@@ -16,6 +16,7 @@ function sanitizeJobForStorage(job) {
   const copy = { ...job };
   if (copy.introMedia?.url && isLocalMediaUrl(copy.introMedia.url)) {
     const { url, ...rest } = copy.introMedia;
+    console.log('url', url);
     copy.introMedia = rest.storageKey ? rest : null;
   }
   return copy;

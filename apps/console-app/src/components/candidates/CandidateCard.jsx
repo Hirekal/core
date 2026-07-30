@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom';
 import { Play, Calendar } from 'lucide-react';
 import Badge from '../common/Badge';
 import { formatDate } from '../../utils/formatDate';
