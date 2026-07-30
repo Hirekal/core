@@ -1,0 +1,62 @@
+export const dummyUsers = [
+  {
+    id: 'user-1',
+    name: 'Sarah Chen',
+    email: 'sarah.chen@acme.com',
+    role: 'admin',
+    organization: 'Acme Corp',
+    avatar: null,
+    theme: 'light',
+  },
+];
+
+export const dummyNotifications = [
+  {
+    id: 'notif-1',
+    title: 'New application received',
+    message: 'Alex Rivera submitted an application for Senior Frontend Engineer.',
+    type: 'application',
+    read: false,
+    timestamp: '2026-07-29T10:30:00Z',
+    jobId: 'job-1',
+    candidateId: 'cand-1',
+  },
+  {
+    id: 'notif-2',
+    title: 'Stage change',
+    message: 'Jordan Lee moved to Shortlisted for Product Designer.',
+    type: 'stage',
+    read: false,
+    timestamp: '2026-07-28T16:20:00Z',
+    jobId: 'job-2',
+    candidateId: 'cand-3',
+  },
+  {
+    id: 'notif-3',
+    title: 'System notice',
+    message: 'Scheduled maintenance on August 1, 2026 from 2:00–4:00 AM UTC.',
+    type: 'system',
+    read: true,
+    timestamp: '2026-07-27T08:00:00Z',
+  },
+  {
+    id: 'notif-4',
+    title: 'New application received',
+    message: 'Morgan Taylor submitted an application for DevOps Engineer.',
+    type: 'application',
+    read: true,
+    timestamp: '2026-07-26T11:45:00Z',
+    jobId: 'job-4',
+    candidateId: 'cand-6',
+  },
+  {
+    id: 'notif-5',
+    title: 'Application completed',
+    message: 'Casey Kim finished their video interview for UX Researcher.',
+    type: 'application',
+    read: true,
+    timestamp: '2026-07-25T09:10:00Z',
+    jobId: 'job-3',
+    candidateId: 'cand-5',
+  },
+];
