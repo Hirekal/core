@@ -1,6 +1,6 @@
 {
   "name": "@hirekal/core",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Hirekal — open-source hiring platform monorepo",
   "license": "MIT",
