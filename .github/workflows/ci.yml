@@ -1,22 +1,30 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
-    branches: [main]
+  push:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
-  build:
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
-
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: "24"
           cache: npm
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -24,8 +32,134 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Test
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build apps
+        run: npm run build
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
         run: npm run test
 
-      - name: Build
-        run: npm run build
+  publish-docker:
+    name: Push Docker images
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push'
+    env:
+      DOCKERHUB_ORG: hirekal
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: api
+            dockerfile: apps/api-app/Dockerfile
+            image: api
+          - name: console
+            dockerfile: apps/console-app/Dockerfile
+            image: console
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compute image tags
+        id: tags
+        shell: bash
+        run: |
+          set -euo pipefail
+          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+          BRANCH_SAFE="${BRANCH_NAME//\//-}"
+          SHORT_SHA="${GITHUB_SHA::7}"
+
+          case "${BRANCH_NAME}" in
+            main)
+              TAG_1="prod"
+              TAG_2="prod-${SHORT_SHA}"
+              ;;
+            development)
+              TAG_1="dev"
+              TAG_2="dev-${SHORT_SHA}"
+              ;;
+            feature/*)
+              FEATURE_NAME="${BRANCH_NAME#feature/}"
+              FEATURE_SAFE="${FEATURE_NAME//\//-}"
+              TAG_1="feature-${FEATURE_SAFE}-${SHORT_SHA}"
+              TAG_2=""
+              ;;
+            *)
+              TAG_1="${BRANCH_SAFE}-${SHORT_SHA}"
+              TAG_2=""
+              ;;
+          esac
+
+          FULL_TAGS="${DOCKERHUB_ORG}/${IMAGE_NAME}:${TAG_1}"
+          if [[ -n "${TAG_2}" ]]; then
+            FULL_TAGS+=$'\n'"${DOCKERHUB_ORG}/${IMAGE_NAME}:${TAG_2}"
+          fi
+
+          {
+            echo "tag_1=${TAG_1}"
+            echo "tag_2=${TAG_2}"
+            echo "tags<<EOF"
+            echo "${FULL_TAGS}"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+        env:
+          DOCKERHUB_ORG: ${{ env.DOCKERHUB_ORG }}
+          IMAGE_NAME: ${{ matrix.image }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.name }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.tags.outputs.tags }}
+          build-args: |
+            GITHUB_REPOSITORY=${{ github.repository }}
+            GITHUB_SHA=${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
