@@ -143,7 +143,7 @@ export default function IntroMediaPicker({
       />
 
       {hasMedia ? (
-        <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
+        <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
           <div className="relative bg-gray-950 px-4 py-4 sm:px-6">
             <div className="mx-auto w-full max-w-3xl">
               {isVideoMedia(value) ? (
@@ -164,7 +164,7 @@ export default function IntroMediaPicker({
             <button
               type="button"
               onClick={handleRemove}
-              className="absolute top-3 right-3 rounded-lg bg-white/95 p-2 text-muted shadow-sm ring-1 ring-border hover:text-red-500 transition-colors"
+              className="absolute top-3 right-3 rounded-lg bg-card/95 p-2 text-muted shadow-sm ring-1 ring-border hover:text-red-500 transition-colors"
               title="Remove media"
             >
               <Trash2 size={16} />
@@ -185,7 +185,7 @@ export default function IntroMediaPicker({
         </div>
       ) : (
         <div className="rounded-2xl border border-dashed border-accent/25 bg-gradient-to-br from-rose-50/80 via-white to-gray-50 px-6 py-10 text-center">
-          <span className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-accent shadow-sm ring-1 ring-accent/10">
+          <span className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-card text-accent shadow-sm ring-1 ring-accent/10">
             <Clapperboard size={26} />
           </span>
           <p className="text-sm font-medium text-heading">{emptyTitle}</p>

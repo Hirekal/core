@@ -10,7 +10,7 @@ export default function Table({ columns, data, onRowClick, emptyMessage = 'No da
 
   if (!data?.length) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-muted">
+      <div className="flex flex-col items-center justify-center py-16 text-muted">
         <p className="text-sm">{emptyMessage}</p>
       </div>
     );
@@ -20,11 +20,11 @@ export default function Table({ columns, data, onRowClick, emptyMessage = 'No da
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
         <thead>
-          <tr className="border-b border-border">
+          <tr className="border-b border-border bg-hover/30">
             {columns.map((col) => (
               <th
                 key={col.key}
-                className="px-4 py-3 font-medium text-muted"
+                className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wide text-muted"
                 style={{ width: col.width }}
               >
                 {col.label}
@@ -37,10 +37,12 @@ export default function Table({ columns, data, onRowClick, emptyMessage = 'No da
             <tr
               key={row.id || i}
               onClick={() => onRowClick?.(row)}
-              className={`border-b border-border last:border-0 ${onRowClick ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+              className={`border-b border-border/70 last:border-0 transition-colors ${
+                onRowClick ? 'cursor-pointer hover:bg-hover/60' : ''
+              }`}
             >
               {columns.map((col) => (
-                <td key={col.key} className="px-4 py-3 text-heading">
+                <td key={col.key} className="px-5 py-4 text-heading">
                   {col.render ? col.render(row) : row[col.key]}
                 </td>
               ))}

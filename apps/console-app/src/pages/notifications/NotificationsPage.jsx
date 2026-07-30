@@ -53,13 +53,13 @@ export default function NotificationsPage() {
               onClick={() => !notif.read && handleMarkRead(notif.id)}
               className={`rounded-xl border p-4 cursor-pointer transition-colors ${
                 notif.read
-                  ? 'border-border bg-white'
+                  ? 'border-border bg-card'
                   : 'border-accent/20 bg-accent/5 hover:bg-accent/10'
               }`}
             >
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className={`text-sm font-medium ${notif.read ? 'text-heading' : 'text-heading'}`}>
+                  <p className="text-sm font-medium text-heading">
                     {!notif.read && <span className="inline-block h-2 w-2 rounded-full bg-accent mr-2" />}
                     {notif.title}
                   </p>

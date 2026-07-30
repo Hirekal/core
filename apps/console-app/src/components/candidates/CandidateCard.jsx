@@ -6,7 +6,7 @@ export default function CandidateCard({ candidate, stageName, onClick }) {
   return (
     <div
       onClick={() => onClick?.(candidate)}
-      className="flex items-center gap-4 rounded-xl border border-border bg-white p-4 shadow-sm cursor-pointer hover:shadow-md transition-shadow"
+      className="flex cursor-pointer items-center gap-4 rounded-xl border border-border bg-card p-4 shadow-sm transition-shadow hover:shadow-md"
     >
       <div className="relative h-16 w-24 shrink-0 rounded-lg overflow-hidden bg-gray-100">
         {candidate.videoThumbnail ? (

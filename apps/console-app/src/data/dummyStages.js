@@ -1,11 +1,6 @@
-export const dummyStages = [
-  { id: 'stage-1', name: 'In Progress', slug: 'in-progress', order: 1, active: true, isDefault: true },
-  { id: 'stage-2', name: 'To Be Reviewed', slug: 'to-be-reviewed', order: 2, active: true, isDefault: true },
-  { id: 'stage-4', name: 'Shortlisted', slug: 'shortlisted', order: 3, active: true, isDefault: true },
-  { id: 'stage-5', name: 'Rejected', slug: 'rejected', order: 4, active: true, isDefault: true },
-  { id: 'stage-7', name: 'Disqualified', slug: 'disqualified', order: 5, active: true, isDefault: false },
-  { id: 'stage-6', name: 'Technical Interview', slug: 'technical-interview', order: 6, active: true, isDefault: false },
-];
+import { DEFAULT_PIPELINE_STAGES, dummyStages } from '../utils/stages';
+
+export { DEFAULT_PIPELINE_STAGES, dummyStages };
 
 export const defaultJobSettings = {
   general: {
@@ -24,7 +19,7 @@ export const defaultJobSettings = {
     description: '<p>Thank you for your application! We will review your submission and get back to you soon.</p>',
     autoRedirectUrl: '',
   },
-  customStages: [...dummyStages],
+  customStages: DEFAULT_PIPELINE_STAGES.map((stage) => ({ ...stage })),
   emailAutomation: {
     inviteApplicants: false,
     verifyApplicantEmail: true,

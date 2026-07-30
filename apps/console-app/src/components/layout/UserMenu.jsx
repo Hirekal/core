@@ -58,7 +58,7 @@ export default function UserMenu() {
         type="button"
         onClick={() => setOpen(!open)}
         className={`flex items-center gap-2 rounded-lg border px-2 py-1.5 sm:px-3 transition-colors ${
-          open ? 'border-accent/30 bg-accent/5' : 'border-border bg-white hover:bg-gray-50'
+          open ? 'border-accent/30 bg-accent/5' : 'border-border bg-card hover:bg-hover'
         }`}
       >
         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-xs font-semibold text-white">
@@ -74,7 +74,7 @@ export default function UserMenu() {
       </button>
 
       {open && (
-        <div className="absolute right-0 z-50 mt-2 w-72 overflow-hidden rounded-xl border border-border bg-white shadow-lg">
+        <div className="absolute right-0 z-50 mt-2 w-72 overflow-hidden rounded-xl border border-border bg-card shadow-lg">
           <div className="border-b border-border px-4 py-3 bg-surface">
             <p className="text-sm font-semibold text-heading">{user?.name}</p>
             <p className="text-xs text-muted truncate">{user?.email}</p>
@@ -85,7 +85,7 @@ export default function UserMenu() {
               const Icon = item.icon;
               const content = (
                 <>
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-muted">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-hover text-muted">
                     <Icon size={16} />
                   </div>
                   <div className="min-w-0">
@@ -101,7 +101,7 @@ export default function UserMenu() {
                     key={item.label}
                     to={item.to}
                     onClick={() => setOpen(false)}
-                    className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
+                    className="flex items-center gap-3 px-4 py-3 hover:bg-hover transition-colors"
                   >
                     {content}
                   </Link>
@@ -116,7 +116,7 @@ export default function UserMenu() {
                     item.onClick?.(e);
                     setOpen(false);
                   }}
-                  className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
+                  className="flex items-center gap-3 px-4 py-3 hover:bg-hover transition-colors"
                 >
                   {content}
                 </a>
@@ -128,9 +128,9 @@ export default function UserMenu() {
             <button
               type="button"
               onClick={handleLogout}
-              className="flex w-full items-center gap-3 px-4 py-3 text-sm text-red-600 hover:bg-red-50 transition-colors"
+              className="flex w-full items-center gap-3 px-4 py-3 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
             >
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-50">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-50 dark:bg-red-950/40">
                 <LogOut size={16} />
               </div>
               <span className="font-medium">Logout</span>

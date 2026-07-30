@@ -15,7 +15,6 @@ import {
   MEDIA_QUESTION_TYPES,
   MEDIA_TYPES,
   DEFAULT_MEDIA_QUESTION,
-  DEFAULT_CANDIDATE_INSTRUCTIONS,
   DEFAULT_APPLICATION_SECTION_TITLE,
   normalizeQuestions,
   normalizeApplicationFields,
@@ -66,6 +65,48 @@ function normalizeSettings(settings = {}) {
   };
 }
 
+function createInitialForm(initialData) {
+  const questions = normalizeQuestions(initialData?.questions || []);
+  const formQuestions = initialData
+    ? questions
+    : questions.map((q) => (q.builtIn ? { ...q, label: '' } : q));
+
+  return {
+    title: initialData?.title ?? '',
+    internalTitle: initialData?.internalTitle ?? '',
+    company: initialData?.company ?? '',
+    companyWebsite: initialData?.companyWebsite ?? '',
+    location: initialData?.location ?? '',
+    employmentType: initialData?.employmentType ?? '',
+    introMedia: initialData?.introMedia ?? null,
+    candidateIntroTitle: initialData?.candidateIntroTitle ?? '',
+    candidateInstructions: initialData?.candidateInstructions ?? '',
+    applicationSectionTitle: initialData?.applicationSectionTitle ?? '',
+    questions: formQuestions,
+    applicationFields: normalizeApplicationFields(initialData?.applicationFields),
+    settings: normalizeSettings(initialData?.settings),
+  };
+}
+
+function prepareFormPayload(form) {
+  return {
+    ...form,
+    title: form.title.trim(),
+    internalTitle: form.internalTitle.trim(),
+    company: form.company.trim(),
+    companyWebsite: form.companyWebsite.trim(),
+    location: form.location.trim(),
+    employmentType: form.employmentType || 'Full-time',
+    candidateIntroTitle: form.candidateIntroTitle.trim(),
+    candidateInstructions: form.candidateInstructions.trim(),
+    applicationSectionTitle: form.applicationSectionTitle.trim() || DEFAULT_APPLICATION_SECTION_TITLE,
+    questions: form.questions.map((q) => ({
+      ...q,
+      label: q.label.trim() || (q.builtIn ? DEFAULT_MEDIA_QUESTION.label : ''),
+    })),
+  };
+}
+
 const FIELD_TYPE_LABELS = Object.fromEntries(FIELD_TYPES.map((t) => [t.value, t.label]));
 
 const FIELD_ICON_MAP = {
@@ -92,7 +133,7 @@ const FORM_SECTIONS = [
 function SectionCard({ title, description, action, icon: Icon, children }) {
   return (
     <Card className="!p-0 overflow-hidden shadow-sm">
-      <div className="flex flex-col gap-3 border-b border-border bg-gray-50/60 px-8 py-5 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 border-b border-border bg-hover/40 px-8 py-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-4">
           {Icon && (
             <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-accent/10 text-accent">
@@ -100,7 +141,7 @@ function SectionCard({ title, description, action, icon: Icon, children }) {
             </span>
           )}
           <div>
-            <h3 className="text-xl font-semibold text-heading">{title}</h3>
+            <h3 className="text-lg font-semibold text-heading">{title}</h3>
             {description && <p className="text-sm text-muted mt-0.5">{description}</p>}
           </div>
         </div>
@@ -114,7 +155,7 @@ function SectionCard({ title, description, action, icon: Icon, children }) {
 function EmptyBlock({ icon: Icon, title, description, action }) {
   return (
     <div className="rounded-xl border border-dashed border-border bg-gray-50/50 px-6 py-12 text-center">
-      <span className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-white text-muted shadow-sm ring-1 ring-border">
+      <span className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-card text-muted shadow-sm ring-1 ring-border">
         <Icon size={22} />
       </span>
       <p className="text-sm font-medium text-heading">{title}</p>
@@ -125,21 +166,7 @@ function EmptyBlock({ icon: Icon, title, description, action }) {
 }
 
 export default function JobForm({ initialData, onSubmit, loading }) {
-  const [form, setForm] = useState({
-    title: initialData?.title || '',
-    internalTitle: initialData?.internalTitle || '',
-    company: initialData?.company || 'Acme Corp',
-    companyWebsite: initialData?.companyWebsite || '',
-    location: initialData?.location || '',
-    employmentType: initialData?.employmentType || 'Full-time',
-    introMedia: initialData?.introMedia || null,
-    candidateIntroTitle: initialData?.candidateIntroTitle ?? '',
-    candidateInstructions: initialData?.candidateInstructions ?? '',
-    applicationSectionTitle: initialData?.applicationSectionTitle || DEFAULT_APPLICATION_SECTION_TITLE,
-    questions: normalizeQuestions(initialData?.questions || []),
-    applicationFields: normalizeApplicationFields(initialData?.applicationFields),
-    settings: normalizeSettings(initialData?.settings),
-  });
+  const [form, setForm] = useState(() => createInitialForm(initialData));
 
   const [activeSection, setActiveSection] = useState('basic');
 
@@ -179,13 +206,10 @@ export default function JobForm({ initialData, onSubmit, loading }) {
     }));
   };
 
-  const removeQuestion = (index) => {
+  const removeQuestion = (questionId) => {
     setForm((prev) => ({
       ...prev,
-      questions: prev.questions.filter((q, i) => {
-        if (i !== index) return true;
-        return !q.builtIn;
-      }),
+      questions: prev.questions.filter((q) => q.builtIn || q.id !== questionId),
     }));
   };
 
@@ -229,7 +253,7 @@ export default function JobForm({ initialData, onSubmit, loading }) {
     return (
       <div
         key={field.id}
-        className="flex items-center justify-between gap-4 px-5 py-4 transition-colors hover:bg-gray-50/60"
+        className="flex items-center justify-between gap-4 px-5 py-4 transition-colors hover:bg-hover/60"
       >
         <div className="flex min-w-0 items-center gap-3">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent/10 text-accent">
@@ -257,7 +281,7 @@ export default function JobForm({ initialData, onSubmit, loading }) {
     return (
       <div
         key={field.id}
-        className="rounded-xl border border-border bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
+        className="rounded-xl border border-border bg-card p-5 shadow-sm transition-shadow hover:shadow-md"
       >
         <div className="flex items-start gap-3">
           <span className="mt-2 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-muted">
@@ -275,6 +299,7 @@ export default function JobForm({ initialData, onSubmit, loading }) {
               value={field.type}
               onChange={(v) => updateApplicationField(globalIndex, { type: v })}
               options={FIELD_TYPES}
+              placeholder="Select field type"
             />
             <Toggle
               label="Required"
@@ -297,8 +322,8 @@ export default function JobForm({ initialData, onSubmit, loading }) {
   const sections = FORM_SECTIONS;
 
   const handleSave = (openPreview) => {
-    if (!form.title.trim()) return;
-    onSubmit(form, { openPreview });
+    if (!form.title.trim() || !form.company.trim()) return;
+    onSubmit(prepareFormPayload(form), { openPreview });
   };
 
   const handleFormSubmit = (e) => {
@@ -306,7 +331,7 @@ export default function JobForm({ initialData, onSubmit, loading }) {
     handleSave(false);
   };
 
-  const standardQuestions = form.questions.filter((q) => !MEDIA_TYPES.has(q.type));
+  const standardQuestions = form.questions.filter((q) => !q.builtIn && !MEDIA_TYPES.has(q.type));
   const defaultMediaQuestion = form.questions.find((q) => q.builtIn) || DEFAULT_MEDIA_QUESTION;
 
   const renderBuiltInMediaQuestion = (q) => {
@@ -323,21 +348,22 @@ export default function JobForm({ initialData, onSubmit, loading }) {
               label="Question"
               value={q.label}
               onChange={(e) => updateQuestion(globalIndex, { label: e.target.value })}
+              placeholder="Tell me about yourself"
               containerClassName="sm:col-span-2"
             />
             <div>
               <label className="text-sm font-medium text-heading mb-1.5 block">Response Type</label>
-              <div className="flex h-[38px] items-center rounded-lg border border-border bg-white px-3 text-sm text-heading">
+              <div className="flex h-[38px] items-center rounded-lg border border-border bg-card px-3 text-sm text-heading">
                 Video
               </div>
             </div>
             <div>
               <label className="text-sm font-medium text-heading mb-1.5 block">Required</label>
-              <div className="flex h-[38px] items-center rounded-lg border border-border bg-white px-3 text-sm text-muted">
+              <div className="flex h-[38px] items-center rounded-lg border border-border bg-card px-3 text-sm text-muted">
                 Yes — candidates must record a video
               </div>
             </div>
-            <div className="sm:col-span-2 rounded-lg bg-white px-3 py-2 text-xs text-muted ring-1 ring-border">
+            <div className="sm:col-span-2 rounded-lg bg-card px-3 py-2 text-xs text-muted ring-1 ring-border">
               Candidates will record a video response using their camera and microphone.
             </div>
           </div>
@@ -353,7 +379,7 @@ export default function JobForm({ initialData, onSubmit, loading }) {
     const isMedia = MEDIA_TYPES.has(q.type);
 
     return (
-      <div key={q.id} className="rounded-xl border border-border bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
+      <div key={q.id} className="rounded-xl border border-border bg-card p-5 shadow-sm transition-shadow hover:shadow-md">
         <div className="flex items-start gap-3">
           <span className="mt-2.5 flex h-8 w-8 shrink-0 cursor-grab items-center justify-center rounded-lg bg-gray-50 text-muted">
             <GripVertical size={16} />
@@ -370,6 +396,7 @@ export default function JobForm({ initialData, onSubmit, loading }) {
               value={q.type}
               onChange={(v) => updateQuestion(globalIndex, { type: v })}
               options={isMedia ? MEDIA_QUESTION_TYPES : STANDARD_QUESTION_TYPES}
+              placeholder="Select question type"
             />
             <Toggle
               label="Required"
@@ -397,8 +424,9 @@ export default function JobForm({ initialData, onSubmit, loading }) {
           </div>
           <button
             type="button"
-            onClick={() => removeQuestion(globalIndex)}
+            onClick={() => removeQuestion(q.id)}
             className="mt-1 rounded-lg p-2 text-muted transition-colors hover:bg-red-50 hover:text-red-500"
+            aria-label="Delete question"
           >
             <Trash2 size={16} />
           </button>
@@ -420,11 +448,11 @@ export default function JobForm({ initialData, onSubmit, loading }) {
               className={`flex shrink-0 items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-all ${
                 activeSection === s.id
                   ? 'border-accent bg-accent text-white shadow-sm'
-                  : 'border-border bg-white text-muted hover:border-accent/30 hover:text-heading'
+                  : 'border-border bg-card text-muted hover:border-accent/30 hover:text-heading'
               }`}
             >
               <span className={`flex h-5 w-5 items-center justify-center rounded-full text-xs font-semibold ${
-                activeSection === s.id ? 'bg-white/20 text-white' : 'bg-gray-100 text-muted'
+                activeSection === s.id ? 'bg-card/20 text-white' : 'bg-hover text-muted'
               }`}>
                 {index + 1}
               </span>
@@ -463,12 +491,12 @@ export default function JobForm({ initialData, onSubmit, loading }) {
               />
 
               <div className="grid gap-5 sm:grid-cols-2 sm:items-start">
-                <Input label="Job Title" required value={form.title} onChange={(e) => updateField('title', e.target.value)} />
-                <Input label="Internal Job Title" value={form.internalTitle} onChange={(e) => updateField('internalTitle', e.target.value)} placeholder="Optional" />
-                <Input label="Company Name" required value={form.company} onChange={(e) => updateField('company', e.target.value)} />
-                <Input label="Company Website" value={form.companyWebsite} onChange={(e) => updateField('companyWebsite', e.target.value)} placeholder="https://" />
-                <Input label="Location" value={form.location} onChange={(e) => updateField('location', e.target.value)} />
-                <SelectDropdown label="Employment Type" value={form.employmentType} onChange={(v) => updateField('employmentType', v)} options={EMPLOYMENT_TYPES} />
+                <Input label="Job Title" required value={form.title} onChange={(e) => updateField('title', e.target.value)} placeholder="e.g. Senior Software Engineer" />
+                <Input label="Internal Job Title" value={form.internalTitle} onChange={(e) => updateField('internalTitle', e.target.value)} placeholder="Optional internal reference" />
+                <Input label="Company Name" required value={form.company} onChange={(e) => updateField('company', e.target.value)} placeholder="e.g. Acme Corp" />
+                <Input label="Company Website" value={form.companyWebsite} onChange={(e) => updateField('companyWebsite', e.target.value)} placeholder="https://example.com" />
+                <Input label="Location" value={form.location} onChange={(e) => updateField('location', e.target.value)} placeholder="e.g. Remote, New York" />
+                <SelectDropdown label="Employment Type" value={form.employmentType} onChange={(v) => updateField('employmentType', v)} options={EMPLOYMENT_TYPES} placeholder="Select employment type" />
               </div>
 
               <div className="mt-8 space-y-5 border-t border-border pt-8">
@@ -491,13 +519,10 @@ export default function JobForm({ initialData, onSubmit, loading }) {
                   <textarea
                     value={form.candidateInstructions}
                     onChange={(e) => updateField('candidateInstructions', e.target.value)}
-                    rows={8}
-                    className="w-full rounded-lg border border-border px-3 py-2.5 text-sm text-heading placeholder:text-gray-400 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 leading-relaxed"
-                    placeholder={DEFAULT_CANDIDATE_INSTRUCTIONS}
+                    rows={6}
+                    className="w-full rounded-lg border border-border px-3 py-2.5 text-sm text-heading placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 leading-relaxed"
+                    placeholder="Write a welcome message and instructions for candidates..."
                   />
-                  <p className="text-xs text-muted mt-1.5">
-                    Optional — only shown on the candidate page when you add text here
-                  </p>
                 </div>
               </div>
             </SectionCard>
@@ -552,7 +577,7 @@ export default function JobForm({ initialData, onSubmit, loading }) {
                 </Button>
               }
             >
-              <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm divide-y divide-border">
+              <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm divide-y divide-border">
                 {builtInFields.map((field) => renderApplicationFieldRow(field))}
               </div>
 
@@ -592,7 +617,7 @@ export default function JobForm({ initialData, onSubmit, loading }) {
               title="Additional Settings"
               description="Recording limits, transcripts, and AI options"
             >
-              <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm divide-y divide-border">
+              <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm divide-y divide-border">
                 <div className="px-5 py-5">
                   <div className="flex items-start gap-3 mb-4">
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent/10 text-accent">
@@ -615,6 +640,7 @@ export default function JobForm({ initialData, onSubmit, loading }) {
                       }))
                     }
                     options={RETAKE_OPTIONS}
+                    placeholder="Select retake limit"
                   />
                 </div>
 
@@ -664,7 +690,7 @@ export default function JobForm({ initialData, onSubmit, loading }) {
             </SectionCard>
           )}
 
-          <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-border bg-white/95 backdrop-blur-sm">
+          <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-border bg-card/95 backdrop-blur-sm">
             <div className="mx-auto flex max-w-6xl xl:max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
               <p className="hidden sm:block text-sm text-muted">
                 {form.title.trim() ? (

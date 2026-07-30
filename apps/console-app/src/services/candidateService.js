@@ -1,5 +1,7 @@
 import { dummyCandidates } from '../data/dummyCandidates';
 import { dummyStages } from '../data/dummyStages';
+import { getActivePipelineStages, resolveJobStages } from '../utils/stages';
+import * as jobService from './jobService';
 
 const delay = (ms = 300) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -90,8 +92,11 @@ export async function deleteCandidate(id) {
 
 export async function getStages(jobId) {
   await delay();
-  void jobId;
-  return stagesStore.filter((s) => s.active && s.id !== 'stage-3');
+  if (jobId) {
+    const job = await jobService.getJobById(jobId);
+    return getActivePipelineStages(resolveJobStages(job?.settings?.customStages));
+  }
+  return getActivePipelineStages(stagesStore);
 }
 
 export async function updateStages(stages) {

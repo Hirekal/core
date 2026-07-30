@@ -92,7 +92,15 @@ export const dummyCandidates = [
     videoUrl: 'https://example.com/videos/casey-kim.mp4',
     notes: [],
     answers: [
-      { questionId: 'q1', question: 'Describe a research project you led', answer: 'I led a usability study for a mobile banking app...', type: 'video', timestamp: '2026-07-25T09:12:00Z' },
+      {
+        questionId: 'q1',
+        question: 'Describe a research project you led',
+        answer: 'I led a usability study for a mobile banking app...',
+        type: 'video',
+        timestamp: '2026-07-25T09:12:00Z',
+        videoThumbnail: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=640&h=360&fit=crop',
+        videoUrl: 'https://example.com/videos/casey-kim.mp4',
+      },
     ],
   },
   {

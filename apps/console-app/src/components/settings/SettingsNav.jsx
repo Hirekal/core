@@ -12,7 +12,7 @@ const settingsNavItems = [
 
 export default function SettingsNav({ basePath }) {
   return (
-    <SidePanel title="Job settings" subtitle="Configure your job">
+    <SidePanel title="Job Settings" subtitle="Configure your job">
       <div className="space-y-1.5">
         {settingsNavItems.map(({ to, label, description, icon }) => (
           <NavLink key={to} to={`${basePath}/${to}`} className="block">

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
-  X, Star, Trash2, Paperclip, Send, Play, Mail, Phone, Clock, MessageSquare, Video,
+  X, Star, Trash2, Play, Mail, Phone, Clock, Video, Plus, StickyNote,
 } from 'lucide-react';
 import Button from '../common/Button';
 import Badge from '../common/Badge';
@@ -9,6 +9,54 @@ import Tabs from '../common/Tabs';
 import Card from '../common/Card';
 import { formatDate, formatDateTime } from '../../utils/formatDate';
 import { lockBodyScroll, unlockBodyScroll } from '../../utils/bodyScrollLock';
+
+function VideoPreview({ thumbnail, videoUrl, label = 'Play video response', className = '' }) {
+  const [playing, setPlaying] = useState(false);
+
+  if (playing && videoUrl) {
+    return (
+      <div className={`overflow-hidden rounded-xl border border-border bg-black ${className}`}>
+        <video
+          src={videoUrl}
+          controls
+          autoPlay
+          poster={thumbnail}
+          className="aspect-video w-full bg-black"
+        >
+          <track kind="captions" />
+        </video>
+      </div>
+    );
+  }
+
+  if (!thumbnail) {
+    return (
+      <div className={`flex aspect-video items-center justify-center rounded-xl border border-dashed border-border bg-hover ${className}`}>
+        <p className="text-sm text-muted">No video thumbnail</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`relative overflow-hidden rounded-xl border border-border bg-gray-900 ${className}`}>
+      <img
+        src={thumbnail}
+        alt=""
+        className="aspect-video w-full object-cover opacity-90"
+      />
+      <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/35">
+        <button
+          type="button"
+          onClick={() => setPlaying(true)}
+          className="flex h-14 w-14 items-center justify-center rounded-full bg-white/95 text-accent shadow-lg transition-transform hover:scale-105"
+        >
+          <Play size={28} fill="currentColor" className="ml-1" />
+        </button>
+        <span className="mt-3 text-sm font-medium text-white">{label}</span>
+      </div>
+    </div>
+  );
+}
 
 export default function CandidateDrawer({
   candidate,
@@ -39,26 +87,31 @@ export default function CandidateDrawer({
     setNoteText('');
   };
 
+  const mainVideoThumbnail = candidate.videoThumbnail
+    || candidate.answers?.find((a) => a.type === 'video')?.videoThumbnail;
+
+  const mainVideoUrl = candidate.videoUrl
+    || candidate.answers?.find((a) => a.type === 'video')?.videoUrl;
+
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[1px]" onClick={onClose} />
 
-      <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-2xl flex-col bg-white shadow-2xl lg:max-w-3xl">
-        {/* Header */}
-        <div className="shrink-0 border-b border-border bg-white px-6 py-5 sm:px-8">
+      <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-2xl flex-col bg-card shadow-2xl lg:max-w-3xl">
+        <div className="shrink-0 border-b border-border px-6 py-5 sm:px-8">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2 mb-1">
-                <h2 className="text-xl font-semibold text-heading truncate">
+              <div className="mb-1 flex flex-wrap items-center gap-2">
+                <h2 className="truncate text-xl font-semibold text-heading">
                   {candidate.firstName} {candidate.lastName}
                 </h2>
                 {currentStage && <Badge status="default">{currentStage.name}</Badge>}
               </div>
-              <p className="text-sm text-muted truncate">{candidate.email}</p>
+              <p className="truncate text-sm text-muted">{candidate.email}</p>
             </div>
             <button
               onClick={onClose}
-              className="shrink-0 rounded-lg p-2 text-muted hover:bg-gray-100 hover:text-heading transition-colors"
+              className="shrink-0 rounded-lg p-2 text-muted transition-colors hover:bg-hover hover:text-heading"
               aria-label="Close"
             >
               <X size={20} />
@@ -66,26 +119,13 @@ export default function CandidateDrawer({
           </div>
         </div>
 
-        {/* Scrollable body */}
         <div className="flex-1 overflow-y-auto px-6 py-6 sm:px-8">
-          {/* Video preview */}
-          {candidate.videoThumbnail && (
-            <div className="relative mb-6 overflow-hidden rounded-xl border border-border bg-gray-900">
-              <img
-                src={candidate.videoThumbnail}
-                alt={`${candidate.firstName} ${candidate.lastName} video`}
-                className="w-full h-52 sm:h-64 object-cover opacity-90"
-              />
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/35">
-                <button
-                  type="button"
-                  className="flex h-14 w-14 items-center justify-center rounded-full bg-white/95 text-accent shadow-lg transition-transform hover:scale-105"
-                >
-                  <Play size={28} fill="currentColor" className="ml-1" />
-                </button>
-                <span className="mt-3 text-sm font-medium text-white">Play video response</span>
-              </div>
-            </div>
+          {mainVideoThumbnail && (
+            <VideoPreview
+              thumbnail={mainVideoThumbnail}
+              videoUrl={mainVideoUrl}
+              className="mb-6"
+            />
           )}
 
           <Tabs
@@ -100,9 +140,8 @@ export default function CandidateDrawer({
 
           {activeTab === 'info' && (
             <div className="space-y-6">
-              {/* Contact info */}
               <Card className="!p-5">
-                <h3 className="text-sm font-semibold text-heading mb-4">Contact Information</h3>
+                <h3 className="mb-4 text-sm font-semibold text-heading">Contact Information</h3>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <ContactItem icon={Mail} label="Email" value={candidate.email} />
                   <ContactItem icon={Phone} label="Phone" value={candidate.phone} />
@@ -115,10 +154,9 @@ export default function CandidateDrawer({
                 </div>
               </Card>
 
-              {/* Rating & Stage row */}
               <div className="grid gap-6 lg:grid-cols-2">
                 <Card className="!p-5">
-                  <h3 className="text-sm font-semibold text-heading mb-3">Rating</h3>
+                  <h3 className="mb-3 text-sm font-semibold text-heading">Rating</h3>
                   <div className="flex gap-1">
                     {[1, 2, 3, 4, 5].map((n) => (
                       <button
@@ -131,7 +169,7 @@ export default function CandidateDrawer({
                           size={28}
                           className={
                             n <= (candidate.rating || 0)
-                              ? 'text-yellow-400 fill-yellow-400'
+                              ? 'fill-yellow-400 text-yellow-400'
                               : 'text-gray-300 hover:text-yellow-200'
                           }
                         />
@@ -146,76 +184,103 @@ export default function CandidateDrawer({
                 </Card>
 
                 <Card className="!p-5">
-                  <h3 className="text-sm font-semibold text-heading mb-3">Current Stage</h3>
+                  <h3 className="mb-3 text-sm font-semibold text-heading">Current Stage</h3>
                   <SelectDropdown
                     value={candidate.stageId}
                     onChange={onStageChange}
+                    placeholder="Select stage"
                     options={defaultStages.map((s) => ({ value: s.id, label: s.name }))}
                   />
                 </Card>
               </div>
 
-              {/* Stage quick actions */}
-              <Card className="!p-5">
-                <h3 className="text-sm font-semibold text-heading mb-3">Move to Stage</h3>
-                <div className="flex flex-wrap gap-2">
-                  {defaultStages.map((stage) => (
-                    <button
-                      key={stage.id}
-                      type="button"
-                      onClick={() => onStageChange?.(stage.id)}
-                      className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                        candidate.stageId === stage.id
-                          ? 'bg-accent text-white shadow-sm'
-                          : 'border border-border bg-white text-heading hover:border-accent/30 hover:bg-accent/5'
-                      }`}
-                    >
-                      {stage.name}
-                    </button>
-                  ))}
-                </div>
-              </Card>
-
-              {/* Notes */}
-              <Card className="!p-5">
-                <div className="flex items-center gap-2 mb-4">
-                  <MessageSquare size={18} className="text-accent" />
-                  <h3 className="text-sm font-semibold text-heading">Notes</h3>
-                </div>
-
-                {(candidate.notes || []).length === 0 ? (
-                  <p className="text-sm text-muted mb-4">No notes added yet.</p>
-                ) : (
-                  <div className="space-y-3 mb-4 max-h-48 overflow-y-auto">
-                    {(candidate.notes || []).map((note) => (
-                      <div key={note.id} className="rounded-lg border border-border bg-surface px-4 py-3">
-                        <p className="text-sm text-heading leading-relaxed">{note.text}</p>
-                        <p className="mt-2 text-xs text-muted">{note.author} · {formatDate(note.createdAt)}</p>
+              <Card className="overflow-hidden !p-0">
+                <div className="border-b border-border bg-hover/30 px-5 py-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="rounded-xl bg-accent/10 p-2.5 text-accent">
+                        <StickyNote size={18} strokeWidth={2} />
                       </div>
-                    ))}
+                      <div>
+                        <h3 className="text-sm font-semibold text-heading">Notes</h3>
+                        <p className="text-xs text-muted">Private team notes for this candidate</p>
+                      </div>
+                    </div>
+                    {(candidate.notes || []).length > 0 && (
+                      <span className="rounded-full bg-accent/10 px-2.5 py-1 text-xs font-semibold tabular-nums text-accent">
+                        {(candidate.notes || []).length}
+                      </span>
+                    )}
                   </div>
-                )}
+                </div>
 
-                <div className="flex gap-2">
-                  <input
-                    value={noteText}
-                    onChange={(e) => setNoteText(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddNote()}
-                    placeholder="Write a note about this candidate..."
-                    className="flex-1 rounded-lg border border-border bg-white px-4 py-2.5 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
-                  />
-                  <Button size="md" onClick={handleAddNote} disabled={!noteText.trim()}>
-                    <Send size={16} />
-                  </Button>
-                  <Button size="md" variant="secondary" title="Attach file">
-                    <Paperclip size={16} />
-                  </Button>
+                <div className="p-5">
+                  {(candidate.notes || []).length === 0 ? (
+                    <div className="mb-5 rounded-xl border border-dashed border-border/80 bg-hover/30 px-6 py-10 text-center">
+                      <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-hover text-muted/70">
+                        <StickyNote size={22} strokeWidth={1.75} />
+                      </div>
+                      <p className="text-sm font-medium text-heading">No notes added yet</p>
+                      <p className="mt-1 text-xs text-muted">Capture feedback, impressions, or follow-ups below</p>
+                    </div>
+                  ) : (
+                    <div className="mb-5 max-h-56 space-y-3 overflow-y-auto pr-1">
+                      {(candidate.notes || []).map((note) => (
+                        <article
+                          key={note.id}
+                          className="rounded-xl border border-border/70 bg-card px-4 py-3.5 shadow-sm ring-1 ring-border/40"
+                        >
+                          <div className="flex items-start gap-3">
+                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/10 text-xs font-semibold text-accent">
+                              {note.author?.[0]?.toUpperCase() || 'T'}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                                <span className="text-sm font-medium text-heading">{note.author || 'Team'}</span>
+                                <span className="text-xs text-muted">· {formatDate(note.createdAt)}</span>
+                              </div>
+                              <p className="mt-1.5 text-sm leading-relaxed text-heading">{note.text}</p>
+                            </div>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="rounded-xl border border-border/70 bg-hover/20 p-4 transition-colors focus-within:border-accent/30 focus-within:ring-2 focus-within:ring-accent/10">
+                    <label htmlFor="candidate-note" className="mb-2 block text-xs font-medium uppercase tracking-wide text-muted">
+                      Add a note
+                    </label>
+                    <textarea
+                      id="candidate-note"
+                      value={noteText}
+                      onChange={(e) => setNoteText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleAddNote();
+                      }}
+                      placeholder="Write a note about this candidate..."
+                      rows={3}
+                      className="w-full resize-none rounded-lg border border-border/70 bg-input px-4 py-3 text-sm text-heading placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+                    />
+                    <div className="mt-3 flex items-center justify-between gap-3">
+                      <p className="text-xs text-muted">
+                        {noteText.trim() ? `${noteText.trim().length} characters` : 'Press ⌘/Ctrl + Enter to save'}
+                      </p>
+                      <Button
+                        size="sm"
+                        onClick={handleAddNote}
+                        disabled={!noteText.trim()}
+                        className="rounded-lg px-4 shadow-sm"
+                      >
+                        <Plus size={15} strokeWidth={2.5} /> Add note
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               </Card>
 
-              {/* Question responses */}
               <Card className="!p-5">
-                <div className="flex items-center gap-2 mb-4">
+                <div className="mb-4 flex items-center gap-2">
                   <Video size={18} className="text-accent" />
                   <h3 className="text-sm font-semibold text-heading">Question Responses</h3>
                 </div>
@@ -223,29 +288,35 @@ export default function CandidateDrawer({
                 {(candidate.answers || []).length === 0 ? (
                   <p className="text-sm text-muted">No responses recorded yet.</p>
                 ) : (
-                  <div className="space-y-4">
-                    {candidate.answers.map((a, i) => (
-                      <div key={i} className="rounded-lg border border-border overflow-hidden">
-                        <div className="bg-surface px-4 py-3 border-b border-border">
-                          <p className="text-sm font-medium text-heading">{a.question}</p>
-                          <span className="mt-1 inline-flex items-center gap-1 text-xs text-muted capitalize">
-                            {a.type === 'video' ? <Video size={12} /> : null}
-                            {a.type} · {formatDateTime(a.timestamp)}
+                  <div className="space-y-5">
+                    {candidate.answers.map((answer, i) => (
+                      <div key={i} className="overflow-hidden rounded-xl border border-border">
+                        <div className="border-b border-border bg-hover/40 px-4 py-3">
+                          <p className="text-sm font-medium text-heading">{answer.question}</p>
+                          <span className="mt-1 inline-flex items-center gap-1 text-xs capitalize text-muted">
+                            {answer.type === 'video' && <Video size={12} />}
+                            {answer.type} · {formatDateTime(answer.timestamp)}
                           </span>
                         </div>
-                        <div className="px-4 py-3">
-                          {a.type === 'video' ? (
-                            <div className="flex items-center gap-3 rounded-lg border border-dashed border-border bg-surface px-4 py-3">
-                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/10 text-accent">
-                                <Play size={18} fill="currentColor" />
-                              </div>
-                              <div>
-                                <p className="text-sm font-medium text-heading">Video response</p>
-                                <p className="text-xs text-muted line-clamp-2 mt-0.5">{a.answer}</p>
-                              </div>
+                        <div className="p-4">
+                          {answer.type === 'video' ? (
+                            <div className="space-y-3">
+                              <VideoPreview
+                                thumbnail={answer.videoThumbnail || candidate.videoThumbnail}
+                                videoUrl={answer.videoUrl || candidate.videoUrl}
+                                label="Play video response"
+                              />
+                              {answer.answer && (
+                                <div className="rounded-lg bg-hover/50 px-4 py-3">
+                                  <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted">
+                                    Transcript
+                                  </p>
+                                  <p className="text-sm leading-relaxed text-heading">{answer.answer}</p>
+                                </div>
+                              )}
                             </div>
                           ) : (
-                            <p className="text-sm text-muted leading-relaxed">{a.answer}</p>
+                            <p className="text-sm leading-relaxed text-muted">{answer.answer}</p>
                           )}
                         </div>
                       </div>
@@ -258,7 +329,7 @@ export default function CandidateDrawer({
 
           {activeTab === 'timeline' && (
             <Card className="!p-5">
-              <h3 className="text-sm font-semibold text-heading mb-6">Activity Timeline</h3>
+              <h3 className="mb-6 text-sm font-semibold text-heading">Activity Timeline</h3>
               <div className="relative space-y-0">
                 {(candidate.answers || []).map((a, i) => (
                   <TimelineItem
@@ -279,15 +350,14 @@ export default function CandidateDrawer({
                   />
                 )}
                 {(candidate.answers || []).length === 0 && !candidate.submittedAt && (
-                  <p className="text-sm text-muted py-4">No activity recorded yet.</p>
+                  <p className="py-4 text-sm text-muted">No activity recorded yet.</p>
                 )}
               </div>
             </Card>
           )}
         </div>
 
-        {/* Footer */}
-        <div className="shrink-0 border-t border-border bg-white px-6 py-4 sm:px-8">
+        <div className="shrink-0 border-t border-border px-6 py-4 sm:px-8">
           <Button variant="danger" className="w-full sm:w-auto" onClick={() => onDelete?.(candidate.id)}>
             <Trash2 size={16} /> Delete Application
           </Button>
@@ -305,7 +375,7 @@ function ContactItem({ icon: Icon, label, value, className = '' }) {
       </div>
       <div className="min-w-0">
         <p className="text-xs font-medium uppercase tracking-wide text-muted">{label}</p>
-        <p className="mt-0.5 text-sm font-medium text-heading break-all">{value || '—'}</p>
+        <p className="mt-0.5 break-all text-sm font-medium text-heading">{value || '—'}</p>
       </div>
     </div>
   );
@@ -316,13 +386,13 @@ function TimelineItem({ title, time, description, dotColor = 'bg-accent', isLast
     <div className="flex gap-4 pb-6 last:pb-0">
       <div className="flex flex-col items-center">
         <div className={`h-3 w-3 shrink-0 rounded-full ${dotColor}`} />
-        {!isLast && <div className="mt-1 w-px flex-1 bg-border min-h-[2rem]" />}
+        {!isLast && <div className="mt-1 min-h-[2rem] w-px flex-1 bg-border" />}
       </div>
-      <div className="flex-1 min-w-0 pt-0.5">
+      <div className="min-w-0 flex-1 pt-0.5">
         <p className="text-sm font-medium text-heading">{title}</p>
-        <p className="text-xs text-muted mt-0.5">{time}</p>
+        <p className="mt-0.5 text-xs text-muted">{time}</p>
         {description && (
-          <p className="mt-2 text-sm text-muted leading-relaxed line-clamp-3">{description}</p>
+          <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-muted">{description}</p>
         )}
       </div>
     </div>

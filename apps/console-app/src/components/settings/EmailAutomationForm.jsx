@@ -1,5 +1,5 @@
 import Toggle from '../common/Toggle';
-import Card from '../common/Card';
+import SettingsSection from '../common/SettingsSection';
 
 export default function EmailAutomationForm({ settings, onChange }) {
   const email = settings.emailAutomation || {};
@@ -22,9 +22,10 @@ export default function EmailAutomationForm({ settings, onChange }) {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <h3 className="text-lg font-semibold mb-2">Applicant Emails</h3>
-        <p className="text-sm text-muted mb-4">Automated emails sent to candidates during the application process.</p>
+      <SettingsSection
+        title="Applicant Emails"
+        description="Automated emails sent to candidates during the application process."
+      >
         <div className="space-y-4">
           <Toggle
             label="Invite applicants"
@@ -57,11 +58,12 @@ export default function EmailAutomationForm({ settings, onChange }) {
             onChange={(v) => update('followUpQuestionEmails', v)}
           />
         </div>
-      </Card>
+      </SettingsSection>
 
-      <Card>
-        <h3 className="text-lg font-semibold mb-2">Stage-based Emails</h3>
-        <p className="text-sm text-muted mb-4">Automatically notify candidates when their application stage changes.</p>
+      <SettingsSection
+        title="Stage-based Emails"
+        description="Automatically notify candidates when their application stage changes."
+      >
         <div className="space-y-4">
           <Toggle
             label="Shortlisted"
@@ -82,7 +84,7 @@ export default function EmailAutomationForm({ settings, onChange }) {
             onChange={(v) => updateStageEmail('disqualified', v)}
           />
         </div>
-      </Card>
+      </SettingsSection>
     </div>
   );
 }
