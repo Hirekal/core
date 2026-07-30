@@ -12,3 +12,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Monorepo scaffold with NestJS API and React console app
 - Node.js 24 toolchain and npm workspaces
 - Husky, commitlint, and GitHub Actions CI
+- Docker images for API and console apps published to Docker Hub
+- Release Please for automated GitHub releases
