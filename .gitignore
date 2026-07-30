@@ -5,6 +5,7 @@ node_modules/
 dist/
 build/
 coverage/
+apps/api-app/dist/
 
 # env & secrets
 .env
