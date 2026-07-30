@@ -72,7 +72,7 @@ export class UserRolesService {
     try {
       return this.userRolesRepository.find({
         where: { userId },
-        relations: ['role'],
+        relations: { role: true },
       });
     } catch (error) {
       this.logger.error(

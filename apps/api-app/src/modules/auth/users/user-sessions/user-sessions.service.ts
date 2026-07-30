@@ -68,7 +68,7 @@ export class UserSessionsService {
           revokedAt: IsNull(),
           status: RecordStatus.ACTIVE,
         },
-        relations: ['user'],
+        relations: { user: true },
       });
     } catch (error) {
       this.logger.error(LOG_MESSAGES.SESSION.FIND_BY_REFRESH_FAILED, error);

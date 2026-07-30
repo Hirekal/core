@@ -123,7 +123,10 @@ export class UsersService {
     try {
       const user = await this.usersRepository.findOne({
         where: { email: email.toLowerCase() },
-        relations: ['organization', 'userRoles', 'userRoles.role'],
+        relations: {
+          organization: true,
+          userRoles: { role: true },
+        },
       });
       if (!user) {
         return null;
