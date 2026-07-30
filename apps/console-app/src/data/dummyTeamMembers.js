@@ -1,0 +1,42 @@
+export const dummyTeamMembers = [
+  {
+    id: 'member-1',
+    name: 'Sarah Chen',
+    email: 'sarah.chen@acme.com',
+    role: 'admin',
+    status: 'active',
+    joinedAt: '2025-01-15T00:00:00Z',
+  },
+  {
+    id: 'member-2',
+    name: 'James Wilson',
+    email: 'james.wilson@acme.com',
+    role: 'member',
+    status: 'active',
+    joinedAt: '2025-02-10T00:00:00Z',
+  },
+  {
+    id: 'member-3',
+    name: 'Emily Rodriguez',
+    email: 'emily.rodriguez@acme.com',
+    role: 'member',
+    status: 'active',
+    joinedAt: '2025-03-05T00:00:00Z',
+  },
+  {
+    id: 'member-4',
+    name: 'Michael Park',
+    email: 'michael.park@acme.com',
+    role: 'member',
+    status: 'active',
+    joinedAt: '2025-04-20T00:00:00Z',
+  },
+  {
+    id: 'member-5',
+    name: 'Lisa Thompson',
+    email: 'lisa.thompson@acme.com',
+    role: 'member',
+    status: 'active',
+    joinedAt: '2025-05-12T00:00:00Z',
+  },
+];

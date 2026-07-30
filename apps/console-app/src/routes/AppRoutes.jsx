@@ -5,6 +5,7 @@ import Navbar from '../components/layout/Navbar';
 import LoginPage from '../pages/auth/LoginPage';
 import SignUpPage from '../pages/auth/SignUpPage';
 import ForgotPasswordPage from '../pages/auth/ForgotPasswordPage';
+import ResetPasswordPage from '../pages/auth/ResetPasswordPage';
 
 import JobListingPage from '../pages/jobs/JobListingPage';
 import JobDetailPage from '../pages/jobs/JobDetailPage';
@@ -35,7 +36,7 @@ export default function AppRoutes() {
       <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
       <Route path="/signup" element={<PublicRoute><SignUpPage /></PublicRoute>} />
       <Route path="/forgot-password" element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />
-      <Route path="/reset-password" element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />
+      <Route path="/reset-password" element={<PublicRoute><ResetPasswordPage /></PublicRoute>} />
 
       <Route
         path="/jobs"
@@ -53,14 +54,7 @@ export default function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      <Route
-        path="/jobs/:id/preview"
-        element={
-          <ProtectedRoute>
-            <ApplicationPreviewPage />
-          </ProtectedRoute>
-        }
-      />
+      <Route path="/jobs/:id/preview" element={<ApplicationPreviewPage />} />
       <Route
         path="/jobs/:id/edit"
         element={

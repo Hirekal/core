@@ -4,6 +4,11 @@ const delay = (ms = 300) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const AUTH_KEY = 'hirekal_auth';
 const LEGACY_AUTH_KEY = 'talently_auth';
+const resetTokensStore = new Map();
+
+function createResetToken() {
+  return `reset-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 export async function login(email, password) {
   await delay(500);
@@ -30,18 +35,47 @@ export async function signUp(name, email, password) {
 export async function requestPasswordReset(email) {
   await delay(500);
   if (!email) throw new Error('Email is required');
-  return { success: true, message: 'Reset link sent to your email' };
+
+  const normalizedEmail = email.trim().toLowerCase();
+  const token = createResetToken();
+
+  resetTokensStore.set(normalizedEmail, {
+    token,
+    createdAt: Date.now(),
+  });
+
+  const resetUrl = `/reset-password?email=${encodeURIComponent(normalizedEmail)}&token=${encodeURIComponent(token)}`;
+  void resetUrl;
+
+  return {
+    success: true,
+    message: 'Reset link sent to your email',
+  };
 }
 
-export async function verifyResetToken(token) {
+export async function verifyResetToken(token, email) {
   await delay(300);
-  if (!token) throw new Error('Invalid or expired token');
+  if (!token || !email) throw new Error('Invalid or expired reset link');
+
+  const stored = resetTokensStore.get(email.trim().toLowerCase());
+  if (!stored || stored.token !== token) {
+    throw new Error('Invalid or expired reset link');
+  }
+
   return { valid: true };
 }
 
-export async function resetPassword(token, password) {
+export async function resetPassword(token, password, email) {
   await delay(500);
-  if (!token || password.length < 8) throw new Error('Invalid request');
+  if (!token || !email || password.length < 8) throw new Error('Invalid request');
+
+  const normalizedEmail = email.trim().toLowerCase();
+  const stored = resetTokensStore.get(normalizedEmail);
+  if (!stored || stored.token !== token) {
+    throw new Error('Invalid or expired reset link');
+  }
+
+  resetTokensStore.delete(normalizedEmail);
   return { success: true };
 }
 

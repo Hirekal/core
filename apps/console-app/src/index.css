@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-accent: #e11d48;
   --color-accent-hover: #be123c;
@@ -7,7 +9,44 @@
   --color-heading: #1a1a1a;
   --color-muted: #6b7280;
   --color-border: #e5e7eb;
+  --color-card: #ffffff;
+  --color-input: #ffffff;
+  --color-hover: #f3f4f6;
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+.dark {
+  --color-surface: #09090b;
+  --color-heading: #fafafa;
+  --color-muted: #a1a1aa;
+  --color-border: #27272a;
+  --color-card: #18181b;
+  --color-input: #27272a;
+  --color-hover: #27272a;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-surface);
+    color: var(--color-heading);
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    color: var(--color-heading);
+    font-weight: 600;
+  }
 }
 
 * {
@@ -15,16 +54,7 @@
 }
 
 html {
-  /* Prevents page content jumping left/right when scrollbar appears or disappears */
   scrollbar-gutter: stable;
-}
-
-body {
-  margin: 0;
-  font-family: var(--font-sans);
-  background-color: var(--color-surface);
-  color: var(--color-heading);
-  -webkit-font-smoothing: antialiased;
 }
 
 #root {

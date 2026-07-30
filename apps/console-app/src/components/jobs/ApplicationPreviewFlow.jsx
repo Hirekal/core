@@ -1,5 +1,16 @@
 import { useMemo, useState } from 'react';
-import { CheckCircle2, Video, ChevronRight } from 'lucide-react';
+import {
+  CheckCircle2,
+  Video,
+  ChevronRight,
+  User,
+  Mail,
+  Phone,
+  Link2,
+  Calendar,
+  Hash,
+  Type,
+} from 'lucide-react';
 import Button from '../common/Button';
 import VideoRecorderModal from '../common/VideoRecorderModal';
 import { isVideoMedia } from '../../utils/mediaHelpers';
@@ -10,8 +21,61 @@ import {
   MEDIA_TYPES,
 } from './jobFormUtils';
 
-const PAGE_CLASS = 'mx-auto w-full max-w-5xl px-5 sm:px-8 lg:px-10 py-8 sm:py-10';
-const CARD_CLASS = 'rounded-2xl border border-border bg-white shadow-sm';
+const CARD_CLASS = 'rounded-2xl border border-border bg-card shadow-sm';
+const CONTENT_WIDTH = 'mx-auto w-full max-w-4xl';
+
+function StepLayout({ children }) {
+  return (
+    <div className="flex min-h-[calc(100dvh-8.5rem)] w-full items-center justify-center py-6 sm:py-8">
+      <div className={CONTENT_WIDTH}>{children}</div>
+    </div>
+  );
+}
+
+function StepCard({ title, subtitle, children, badge }) {
+  return (
+    <section className={`${CARD_CLASS} overflow-hidden`}>
+      <div className="border-b border-border bg-accent/[0.04] px-5 py-4 sm:px-6">
+        {badge && <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-accent">{badge}</p>}
+        <h2 className="text-base font-semibold text-heading sm:text-lg">{title}</h2>
+        {subtitle && <p className="mt-0.5 text-sm text-muted">{subtitle}</p>}
+      </div>
+      <div className="p-5 sm:p-6">{children}</div>
+    </section>
+  );
+}
+
+function ProgressBar({ current, total }) {
+  return (
+    <div className="mb-5">
+      <p className="mb-2 text-center text-sm font-medium text-muted">
+        Step {current} of {total}
+      </p>
+      <div className="mx-auto h-1.5 max-w-md overflow-hidden rounded-full bg-hover">
+        <div
+          className="h-full rounded-full bg-accent transition-all duration-300"
+          style={{ width: `${(current / total) * 100}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+const FIELD_ICONS = {
+  firstName: User,
+  lastName: User,
+  email: Mail,
+  phone: Phone,
+};
+
+const TYPE_ICONS = {
+  email: Mail,
+  phone: Phone,
+  url: Link2,
+  date: Calendar,
+  number: Hash,
+  text: Type,
+};
 
 function validateApplicationField(field, value) {
   const trimmed = String(value ?? '').trim();
@@ -48,17 +112,15 @@ function validateStandardQuestion(question, value) {
   return null;
 }
 
-function CompanyLogo({ company }) {
+export function PublicCareersHeader({ company }) {
   const initial = (company || 'C').charAt(0).toUpperCase();
+
   return (
-    <div className="flex items-center justify-center gap-3">
-      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-accent text-white shadow-sm">
-        <span className="text-lg font-bold">{initial}</span>
+    <div className="flex items-center gap-2.5">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent text-sm font-bold text-white shadow-sm">
+        {initial}
       </div>
-      <div className="text-left leading-tight">
-        <p className="text-base font-semibold text-heading">{company}</p>
-        <p className="text-xs font-medium text-muted tracking-wide">Careers</p>
-      </div>
+      <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Careers</span>
     </div>
   );
 }
@@ -69,7 +131,7 @@ function InstructionText({ text }) {
     : text.split('\n').map((p) => p.trim()).filter(Boolean);
 
   return (
-    <div className="space-y-4 text-[15px] leading-7 text-gray-600">
+    <div className="space-y-3 text-sm leading-6 text-muted sm:text-[15px] sm:leading-7">
       {paragraphs.map((paragraph, index) => (
         <p
           key={index}
@@ -82,7 +144,64 @@ function InstructionText({ text }) {
   );
 }
 
+function ThankYouScreen({ job, thankYou = {} }) {
+  const message =
+    thankYou.description?.replace(/<[^>]+>/g, '').trim()
+    || 'Thank you for your application! We will review your submission and get back to you soon.';
+
+  return (
+    <StepCard
+      title="Application submitted!"
+      subtitle={`Thank you for applying to ${job.title}${job.company ? ` at ${job.company}` : ''}.`}
+    >
+      <div className="space-y-5 text-center">
+        {thankYou.mediaUrl ? (
+          <section className="overflow-hidden rounded-xl border border-border bg-black shadow-md">
+            <div className="relative aspect-[16/9] w-full">
+              {isVideoMedia({ type: thankYou.mediaType, url: thankYou.mediaUrl }) ? (
+                <video
+                  src={thankYou.mediaUrl}
+                  controls
+                  playsInline
+                  className="absolute inset-0 h-full w-full object-contain"
+                />
+              ) : (
+                <img
+                  src={thankYou.mediaUrl}
+                  alt="Thank you"
+                  className="absolute inset-0 h-full w-full object-contain"
+                />
+              )}
+            </div>
+          </section>
+        ) : (
+          <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-accent/10 text-accent">
+            <CheckCircle2 size={32} />
+          </span>
+        )}
+
+        <p className="text-sm leading-relaxed text-muted">{message}</p>
+      </div>
+    </StepCard>
+  );
+}
+
+function getFieldIcon(field) {
+  return FIELD_ICONS[field.id] || TYPE_ICONS[field.type] || Type;
+}
+
+function getFieldPlaceholder(field) {
+  const placeholders = {
+    firstName: 'John',
+    lastName: 'Doe',
+    email: 'you@email.com',
+    phone: '+1 (555) 000-0000',
+  };
+  return placeholders[field.id] || `Enter ${field.label.toLowerCase()}`;
+}
+
 function PreviewField({
+  field,
   label,
   required,
   type = 'text',
@@ -92,27 +211,40 @@ function PreviewField({
   placeholder,
   className = '',
 }) {
+  const Icon = getFieldIcon(field || { id: '', type });
   const inputType =
     type === 'phone' ? 'tel' : type === 'email' ? 'email' : type === 'number' ? 'number' : type === 'date' ? 'date' : 'text';
 
   return (
-    <div className={`flex flex-col gap-2 ${className}`}>
-      <label className="text-sm font-medium text-heading">
+    <div className={`group ${className}`}>
+      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">
         {label}
-        {required && <span className="text-accent ml-0.5">*</span>}
+        {required && <span className="text-accent normal-case tracking-normal"> *</span>}
       </label>
-      <input
-        type={inputType}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className={`w-full rounded-xl border bg-white px-4 py-3 text-[15px] text-heading placeholder:text-gray-400 transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 ${
-          error ? 'border-red-400 bg-red-50/30' : 'border-border hover:border-gray-300'
-        }`}
-      />
-      {error && <p className="text-xs text-red-500">{error}</p>}
+      <div className="relative">
+        <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted transition-colors group-focus-within:text-accent">
+          <Icon size={17} strokeWidth={2} />
+        </span>
+        <input
+          type={inputType}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className={`w-full rounded-xl border-2 bg-input py-2.5 pl-11 pr-3.5 text-sm text-heading placeholder:text-muted/70 transition-all focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/10 ${
+            error
+              ? 'border-red-400 bg-red-50/20 dark:bg-red-950/20'
+              : 'border-border hover:border-accent/35'
+          }`}
+        />
+      </div>
+      {error && <p className="mt-1.5 text-xs font-medium text-red-500">{error}</p>}
     </div>
   );
+}
+
+function getFieldGridClass(field) {
+  if (!field.builtIn) return 'sm:col-span-2';
+  return '';
 }
 
 export default function ApplicationPreviewFlow({ job }) {
@@ -195,52 +327,34 @@ export default function ApplicationPreviewFlow({ job }) {
   };
 
   if (phase === 'done') {
+    const thankYou = job.settings?.thankYouPage || {};
+
     return (
-      <div className={`${PAGE_CLASS} text-center`}>
-        <div className={`${CARD_CLASS} px-8 py-14 sm:px-12`}>
-          <span className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-accent/10 text-accent">
-            <CheckCircle2 size={36} />
-          </span>
-          <h2 className="text-2xl font-semibold text-heading">Application submitted!</h2>
-          <p className="mt-3 text-muted max-w-md mx-auto text-[15px] leading-relaxed">
-            Thank you for applying to <strong className="text-heading">{job.title}</strong> at {job.company}.
-            We&apos;ll review your responses and get back to you soon.
-          </p>
-        </div>
-      </div>
+      <StepLayout>
+        <ThankYouScreen job={job} thankYou={thankYou} />
+      </StepLayout>
     );
   }
 
   if (phase === 'questions' && currentQuestion) {
     const answer = questionAnswers[currentQuestion.id] ?? '';
+    const totalSteps = standardQuestions.length + 1;
+    const currentStep = questionIndex + 1;
 
     return (
-      <div className={PAGE_CLASS}>
-        <div className="mb-6 text-center">
-          <p className="text-sm text-muted">
-            Question {questionIndex + 1} of {standardQuestions.length}
-          </p>
-          <div className="mt-2 h-1.5 rounded-full bg-gray-100 overflow-hidden max-w-sm mx-auto">
-            <div
-              className="h-full bg-accent transition-all duration-300"
-              style={{ width: `${((questionIndex + 1) / standardQuestions.length) * 100}%` }}
-            />
-          </div>
-        </div>
-
-        <div className={`${CARD_CLASS} p-8 sm:p-10`}>
-          <h2 className="text-xl font-semibold text-heading mb-6">
-            {currentQuestion.label || 'Untitled question'}
-            {currentQuestion.required && <span className="text-accent"> *</span>}
-          </h2>
-
+      <StepLayout>
+        <ProgressBar current={currentStep} total={totalSteps} />
+        <StepCard
+          title={currentQuestion.label || 'Untitled question'}
+          subtitle={currentQuestion.required ? 'Required question' : 'Optional question'}
+        >
           {currentQuestion.type === 'multiple-choice' ? (
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {(currentQuestion.options || []).map((opt) => (
                 <label
                   key={opt}
-                  className={`flex items-center gap-3 rounded-xl border px-4 py-3.5 cursor-pointer transition-colors ${
-                    answer === opt ? 'border-accent bg-accent/5' : 'border-border hover:bg-gray-50'
+                  className={`flex cursor-pointer items-center gap-3 rounded-xl border-2 px-4 py-3 transition-all ${
+                    answer === opt ? 'border-accent bg-accent/5' : 'border-border hover:border-accent/35 hover:bg-hover'
                   }`}
                 >
                   <input
@@ -253,13 +367,14 @@ export default function ApplicationPreviewFlow({ job }) {
                     }}
                     className="text-accent"
                   />
-                  <span className="text-sm text-heading">{opt}</span>
+                  <span className="text-sm font-medium text-heading">{opt}</span>
                 </label>
               ))}
-              {questionError && <p className="text-xs text-red-500">{questionError}</p>}
+              {questionError && <p className="text-xs font-medium text-red-500">{questionError}</p>}
             </div>
           ) : (
             <PreviewField
+              field={currentQuestion}
               label="Your answer"
               required={currentQuestion.required}
               type={currentQuestion.type}
@@ -273,56 +388,75 @@ export default function ApplicationPreviewFlow({ job }) {
             />
           )}
 
-          <Button className="w-full mt-8 rounded-full py-3.5" size="lg" onClick={handleQuestionNext}>
+          <Button
+            className="mt-6 w-full rounded-full py-3 text-sm font-semibold shadow-md shadow-accent/20 sm:text-base"
+            size="lg"
+            onClick={handleQuestionNext}
+          >
             {questionIndex < standardQuestions.length - 1 ? 'Next' : 'Continue to video'}{' '}
             <ChevronRight size={18} />
           </Button>
-        </div>
-      </div>
+        </StepCard>
+      </StepLayout>
     );
   }
 
   if (phase === 'video') {
-    return (
-      <div className={PAGE_CLASS}>
-        <div className={`${CARD_CLASS} p-8 sm:p-10 text-center`}>
-          <span className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-accent/10 text-accent">
-            <Video size={26} />
-          </span>
-          <h2 className="text-xl font-semibold text-heading">
-            {mediaQuestion?.label || 'Tell me about yourself'}
-            <span className="text-accent"> *</span>
-          </h2>
-          <p className="mt-2 text-sm text-muted max-w-lg mx-auto leading-relaxed">
-            Record a short video using your camera and microphone. This step is required to submit your application.
-          </p>
+    const totalSteps = standardQuestions.length + 1;
+    const currentStep = totalSteps;
 
+    return (
+      <StepLayout>
+        <ProgressBar current={currentStep} total={totalSteps} />
+        <StepCard
+          badge="Final step"
+          title={mediaQuestion?.label || 'Tell me about yourself'}
+          subtitle="Record a short video using your camera and microphone. This step is required to submit your application."
+        >
           {videoRecording?.url ? (
-            <div className="mt-6 mx-auto max-w-xl">
-              <video src={videoRecording.url} controls playsInline className="w-full rounded-xl bg-black shadow-md" />
-              <button
-                type="button"
-                onClick={() => setRecorderOpen(true)}
-                className="mt-3 text-sm font-medium text-accent hover:underline"
-              >
-                Re-record video
-              </button>
+            <div className="overflow-hidden rounded-xl border border-border bg-black">
+              <div className="relative aspect-video w-full">
+                <video
+                  src={videoRecording.url}
+                  controls
+                  playsInline
+                  className="absolute inset-0 h-full w-full object-contain"
+                />
+              </div>
+              <div className="border-t border-border bg-card px-4 py-3 text-center">
+                <button
+                  type="button"
+                  onClick={() => setRecorderOpen(true)}
+                  className="text-sm font-medium text-accent hover:underline"
+                >
+                  Re-record video
+                </button>
+              </div>
             </div>
           ) : (
-            <div className="mt-6 mx-auto max-w-xl rounded-xl border border-dashed border-border bg-gray-50 py-12 px-6">
-              <p className="text-sm text-muted">No recording yet</p>
-              <Button className="mt-4" onClick={() => setRecorderOpen(true)}>
-                <Video size={16} /> Record video
-              </Button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setRecorderOpen(true)}
+              className="group flex w-full flex-col items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-border bg-hover py-12 transition-all hover:border-accent/40 hover:bg-accent/[0.03]"
+            >
+              <span className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-accent/10 text-accent transition-transform group-hover:scale-105">
+                <Video size={26} />
+              </span>
+              <p className="text-sm font-semibold text-heading">No recording yet</p>
+              <p className="mt-1 text-xs text-muted">Click to open camera and record</p>
+            </button>
           )}
 
-          {videoError && <p className="mt-3 text-sm text-red-500">{videoError}</p>}
+          {videoError && <p className="mt-3 text-center text-sm font-medium text-red-500">{videoError}</p>}
 
-          <Button className="w-full mt-8 max-w-xl mx-auto rounded-full py-3.5" size="lg" onClick={handleSubmit}>
+          <Button
+            className="mt-6 w-full rounded-full py-3 text-sm font-semibold shadow-md shadow-accent/20 sm:text-base"
+            size="lg"
+            onClick={handleSubmit}
+          >
             Submit application
           </Button>
-        </div>
+        </StepCard>
 
         <VideoRecorderModal
           isOpen={recorderOpen}
@@ -330,35 +464,31 @@ export default function ApplicationPreviewFlow({ job }) {
           onRecorded={handleVideoRecorded}
           title="Record your response"
         />
-      </div>
+      </StepLayout>
     );
   }
 
   const jobMeta = [job.title, job.location, job.employmentType].filter(Boolean).join(' · ');
 
   return (
-    <div className={PAGE_CLASS}>
-      <header className="mb-6 sm:mb-8">
-        <CompanyLogo company={job.company} />
-      </header>
-
+    <div className={`${CONTENT_WIDTH} space-y-5 py-5 sm:py-6`}>
       {job.introMedia?.url && (
-        <section className="mb-8 sm:mb-10">
-          <div className="overflow-hidden rounded-2xl shadow-md ring-1 ring-black/5">
+        <section className="overflow-hidden rounded-xl border border-border bg-black shadow-md">
+          <div className="relative aspect-[16/9] w-full">
             {isVideoMedia(job.introMedia) ? (
               <video
                 key={job.introMedia.url}
                 src={job.introMedia.url}
                 controls
                 playsInline
-                className="w-full aspect-video max-h-[440px] bg-black object-cover"
+                className="absolute inset-0 h-full w-full object-contain"
               />
             ) : (
               <img
                 key={job.introMedia.url}
                 src={job.introMedia.url}
                 alt="Introduction"
-                className="w-full aspect-video max-h-[440px] object-cover"
+                className="absolute inset-0 h-full w-full object-contain"
               />
             )}
           </div>
@@ -366,52 +496,66 @@ export default function ApplicationPreviewFlow({ job }) {
       )}
 
       {(introTitle || jobMeta || hasInstructions) && (
-        <section className="mb-8 sm:mb-10 max-w-3xl mx-auto text-center">
+        <section className="text-center">
+          {job.company && (
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-accent">{job.company}</p>
+          )}
           {introTitle && (
-            <h1 className="text-2xl sm:text-3xl font-bold text-heading tracking-tight leading-tight">
+            <h1 className={`text-2xl font-semibold tracking-tight text-heading leading-tight sm:text-[1.75rem] ${job.company ? 'mt-2' : ''}`}>
               {introTitle}
             </h1>
           )}
           {jobMeta && (
-            <p className={`text-base text-muted font-medium ${introTitle ? 'mt-3' : ''}`}>{jobMeta}</p>
+            <p className={`text-sm text-muted font-medium ${introTitle || job.company ? 'mt-2' : ''}`}>{jobMeta}</p>
           )}
           {hasInstructions && (
-            <div className={`text-left ${introTitle || jobMeta ? 'mt-8' : ''}`}>
+            <div className={`mx-auto max-w-3xl text-left ${introTitle || jobMeta || job.company ? 'mt-4' : ''}`}>
               <InstructionText text={instructions} />
             </div>
           )}
         </section>
       )}
 
-      <section className={`${CARD_CLASS} p-7 sm:p-9 lg:p-10`}>
-        <h2 className="text-lg sm:text-xl font-semibold text-accent mb-7">{applicationTitle}</h2>
-
-        <div className="grid gap-5 sm:grid-cols-2 lg:gap-6">
-          {fields.map((field) => (
-            <PreviewField
-              key={field.id}
-              label={field.label}
-              required={field.required}
-              type={field.type}
-              value={applicationValues[field.id] ?? ''}
-              onChange={(v) => handleApplicationChange(field.id, v)}
-              error={applicationErrors[field.id]}
-              placeholder={`Enter ${field.label.toLowerCase()}`}
-              className={!field.builtIn || field.id === 'email' ? 'sm:col-span-2' : ''}
-            />
-          ))}
+      <section className={`${CARD_CLASS} overflow-hidden`}>
+        <div className="border-b border-border bg-accent/[0.04] px-5 py-4 sm:px-6">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-accent">Step 1</p>
+          <h2 className="text-base font-semibold text-heading sm:text-lg">{applicationTitle}</h2>
+          <p className="mt-0.5 text-sm text-muted">Fill in your details to continue</p>
         </div>
 
-        <Button className="w-full mt-8 sm:mt-10 rounded-full py-3.5 text-base font-semibold" size="lg" onClick={handleStartNow}>
-          Start now
-        </Button>
+        <div className="p-5 sm:p-6">
+          <div className="grid gap-4 sm:grid-cols-2">
+            {fields.map((field) => (
+              <PreviewField
+                key={field.id}
+                field={field}
+                label={field.label}
+                required={field.required}
+                type={field.type}
+                value={applicationValues[field.id] ?? ''}
+                onChange={(v) => handleApplicationChange(field.id, v)}
+                error={applicationErrors[field.id]}
+                placeholder={getFieldPlaceholder(field)}
+                className={getFieldGridClass(field)}
+              />
+            ))}
+          </div>
 
-        <p className="mt-6 text-center text-xs sm:text-sm text-muted">
-          By continuing, you agree to our{' '}
-          <a href="#" className="text-accent font-medium hover:underline" onClick={(e) => e.preventDefault()}>
-            Privacy policy & Terms
-          </a>
-        </p>
+          <Button
+            className="mt-6 w-full rounded-full py-3 text-sm font-semibold shadow-md shadow-accent/20 sm:text-base"
+            size="lg"
+            onClick={handleStartNow}
+          >
+            Start now
+          </Button>
+
+          <p className="mt-3 text-center text-xs text-muted">
+            By continuing, you agree to our{' '}
+            <a href="#" className="text-accent font-medium hover:underline" onClick={(e) => e.preventDefault()}>
+              Privacy policy & Terms
+            </a>
+          </p>
+        </div>
       </section>
     </div>
   );
