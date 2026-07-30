@@ -17,10 +17,32 @@ jobs:
   release-please:
     name: Release Please
     runs-on: ubuntu-latest
+    outputs:
+      releases_created: ${{ steps.release.outputs.releases_created }}
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Run Release Please
+        id: release
         uses: googleapis/release-please-action@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+      - name: Extract release version
+        id: version
+        if: steps.release.outputs.releases_created == 'true'
+        run: |
+          VERSION=$(echo '${{ steps.release.outputs.paths_released }}' | jq -r '.[0].version')
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+  publish-release-docker:
+    name: Publish release Docker images
+    needs: release-please
+    if: needs.release-please.outputs.releases_created == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/release-docker.yml
+    with:
+      tag: v${{ needs.release-please.outputs.version }}
+    secrets: inherit

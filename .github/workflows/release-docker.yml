@@ -1,0 +1,81 @@
+name: Release Docker
+
+on:
+  release:
+    types: [published]
+  workflow_call:
+    inputs:
+      tag:
+        description: Git release tag (e.g. v1.2.3)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish-release-images:
+    name: Push release Docker images
+    runs-on: ubuntu-latest
+    env:
+      DOCKERHUB_ORG: hirekal
+      RELEASE_TAG: ${{ inputs.tag || github.event.release.tag_name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: api
+            dockerfile: apps/api-app/Dockerfile
+            image: api
+          - name: console
+            dockerfile: apps/console-app/Dockerfile
+            image: console
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Compute release image tags
+        id: tags
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELEASE_TAG="${RELEASE_TAG}"
+          VERSION="${RELEASE_TAG#v}"
+
+          FULL_TAGS="${DOCKERHUB_ORG}/${IMAGE_NAME}:latest"
+          FULL_TAGS+=$'\n'"${DOCKERHUB_ORG}/${IMAGE_NAME}:${RELEASE_TAG}"
+          FULL_TAGS+=$'\n'"${DOCKERHUB_ORG}/${IMAGE_NAME}:${VERSION}"
+
+          {
+            echo "tags<<EOF"
+            echo "${FULL_TAGS}"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+        env:
+          DOCKERHUB_ORG: ${{ env.DOCKERHUB_ORG }}
+          IMAGE_NAME: ${{ matrix.image }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.name }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.tags.outputs.tags }}
+          build-args: |
+            GITHUB_REPOSITORY=${{ github.repository }}
+            GITHUB_SHA=${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.image }}-release
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-release
