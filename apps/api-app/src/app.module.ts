@@ -6,6 +6,7 @@ import { getDatabaseUrl } from './config/typeorm.config';
 import { JobModule } from './modules/job/job.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { AuthModule } from './modules/auth/auth.module';
 
 @Module({
     imports: [
@@ -24,6 +25,16 @@ import { AppService } from './app.service';
         }),
         CloudStorageModule,
         JobModule,
+        AuthModule.forRootAsync({
+            inject: [ConfigService],
+            useFactory: (configService: ConfigService) => {
+              return {
+                jwtSecret: configService.get('JWT_SECRET'),
+                jwtAccessExpiresIn: configService.get('JWT_ACCESS_EXPIRES_IN'),
+                jwtRefreshExpiresIn: configService.get('JWT_REFRESH_EXPIRES_IN'),
+              };
+            },
+          }),
     ],
     controllers: [AppController],
     providers: [AppService],
