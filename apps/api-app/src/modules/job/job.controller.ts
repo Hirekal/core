@@ -1,0 +1,309 @@
+import {
+    Body,
+    Controller,
+    Delete,
+    Get,
+    Logger,
+    Param,
+    ParseUUIDPipe,
+    Patch,
+    Post,
+    Query,
+    UploadedFile,
+    UseGuards,
+    UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { RequestContextGuard } from '../../common/request-context/request-context.guard';
+import { CurrentOrganizationId } from '../../common/request-context/current-organization-id.decorator';
+import { CurrentUserId } from '../../common/request-context/current-user-id.decorator';
+import { CreateJobDto } from './dto/create-job.dto';
+import { ListJobsQueryDto } from './dto/list-jobs-query.dto';
+import { UpdateJobDto } from './dto/update-job.dto';
+import { JobService } from './job.service';
+import { toErrorMessage } from '../../common/utils/error.util';
+
+@Controller('jobs')
+@UseGuards(RequestContextGuard)
+export class JobController {
+    private readonly logger = new Logger(JobController.name);
+
+    constructor(private readonly jobService: JobService) { }
+
+    /**
+     * List jobs for the current organization.
+     * @param organizationId 
+     * @param query 
+     * @returns 
+     */
+    @Get()
+    async findAll(
+        @CurrentOrganizationId() organizationId: string,
+        @Query() query: ListJobsQueryDto,
+    ) {
+        try {
+            return await this.jobService.findAll(organizationId, query);
+        } catch (error) {
+            this.logger.error(`List jobs failed: ${toErrorMessage(error)}`);
+            throw error;
+        }
+    }
+
+    /**
+     * Create a new job (seeds questions, fields, stages, settings).
+     * @param organizationId 
+     * @param userId 
+     * @param dto 
+     * @returns 
+     */
+    @Post()
+    async create(
+        @CurrentOrganizationId() organizationId: string,
+        @CurrentUserId() userId: string,
+        @Body() dto: CreateJobDto,
+    ) {
+        try {
+            return await this.jobService.create(organizationId, userId, dto);
+        } catch (error) {
+            this.logger.error(`Create job failed: ${toErrorMessage(error)}`);
+            throw error;
+        }
+    }
+
+    /**
+     * Admin preview payload for a job.
+     * @param id 
+     * @param organizationId 
+     * @returns 
+     */
+    @Get(':id/preview')
+    async preview(
+        @Param('id', ParseUUIDPipe) id: string,
+        @CurrentOrganizationId() organizationId: string,
+    ) {
+        try {
+            return await this.jobService.preview(id, organizationId);
+        } catch (error) {
+            this.logger.error(`Preview job ${id} failed: ${toErrorMessage(error)}`);
+            throw error;
+        }
+    }
+
+    /**
+     * Upload intro media (image/video) to R2 for a job.
+     * @param id 
+     * @param organizationId 
+     * @param userId 
+     * @param file 
+     * @returns 
+     */
+    @Post(':id/media/intro')
+    @UseInterceptors(FileInterceptor('file'))
+    async uploadIntroMedia(
+        @Param('id', ParseUUIDPipe) id: string,
+        @CurrentOrganizationId() organizationId: string,
+        @CurrentUserId() userId: string,
+        @UploadedFile() file: Express.Multer.File,
+    ) {
+        try {
+            return await this.jobService.uploadIntroMedia(
+                id,
+                organizationId,
+                userId,
+                file,
+            );
+        } catch (error) {
+            this.logger.error(`Upload intro media for job ${id} failed: ${toErrorMessage(error)}`);
+            throw error;
+        }
+    }
+
+    /**
+     * Remove intro media from R2 and clear job columns.
+     * @param id 
+     * @param organizationId 
+     * @param userId 
+     * @returns 
+     */
+    @Delete(':id/media/intro')
+    async deleteIntroMedia(
+        @Param('id', ParseUUIDPipe) id: string,
+        @CurrentOrganizationId() organizationId: string,
+        @CurrentUserId() userId: string,
+    ) {
+        try {
+            return await this.jobService.deleteIntroMedia(id, organizationId, userId);
+        } catch (error) {
+            this.logger.error(`Delete intro media for job ${id} failed: ${toErrorMessage(error)}`);
+            throw error;
+        }
+    }
+
+    /**
+     * Duplicate a job with children and R2 media copy.
+     * @param id 
+     * @param organizationId 
+     * @param userId 
+     * @returns 
+     */
+    @Post(':id/duplicate')
+    async duplicate(
+        @Param('id', ParseUUIDPipe) id: string,
+        @CurrentOrganizationId() organizationId: string,
+        @CurrentUserId() userId: string,
+    ) {
+        try {
+            return await this.jobService.duplicate(id, organizationId, userId);
+        } catch (error) {
+            this.logger.error(`Duplicate job ${id} failed: ${toErrorMessage(error)}`);
+            throw error;
+        }
+    }
+
+    /**
+     * Pause an active job.
+     * @param id 
+     * @param organizationId 
+     * @param userId 
+     * @returns 
+     */
+    @Post(':id/pause')
+    async pause(
+        @Param('id', ParseUUIDPipe) id: string,
+        @CurrentOrganizationId() organizationId: string,
+        @CurrentUserId() userId: string,
+    ) {
+        try {
+            return await this.jobService.pause(id, organizationId, userId);
+        } catch (error) {
+            this.logger.error(`Pause job ${id} failed: ${toErrorMessage(error)}`);
+            throw error;
+        }
+    }
+
+    /**
+     * Resume a paused job.
+     * @param id 
+     * @param organizationId 
+     * @param userId 
+     * @returns 
+     */
+    @Post(':id/resume')
+    async resume(
+        @Param('id', ParseUUIDPipe) id: string,
+        @CurrentOrganizationId() organizationId: string,
+        @CurrentUserId() userId: string,
+    ) {
+        try {
+            return await this.jobService.resume(id, organizationId, userId);
+        } catch (error) {
+            this.logger.error(`Resume job ${id} failed: ${toErrorMessage(error)}`);
+            throw error;
+        }
+    }
+
+    /**
+     * Archive an active or paused job.
+     * @param id 
+     * @param organizationId 
+     * @param userId 
+     * @returns 
+     */
+    @Post(':id/archive')
+    async archive(
+        @Param('id', ParseUUIDPipe) id: string,
+        @CurrentOrganizationId() organizationId: string,
+        @CurrentUserId() userId: string,
+    ) {
+        try {
+            return await this.jobService.archive(id, organizationId, userId);
+        } catch (error) {
+            this.logger.error(`Archive job ${id} failed: ${toErrorMessage(error)}`);
+            throw error;
+        }
+    }
+
+    /**
+     * Restore an archived job to active.
+     * @param id 
+     * @param organizationId 
+     * @param userId 
+     * @returns 
+     */
+    @Post(':id/restore')
+    async restore(
+        @Param('id', ParseUUIDPipe) id: string,
+        @CurrentOrganizationId() organizationId: string,
+        @CurrentUserId() userId: string,
+    ) {
+        try {
+            return await this.jobService.restore(id, organizationId, userId);
+        } catch (error) {
+            this.logger.error(`Restore job ${id} failed: ${toErrorMessage(error)}`);
+            throw error;
+        }
+    }
+
+    /**
+     * Get a full job by id (org-scoped).
+     * @param id 
+     * @param organizationId 
+     * @returns 
+     */
+    @Get(':id')
+    async findById(
+        @Param('id', ParseUUIDPipe) id: string,
+        @CurrentOrganizationId() organizationId: string,
+    ) {
+        try {
+            return await this.jobService.findById(id, organizationId);
+        } catch (error) {
+            this.logger.error(`Get job ${id} failed: ${toErrorMessage(error)}`);
+            throw error;
+        }
+    }
+
+    /**
+     * Update a job and optional nested questions/fields.
+     * @param id 
+     * @param organizationId 
+     * @param userId 
+     * @param dto 
+     * @returns 
+     */
+    @Patch(':id')
+    async update(
+        @Param('id', ParseUUIDPipe) id: string,
+        @CurrentOrganizationId() organizationId: string,
+        @CurrentUserId() userId: string,
+        @Body() dto: UpdateJobDto,
+    ) {
+        try {
+            return await this.jobService.update(id, organizationId, userId, dto);
+        } catch (error) {
+            this.logger.error(`Update job ${id} failed: ${toErrorMessage(error)}`);
+            throw error;
+        }
+    }
+
+    /**
+     * Soft-delete an archived job (and best-effort R2 cleanup).
+     * @param id 
+     * @param organizationId 
+     * @param userId 
+     * @returns 
+     */
+    @Delete(':id')
+    async delete(
+        @Param('id', ParseUUIDPipe) id: string,
+        @CurrentOrganizationId() organizationId: string,
+        @CurrentUserId() userId: string,
+    ) {
+        try {
+            return await this.jobService.delete(id, organizationId, userId);
+        } catch (error) {
+            this.logger.error(`Delete job ${id} failed: ${toErrorMessage(error)}`);
+            throw error;
+        }
+    }
+}
