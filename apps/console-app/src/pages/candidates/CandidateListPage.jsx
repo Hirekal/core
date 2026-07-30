@@ -76,12 +76,14 @@ export default function CandidateListPage() {
             placeholder="Search candidates..."
             value={candidateSearch}
             onChange={(e) => setCandidateSearch(e.target.value)}
-            className="w-full rounded-lg border border-border bg-white py-2 pl-9 pr-3 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+            className="w-full rounded-lg border border-border bg-input py-2 pl-9 pr-3 text-sm text-heading placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
           />
         </div>
         <SelectDropdown
+          size="sm"
           value={candidateSortBy}
           onChange={setCandidateSortBy}
+          placeholder="Sort by"
           options={[
             { value: 'submitted', label: 'Submission Date' },
             { value: 'name', label: 'Name A-Z' },

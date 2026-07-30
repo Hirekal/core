@@ -15,8 +15,7 @@ const delay = (ms = 300) => new Promise((resolve) => setTimeout(resolve, ms));
 function sanitizeJobForStorage(job) {
   const copy = { ...job };
   if (copy.introMedia?.url && isLocalMediaUrl(copy.introMedia.url)) {
-    const { url, ...rest } = copy.introMedia;
-    console.log('url', url);
+    const { url: _url, ...rest } = copy.introMedia;
     copy.introMedia = rest.storageKey ? rest : null;
   }
   return copy;
@@ -230,6 +229,32 @@ export async function deleteJob(id) {
     // ignore
   }
   return { success: true };
+}
+
+export async function pauseJob(id) {
+  await delay(400);
+  const index = jobsStore.findIndex((j) => j.id === id);
+  if (index === -1) return null;
+  jobsStore[index] = {
+    ...jobsStore[index],
+    status: 'paused',
+    updatedAt: new Date().toISOString(),
+  };
+  writeStore();
+  return jobsStore[index];
+}
+
+export async function resumeJob(id) {
+  await delay(400);
+  const index = jobsStore.findIndex((j) => j.id === id);
+  if (index === -1) return null;
+  jobsStore[index] = {
+    ...jobsStore[index],
+    status: 'active',
+    updatedAt: new Date().toISOString(),
+  };
+  writeStore();
+  return jobsStore[index];
 }
 
 export async function archiveJob(id) {

@@ -74,6 +74,16 @@ export default function JobListingPage() {
     loadJobs();
   };
 
+  const handlePause = async (job) => {
+    await jobService.pauseJob(job.id);
+    loadJobs();
+  };
+
+  const handleResume = async (job) => {
+    await jobService.resumeJob(job.id);
+    loadJobs();
+  };
+
   const tableColumns = [
     {
       key: 'title',
@@ -101,6 +111,8 @@ export default function JobListingPage() {
           job={row}
           onDuplicate={handleDuplicate}
           onCopyLink={handleCopyLink}
+          onPause={handlePause}
+          onResume={handleResume}
           onArchive={setJobToArchive}
           onRestore={handleRestore}
           onDelete={setJobToDelete}
@@ -185,13 +197,13 @@ export default function JobListingPage() {
             action={<Link to="/jobs/new"><Button><Plus size={16} /> Add New Job</Button></Link>}
           />
         ) : jobViewMode === 'table' ? (
-          <div className="rounded-xl border border-border bg-white shadow-sm">
+          <div className="rounded-xl border border-border bg-card shadow-sm">
             <Table columns={tableColumns} data={jobs} />
           </div>
         ) : jobViewMode === 'list' ? (
           <div className="space-y-3">
             {jobs.map((job) => (
-              <div key={job.id} className="flex items-center gap-4 rounded-xl border border-border bg-white p-4 shadow-sm hover:shadow-md transition-shadow">
+              <div key={job.id} className="flex items-center gap-4 rounded-xl border border-border bg-card p-4 shadow-sm transition-shadow hover:shadow-md">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <Link to={`/jobs/${job.id}`} className="font-semibold hover:text-accent">{job.title}</Link>
@@ -205,6 +217,8 @@ export default function JobListingPage() {
                   job={job}
                   onDuplicate={handleDuplicate}
                   onCopyLink={handleCopyLink}
+                  onPause={handlePause}
+                  onResume={handleResume}
                   onArchive={setJobToArchive}
                   onRestore={handleRestore}
                   onDelete={setJobToDelete}
@@ -213,16 +227,13 @@ export default function JobListingPage() {
             ))}
           </div>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
             {jobs.map((job) => (
               <JobCard
                 key={job.id}
                 job={job}
                 onDuplicate={handleDuplicate}
                 onCopyLink={handleCopyLink}
-                onArchive={setJobToArchive}
-                onRestore={handleRestore}
-                onDelete={setJobToDelete}
               />
             ))}
           </div>

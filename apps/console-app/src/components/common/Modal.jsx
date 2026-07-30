@@ -22,12 +22,12 @@ export default function Modal({ isOpen, onClose, title, children, footer, size =
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className={`relative w-full ${sizeClasses[size]} rounded-xl bg-white shadow-xl`}>
+      <div className={`relative w-full ${sizeClasses[size]} rounded-xl bg-card shadow-xl`}>
         <div className="flex items-center justify-between border-b border-border px-6 py-4">
           <h2 className="text-lg font-semibold text-heading">{title}</h2>
           <button
             onClick={onClose}
-            className="rounded-lg p-1 text-muted hover:bg-gray-100 hover:text-heading"
+            className="rounded-lg p-1 text-muted hover:bg-hover hover:text-heading"
           >
             <X size={20} />
           </button>

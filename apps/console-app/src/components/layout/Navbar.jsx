@@ -8,7 +8,7 @@ export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-white">
+    <header className="sticky top-0 z-40 border-b border-border bg-card">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
         {/* Left: logo + brand name + Jobs */}
         <div className="flex items-center gap-8">
@@ -24,7 +24,7 @@ export default function Navbar() {
               to="/jobs"
               className={({ isActive }) =>
                 `flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                  isActive ? 'text-accent bg-accent/5' : 'text-muted hover:text-heading hover:bg-gray-50'
+                  isActive ? 'text-accent bg-accent/5' : 'text-muted hover:text-heading hover:bg-hover'
                 }`
               }
             >
@@ -40,7 +40,7 @@ export default function Navbar() {
           <UserMenu />
 
           <button
-            className="md:hidden rounded-lg p-2 text-muted hover:bg-gray-50"
+            className="md:hidden rounded-lg p-2 text-muted hover:bg-hover"
             onClick={() => setMobileOpen(!mobileOpen)}
             aria-label="Menu"
           >
@@ -50,7 +50,7 @@ export default function Navbar() {
       </div>
 
       {mobileOpen && (
-        <nav className="border-t border-border bg-white px-4 py-3 md:hidden">
+        <nav className="border-t border-border bg-card px-4 py-3 md:hidden">
           <NavLink
             to="/jobs"
             onClick={() => setMobileOpen(false)}
