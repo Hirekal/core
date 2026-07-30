@@ -11,7 +11,6 @@ import {
     QuestionCategory,
     QuestionType,
 } from '../enums/job.enums';
-import { nowMs } from '../../../common/utils/timestamp.util';
 import { JobService } from '../job.service';
 import {
     CreateJobQuestionDto,
@@ -78,7 +77,7 @@ export class JobQuestionsService {
             }
 
             const existing = await this.questionRepository.findByJobId(jobId);
-            const timestamp = nowMs();
+            const timestamp = new Date();
 
             return this.questionRepository.create({
                 jobId,
@@ -123,7 +122,7 @@ export class JobQuestionsService {
                 throw new NotFoundException(QuestionErrors.NOT_FOUND(questionId));
             }
 
-            const updateData: Partial<JobQuestion> = { updatedAt: nowMs() };
+            const updateData: Partial<JobQuestion> = { updatedAt: new Date() };
 
             if (question.builtIn) {
                 if (dto.type && dto.type !== QuestionType.VIDEO) {
@@ -216,7 +215,7 @@ export class JobQuestionsService {
                 );
             }
 
-            const timestamp = nowMs();
+            const timestamp = new Date();
             for (let i = 0; i < dto.questionIds.length; i++) {
                 await this.questionRepository.update(dto.questionIds[i], {
                     sortOrder: i + 1,

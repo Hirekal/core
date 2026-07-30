@@ -1,6 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
-import { SYSTEM_ROLES } from '../../auth/common/constants/auth.constants';
-import { ROLE_DESCRIPTIONS } from '../../auth/common/constants/messages';
+import { SYSTEM_ROLES } from '../modules/auth/common/constants/auth.constants';
+import { ROLE_DESCRIPTIONS } from '../modules/auth/common/constants/messages';
 
 export class SeedSystemRoles1753870800000 implements MigrationInterface {
   name = 'SeedSystemRoles1753870800000';

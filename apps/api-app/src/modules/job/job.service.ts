@@ -32,7 +32,6 @@ import { R2Service } from '../cloud-storage/r2.service';
 import { isPostgresUniqueViolation } from '../../common/utils/error.util';
 import { buildMediaKey, validateMediaFile } from './utils/media.util';
 import { resolveUniqueSlug, slugifyTitle } from '../../common/utils/slug.util';
-import { nowMs } from '../../common/utils/timestamp.util';
 import { JobApplicationFieldRepository } from './job-application-fields/repositories/job-application-field.repository';
 import { JobPipelineStageRepository } from './job-pipeline-stages/repositories/job-pipeline-stage.repository';
 import { JobQuestionRepository } from './job-questions/repositories/job-question.repository';
@@ -138,7 +137,7 @@ export class JobService {
         const maxSlugAttempts = 5;
 
         try {
-            const timestamp = nowMs();
+            const timestamp = new Date();
             const baseSlug = slugifyTitle(dto.title);
 
             for (let attempt = 1; attempt <= maxSlugAttempts; attempt++) {
@@ -333,7 +332,7 @@ export class JobService {
                 throw new NotFoundException(JobErrors.NOT_FOUND(id));
             }
 
-            const timestamp = nowMs();
+            const timestamp = new Date();
             const updateData: Partial<Job> = {
                 updatedById: userId,
                 updatedAt: timestamp,
@@ -450,9 +449,9 @@ export class JobService {
             }
 
             await this.jobRepository.update(id, {
-                deletedAt: nowMs(),
+                deletedAt: new Date(),
                 updatedById: userId,
-                updatedAt: nowMs(),
+                updatedAt: new Date(),
             });
 
             // Soft-delete already succeeded — R2 cleanup must not fail the API response
@@ -493,7 +492,7 @@ export class JobService {
                 throw new NotFoundException(JobErrors.NOT_FOUND(id));
             }
 
-            const timestamp = nowMs();
+            const timestamp = new Date();
             const baseSlug = slugifyTitle(`${original.title}-copy`);
             const newJobId = randomUUID();
 
@@ -827,7 +826,7 @@ export class JobService {
                 introMediaStorageKey: storageKey,
                 introMediaFileName: file.originalname,
                 updatedById: userId,
-                updatedAt: nowMs(),
+                updatedAt: new Date(),
             });
 
             // Only delete the old object after DB points at the new one
@@ -876,7 +875,7 @@ export class JobService {
                 introMediaStorageKey: null,
                 introMediaFileName: null,
                 updatedById: userId,
-                updatedAt: nowMs(),
+                updatedAt: new Date(),
             });
 
             if (previousKey) {
@@ -935,7 +934,7 @@ export class JobService {
             await this.jobRepository.update(id, {
                 status: to,
                 updatedById: userId,
-                updatedAt: nowMs(),
+                updatedAt: new Date(),
             });
             return this.findById(id, organizationId);
         } catch (error) {
@@ -984,7 +983,7 @@ export class JobService {
         manager: import('typeorm').EntityManager,
         jobId: string,
         questions: UpdateJobDto['questions'],
-        timestamp: number,
+        timestamp: Date,
     ): Promise<void> {
         if (!questions) return;
 
@@ -1052,7 +1051,7 @@ export class JobService {
         manager: import('typeorm').EntityManager,
         jobId: string,
         fields: UpdateJobDto['applicationFields'],
-        timestamp: number,
+        timestamp: Date,
     ): Promise<void> {
         if (!fields) return;
 

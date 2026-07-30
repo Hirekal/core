@@ -1,22 +1,14 @@
-import { Column, PrimaryGeneratedColumn } from 'typeorm';
-import { bigintTimestampTransformer } from '../utils/timestamp.util';
+import {
+  Column,
+  CreateDateColumn,
+  DeleteDateColumn,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 
 /**
- * Shared base columns for all entities: id + createdAt + updatedAt.
- *
- * Timestamps are bigint epoch ms (project convention).
+ * Shared base columns for all entities: id, timestamps, soft-delete, metadata, status.
  */
-// export abstract class BaseEntity {
-//   @PrimaryGeneratedColumn('uuid')
-//   id!: string;
-
-//   @Column({ type: 'bigint', transformer: bigintTimestampTransformer })
-//   createdAt!: number;
-
-//   @Column({ type: 'bigint', transformer: bigintTimestampTransformer })
-//   updatedAt!: number;
-// }
-
 export abstract class BaseEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;

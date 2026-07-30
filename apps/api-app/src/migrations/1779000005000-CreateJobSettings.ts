@@ -5,6 +5,7 @@ import {
   TableForeignKey,
   TableUnique,
 } from 'typeorm';
+import { BASE_ENTITY_COLUMNS } from './helpers/migration-columns';
 
 /**
  * ON DELETE CASCADE on jobId fires only on hard SQL DELETE (future purge).
@@ -16,19 +17,12 @@ export class CreateJobSettings1779000005000 implements MigrationInterface {
       new Table({
         name: 'job_settings',
         columns: [
-          {
-            name: 'id',
-            type: 'uuid',
-            isPrimary: true,
-            default: 'uuid_generate_v4()',
-          },
+          ...BASE_ENTITY_COLUMNS,
           { name: 'jobId', type: 'uuid', isNullable: false },
           { name: 'general', type: 'jsonb', default: `'{}'` },
           { name: 'thankYouPage', type: 'jsonb', default: `'{}'` },
           { name: 'emailAutomation', type: 'jsonb', default: `'{}'` },
           { name: 'webhook', type: 'jsonb', default: `'{}'` },
-          { name: 'createdAt', type: 'bigint', isNullable: false },
-          { name: 'updatedAt', type: 'bigint', isNullable: false },
         ],
       }),
       true,

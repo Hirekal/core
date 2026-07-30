@@ -5,22 +5,15 @@ import {
   TableIndex,
   TableUnique,
 } from 'typeorm';
+import { BASE_ENTITY_COLUMNS } from './helpers/migration-columns';
 
 export class CreateJobs1779000001000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
-
-    await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
-
     await queryRunner.createTable(
       new Table({
         name: 'jobs',
         columns: [
-          {
-            name: 'id',
-            type: 'uuid',
-            isPrimary: true,
-            default: 'uuid_generate_v4()',
-          },
+          ...BASE_ENTITY_COLUMNS,
           { name: 'organizationId', type: 'uuid', isNullable: false },
           { name: 'createdById', type: 'uuid', isNullable: true },
           { name: 'updatedById', type: 'uuid', isNullable: true },
@@ -49,12 +42,6 @@ export class CreateJobs1779000001000 implements MigrationInterface {
             type: 'varchar',
             length: '50',
             default: `'FULL_TIME'`,
-          },
-          {
-            name: 'status',
-            type: 'varchar',
-            length: '50',
-            default: `'ACTIVE'`,
           },
           { name: 'slug', type: 'varchar', length: '100', isNullable: false },
           {
@@ -117,9 +104,6 @@ export class CreateJobs1779000001000 implements MigrationInterface {
           { name: 'applicationsStarted', type: 'int', default: 0 },
           { name: 'applicationsSubmitted', type: 'int', default: 0 },
           { name: 'applicationCount', type: 'int', default: 0 },
-          { name: 'createdAt', type: 'bigint', isNullable: false },
-          { name: 'updatedAt', type: 'bigint', isNullable: false },
-          { name: 'deletedAt', type: 'bigint', isNullable: true },
         ],
       }),
       true,

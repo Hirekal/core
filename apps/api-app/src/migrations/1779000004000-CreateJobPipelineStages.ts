@@ -6,6 +6,7 @@ import {
   TableIndex,
   TableUnique,
 } from 'typeorm';
+import { BASE_ENTITY_COLUMNS } from './helpers/migration-columns';
 
 /**
  * ON DELETE CASCADE on jobId fires only on hard SQL DELETE (future purge).
@@ -19,20 +20,13 @@ export class CreateJobPipelineStages1779000004000
       new Table({
         name: 'job_pipeline_stages',
         columns: [
-          {
-            name: 'id',
-            type: 'uuid',
-            isPrimary: true,
-            default: 'uuid_generate_v4()',
-          },
+          ...BASE_ENTITY_COLUMNS,
           { name: 'jobId', type: 'uuid', isNullable: false },
           { name: 'name', type: 'varchar', length: '100', isNullable: false },
           { name: 'slug', type: 'varchar', length: '50', isNullable: false },
           { name: 'sortOrder', type: 'int', default: 0 },
           { name: 'active', type: 'boolean', default: true },
           { name: 'isDefault', type: 'boolean', default: false },
-          { name: 'createdAt', type: 'bigint', isNullable: false },
-          { name: 'updatedAt', type: 'bigint', isNullable: false },
         ],
       }),
       true,

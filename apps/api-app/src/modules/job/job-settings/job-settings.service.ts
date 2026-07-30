@@ -9,7 +9,6 @@ import { SettingsErrors } from '../constants/settings-errors';
 import { IntroMediaType } from '../enums/job.enums';
 import { R2Service } from '../../cloud-storage/r2.service';
 import { buildMediaKey, validateMediaFile } from '../utils/media.util';
-import { nowMs } from '../../../common/utils/timestamp.util';
 import { JobService } from '../job.service';
 import {
     PatchEmailAutomationDto,
@@ -178,7 +177,7 @@ export class JobSettingsService {
 
             await this.settingsRepository.update(settings.id, {
                 thankYouPage,
-                updatedAt: nowMs(),
+                updatedAt: new Date(),
             });
 
             if (previousKey && previousKey !== storageKey) {
@@ -235,7 +234,7 @@ export class JobSettingsService {
                     storageKey: '',
                     fileName: '',
                 },
-                updatedAt: nowMs(),
+                updatedAt: new Date(),
             });
 
             if (previousKey) {
@@ -304,7 +303,7 @@ export class JobSettingsService {
 
             await this.settingsRepository.update(settings.id, {
                 general,
-                updatedAt: nowMs(),
+                updatedAt: new Date(),
             });
 
             if (previousKey && previousKey !== storageKey) {
@@ -363,7 +362,7 @@ export class JobSettingsService {
 
             await this.settingsRepository.update(settings.id, {
                 [section]: merged,
-                updatedAt: nowMs(),
+                updatedAt: new Date(),
             } as Partial<JobSettings>);
 
             const updated = await this.settingsRepository.findByJobId(jobId);

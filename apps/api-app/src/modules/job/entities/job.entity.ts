@@ -4,7 +4,7 @@ import {
     JobStatus,
     QuestionRetakes,
 } from '../enums/job.enums';
-import { SoftDeletableEntity } from '../../../common/entities/base.entity';
+import { BaseEntity } from '../../../common/entities/base.entity';
 import type { JobApplicationField } from '../job-application-fields/entities/job-application-field.entity';
 import type { JobPipelineStage } from '../job-pipeline-stages/entities/job-pipeline-stage.entity';
 import type { JobQuestion } from '../job-questions/entities/job-question.entity';
@@ -12,7 +12,7 @@ import type { JobSettings } from '../job-settings/entities/job-settings.entity';
 import { Column, Entity, OneToMany, OneToOne, Relation } from 'typeorm';
 
 @Entity('jobs')
-export class Job extends SoftDeletableEntity {
+export class Job extends BaseEntity {
     @Column({ type: 'uuid' })
     organizationId!: string;
 
@@ -44,8 +44,7 @@ export class Job extends SoftDeletableEntity {
     })
     employmentType!: EmploymentType;
 
-    @Column({ type: 'varchar', length: 50, default: JobStatus.ACTIVE })
-    status!: JobStatus;
+    declare status: JobStatus;
 
     @Column({ type: 'varchar', length: 100 })
     slug!: string;

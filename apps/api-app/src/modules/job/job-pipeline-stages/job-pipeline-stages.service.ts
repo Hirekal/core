@@ -8,7 +8,6 @@ import {
 } from '@nestjs/common';
 import { PipelineStageErrors } from '../constants/pipeline-stage-errors';
 import { slugifyTitle } from '../../../common/utils/slug.util';
-import { nowMs } from '../../../common/utils/timestamp.util';
 import { JobService } from '../job.service';
 import {
     CreateJobPipelineStageDto,
@@ -74,7 +73,7 @@ export class JobPipelineStagesService {
             }
 
             const existing = await this.stageRepository.findByJobId(jobId);
-            const timestamp = nowMs();
+            const timestamp = new Date();
 
             return this.stageRepository.create({
                 jobId,
@@ -120,7 +119,7 @@ export class JobPipelineStagesService {
             }
 
             const updateData: Partial<JobPipelineStage> = {
-                updatedAt: nowMs(),
+                updatedAt: new Date(),
             };
 
             if (dto.name !== undefined) {
@@ -177,7 +176,7 @@ export class JobPipelineStagesService {
 
             await this.stageRepository.update(stageId, {
                 active: false,
-                updatedAt: nowMs(),
+                updatedAt: new Date(),
             });
 
             return { success: true };
@@ -213,7 +212,7 @@ export class JobPipelineStagesService {
                 );
             }
 
-            const timestamp = nowMs();
+            const timestamp = new Date();
             for (let i = 0; i < dto.stageIds.length; i++) {
                 await this.stageRepository.update(dto.stageIds[i], {
                     sortOrder: i + 1,

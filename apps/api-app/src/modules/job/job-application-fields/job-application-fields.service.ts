@@ -7,7 +7,6 @@ import {
     NotFoundException,
 } from '@nestjs/common';
 import { ApplicationFieldErrors } from '../constants/application-field-errors';
-import { nowMs } from '../../../common/utils/timestamp.util';
 import { JobService } from '../job.service';
 import {
     CreateJobApplicationFieldDto,
@@ -66,7 +65,7 @@ export class JobApplicationFieldsService {
             await this.jobService.assertJobAccess(jobId, organizationId);
 
             const existing = await this.fieldRepository.findByJobId(jobId);
-            const timestamp = nowMs();
+            const timestamp = new Date();
 
             return this.fieldRepository.create({
                 jobId,
@@ -113,7 +112,7 @@ export class JobApplicationFieldsService {
             }
 
             const updateData: Partial<JobApplicationField> = {
-                updatedAt: nowMs(),
+                updatedAt: new Date(),
             };
 
             if (field.builtIn) {
@@ -209,7 +208,7 @@ export class JobApplicationFieldsService {
                 );
             }
 
-            const timestamp = nowMs();
+            const timestamp = new Date();
             for (let i = 0; i < dto.fieldIds.length; i++) {
                 await this.fieldRepository.update(dto.fieldIds[i], {
                     sortOrder: i + 1,

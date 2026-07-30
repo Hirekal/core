@@ -29,7 +29,7 @@ import { AuthModule } from './modules/auth/auth.module';
             inject: [ConfigService],
             useFactory: (configService: ConfigService) => {
               return {
-                jwtSecret: configService.get('JWT_SECRET'),
+                jwtSecret: configService.getOrThrow<string>('JWT_SECRET'),
                 jwtAccessExpiresIn: configService.get('JWT_ACCESS_EXPIRES_IN'),
                 jwtRefreshExpiresIn: configService.get('JWT_REFRESH_EXPIRES_IN'),
               };

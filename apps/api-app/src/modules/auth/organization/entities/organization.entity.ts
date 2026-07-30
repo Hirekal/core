@@ -1,5 +1,5 @@
 import { Entity, Column, OneToMany } from 'typeorm';
-import { BaseEntity } from '../../common/entities/base.entity';
+import { BaseEntity } from '../../../../common/entities/base.entity';
 import { OrganizationStatus } from '../../common/constants/auth.constants';
 import { User } from '../../users/entities/user.entity';
 import { Role } from '../../roles/entities/role.entity';

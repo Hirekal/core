@@ -5,10 +5,9 @@ import {
   ObjectLiteral,
   Repository,
 } from 'typeorm';
-import { nowMs } from '../utils/timestamp.util';
 
 export interface SoftDeletable {
-  deletedAt?: number | null;
+  deletedAt?: Date | null;
 }
 
 /**
@@ -54,7 +53,7 @@ export class BaseRepository<T extends ObjectLiteral & SoftDeletable> {
    */
   async softDelete(id: string): Promise<void> {
     await this.repository.update(id, {
-      deletedAt: nowMs(),
+      deletedAt: new Date(),
     } as never);
   }
 }
