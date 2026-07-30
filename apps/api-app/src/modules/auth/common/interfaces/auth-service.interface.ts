@@ -4,13 +4,15 @@ import { AuthTokensResponse } from './auth-response.interface';
 
 export interface SignupExistingUserResponse {
   user: User;
-  verificationCode: string;
+  message: string;
+  verificationCode?: string;
 }
 
 export interface SignupNewUserResponse {
   user: User;
   organization: Organization;
-  verificationCode: string;
+  message: string;
+  verificationCode?: string;
 }
 
 export type SignupResponse = SignupExistingUserResponse | SignupNewUserResponse;
@@ -27,13 +29,16 @@ export interface ForgotPasswordResponse extends MessageResponse {
   resetCode?: string;
 }
 
+export interface ResendVerificationResponse extends MessageResponse {
+  verificationCode?: string;
+}
+
 export interface VerifyCodeResponse extends MessageResponse {
   type: string;
 }
 
 export interface UpdateProfilePatch {
   name?: string;
-  password?: string;
   metadata?: Record<string, unknown>;
   updatedBy: string;
 }

@@ -10,13 +10,10 @@ import {
     Post,
     Query,
     UploadedFile,
-    UseGuards,
     UseInterceptors,
 } from '@nestjs/common';
+import { CurrentUser } from '../auth/common/decorators/current-user.decorator';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { RequestContextGuard } from '../../common/request-context/request-context.guard';
-import { CurrentOrganizationId } from '../../common/request-context/current-organization-id.decorator';
-import { CurrentUserId } from '../../common/request-context/current-user-id.decorator';
 import { CreateJobDto } from './dto/create-job.dto';
 import { ListJobsQueryDto } from './dto/list-jobs-query.dto';
 import { UpdateJobDto } from './dto/update-job.dto';
@@ -24,7 +21,6 @@ import { JobService } from './job.service';
 import { toErrorMessage } from '../../common/utils/error.util';
 
 @Controller('jobs')
-@UseGuards(RequestContextGuard)
 export class JobController {
     private readonly logger = new Logger(JobController.name);
 
@@ -38,7 +34,7 @@ export class JobController {
      */
     @Get()
     async findAll(
-        @CurrentOrganizationId() organizationId: string,
+        @CurrentUser('organizationId') organizationId: string,
         @Query() query: ListJobsQueryDto,
     ) {
         try {
@@ -58,8 +54,8 @@ export class JobController {
      */
     @Post()
     async create(
-        @CurrentOrganizationId() organizationId: string,
-        @CurrentUserId() userId: string,
+        @CurrentUser('organizationId') organizationId: string,
+        @CurrentUser('id') userId: string,
         @Body() dto: CreateJobDto,
     ) {
         try {
@@ -79,7 +75,7 @@ export class JobController {
     @Get(':id/preview')
     async preview(
         @Param('id', ParseUUIDPipe) id: string,
-        @CurrentOrganizationId() organizationId: string,
+        @CurrentUser('organizationId') organizationId: string,
     ) {
         try {
             return await this.jobService.preview(id, organizationId);
@@ -101,8 +97,8 @@ export class JobController {
     @UseInterceptors(FileInterceptor('file'))
     async uploadIntroMedia(
         @Param('id', ParseUUIDPipe) id: string,
-        @CurrentOrganizationId() organizationId: string,
-        @CurrentUserId() userId: string,
+        @CurrentUser('organizationId') organizationId: string,
+        @CurrentUser('id') userId: string,
         @UploadedFile() file: Express.Multer.File,
     ) {
         try {
@@ -128,8 +124,8 @@ export class JobController {
     @Delete(':id/media/intro')
     async deleteIntroMedia(
         @Param('id', ParseUUIDPipe) id: string,
-        @CurrentOrganizationId() organizationId: string,
-        @CurrentUserId() userId: string,
+        @CurrentUser('organizationId') organizationId: string,
+        @CurrentUser('id') userId: string,
     ) {
         try {
             return await this.jobService.deleteIntroMedia(id, organizationId, userId);
@@ -149,8 +145,8 @@ export class JobController {
     @Post(':id/duplicate')
     async duplicate(
         @Param('id', ParseUUIDPipe) id: string,
-        @CurrentOrganizationId() organizationId: string,
-        @CurrentUserId() userId: string,
+        @CurrentUser('organizationId') organizationId: string,
+        @CurrentUser('id') userId: string,
     ) {
         try {
             return await this.jobService.duplicate(id, organizationId, userId);
@@ -170,8 +166,8 @@ export class JobController {
     @Post(':id/pause')
     async pause(
         @Param('id', ParseUUIDPipe) id: string,
-        @CurrentOrganizationId() organizationId: string,
-        @CurrentUserId() userId: string,
+        @CurrentUser('organizationId') organizationId: string,
+        @CurrentUser('id') userId: string,
     ) {
         try {
             return await this.jobService.pause(id, organizationId, userId);
@@ -191,8 +187,8 @@ export class JobController {
     @Post(':id/resume')
     async resume(
         @Param('id', ParseUUIDPipe) id: string,
-        @CurrentOrganizationId() organizationId: string,
-        @CurrentUserId() userId: string,
+        @CurrentUser('organizationId') organizationId: string,
+        @CurrentUser('id') userId: string,
     ) {
         try {
             return await this.jobService.resume(id, organizationId, userId);
@@ -212,8 +208,8 @@ export class JobController {
     @Post(':id/archive')
     async archive(
         @Param('id', ParseUUIDPipe) id: string,
-        @CurrentOrganizationId() organizationId: string,
-        @CurrentUserId() userId: string,
+        @CurrentUser('organizationId') organizationId: string,
+        @CurrentUser('id') userId: string,
     ) {
         try {
             return await this.jobService.archive(id, organizationId, userId);
@@ -233,8 +229,8 @@ export class JobController {
     @Post(':id/restore')
     async restore(
         @Param('id', ParseUUIDPipe) id: string,
-        @CurrentOrganizationId() organizationId: string,
-        @CurrentUserId() userId: string,
+        @CurrentUser('organizationId') organizationId: string,
+        @CurrentUser('id') userId: string,
     ) {
         try {
             return await this.jobService.restore(id, organizationId, userId);
@@ -253,7 +249,7 @@ export class JobController {
     @Get(':id')
     async findById(
         @Param('id', ParseUUIDPipe) id: string,
-        @CurrentOrganizationId() organizationId: string,
+        @CurrentUser('organizationId') organizationId: string,
     ) {
         try {
             return await this.jobService.findById(id, organizationId);
@@ -274,8 +270,8 @@ export class JobController {
     @Patch(':id')
     async update(
         @Param('id', ParseUUIDPipe) id: string,
-        @CurrentOrganizationId() organizationId: string,
-        @CurrentUserId() userId: string,
+        @CurrentUser('organizationId') organizationId: string,
+        @CurrentUser('id') userId: string,
         @Body() dto: UpdateJobDto,
     ) {
         try {
@@ -296,8 +292,8 @@ export class JobController {
     @Delete(':id')
     async delete(
         @Param('id', ParseUUIDPipe) id: string,
-        @CurrentOrganizationId() organizationId: string,
-        @CurrentUserId() userId: string,
+        @CurrentUser('organizationId') organizationId: string,
+        @CurrentUser('id') userId: string,
     ) {
         try {
             return await this.jobService.delete(id, organizationId, userId);

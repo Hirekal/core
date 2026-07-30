@@ -1,6 +1,5 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { RequestContextGuard } from '../../../common/request-context/request-context.guard';
 import { JobModule } from '../job.module';
 import { JobSettings } from './entities/job-settings.entity';
 import { JobSettingsController } from './job-settings.controller';
@@ -13,7 +12,7 @@ import { JobSettingsRepository } from './repositories/job-settings.repository';
         forwardRef(() => JobModule),
     ],
     controllers: [JobSettingsController],
-    providers: [JobSettingsService, JobSettingsRepository, RequestContextGuard],
+    providers: [JobSettingsService, JobSettingsRepository],
     exports: [JobSettingsService, JobSettingsRepository],
 })
 export class JobSettingsModule { }

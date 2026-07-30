@@ -9,10 +9,8 @@ import {
     Patch,
     Post,
     Query,
-    UseGuards,
 } from '@nestjs/common';
-import { RequestContextGuard } from '../../../common/request-context/request-context.guard';
-import { CurrentOrganizationId } from '../../../common/request-context/current-organization-id.decorator';
+import { CurrentUser } from '../../auth/common/decorators/current-user.decorator';
 import { toErrorMessage } from '../../../common/utils/error.util';
 import {
     CreateJobPipelineStageDto,
@@ -22,7 +20,6 @@ import {
 import { JobPipelineStagesService } from './job-pipeline-stages.service';
 
 @Controller('jobs/:jobId/stages')
-@UseGuards(RequestContextGuard)
 export class JobPipelineStagesController {
     private readonly logger = new Logger(JobPipelineStagesController.name);
 
@@ -38,7 +35,7 @@ export class JobPipelineStagesController {
     @Get()
     async findAll(
         @Param('jobId', ParseUUIDPipe) jobId: string,
-        @CurrentOrganizationId() organizationId: string,
+        @CurrentUser('organizationId') organizationId: string,
         @Query('active') active?: string,
     ) {
         try {
@@ -65,7 +62,7 @@ export class JobPipelineStagesController {
     @Post()
     async create(
         @Param('jobId', ParseUUIDPipe) jobId: string,
-        @CurrentOrganizationId() organizationId: string,
+        @CurrentUser('organizationId') organizationId: string,
         @Body() dto: CreateJobPipelineStageDto,
     ) {
         try {
@@ -88,7 +85,7 @@ export class JobPipelineStagesController {
     @Patch('reorder')
     async reorder(
         @Param('jobId', ParseUUIDPipe) jobId: string,
-        @CurrentOrganizationId() organizationId: string,
+        @CurrentUser('organizationId') organizationId: string,
         @Body() dto: ReorderPipelineStagesDto,
     ) {
         try {
@@ -113,7 +110,7 @@ export class JobPipelineStagesController {
     async update(
         @Param('jobId', ParseUUIDPipe) jobId: string,
         @Param('stageId', ParseUUIDPipe) stageId: string,
-        @CurrentOrganizationId() organizationId: string,
+        @CurrentUser('organizationId') organizationId: string,
         @Body() dto: UpdateJobPipelineStageDto,
     ) {
         try {
@@ -141,7 +138,7 @@ export class JobPipelineStagesController {
     async delete(
         @Param('jobId', ParseUUIDPipe) jobId: string,
         @Param('stageId', ParseUUIDPipe) stageId: string,
-        @CurrentOrganizationId() organizationId: string,
+        @CurrentUser('organizationId') organizationId: string,
     ) {
         try {
             return await this.stagesService.delete(jobId, stageId, organizationId);

@@ -1,6 +1,5 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { RequestContextGuard } from '../../../common/request-context/request-context.guard';
 import { JobModule } from '../job.module';
 import { JobApplicationField } from './entities/job-application-field.entity';
 import { JobApplicationFieldsController } from './job-application-fields.controller';
@@ -16,7 +15,6 @@ import { JobApplicationFieldRepository } from './repositories/job-application-fi
     providers: [
         JobApplicationFieldsService,
         JobApplicationFieldRepository,
-        RequestContextGuard,
     ],
     exports: [JobApplicationFieldsService, JobApplicationFieldRepository],
 })

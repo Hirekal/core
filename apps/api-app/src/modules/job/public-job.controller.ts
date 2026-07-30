@@ -1,4 +1,5 @@
 import { Controller, Get, Logger, Param } from '@nestjs/common';
+import { Public } from '../auth/common/decorators/public.decorator';
 import { toErrorMessage } from '../../common/utils/error.util';
 import { JobService } from './job.service';
 
@@ -13,6 +14,7 @@ export class PublicJobController {
      * @param slug 
      * @returns 
      */
+    @Public()
     @Get(':slug')
     async findBySlug(@Param('slug') slug: string) {
         try {

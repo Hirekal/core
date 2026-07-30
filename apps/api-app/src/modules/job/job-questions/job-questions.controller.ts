@@ -8,10 +8,8 @@ import {
     ParseUUIDPipe,
     Patch,
     Post,
-    UseGuards,
 } from '@nestjs/common';
-import { RequestContextGuard } from '../../../common/request-context/request-context.guard';
-import { CurrentOrganizationId } from '../../../common/request-context/current-organization-id.decorator';
+import { CurrentUser } from '../../auth/common/decorators/current-user.decorator';
 import { toErrorMessage } from '../../../common/utils/error.util';
 import {
     CreateJobQuestionDto,
@@ -21,7 +19,6 @@ import {
 import { JobQuestionsService } from './job-questions.service';
 
 @Controller('jobs/:jobId/questions')
-@UseGuards(RequestContextGuard)
 export class JobQuestionsController {
     private readonly logger = new Logger(JobQuestionsController.name);
 
@@ -36,7 +33,7 @@ export class JobQuestionsController {
     @Get()
     async findAll(
         @Param('jobId', ParseUUIDPipe) jobId: string,
-        @CurrentOrganizationId() organizationId: string,
+        @CurrentUser('organizationId') organizationId: string,
     ) {
         try {
             return await this.questionsService.findAll(jobId, organizationId);
@@ -58,7 +55,7 @@ export class JobQuestionsController {
     @Post()
     async create(
         @Param('jobId', ParseUUIDPipe) jobId: string,
-        @CurrentOrganizationId() organizationId: string,
+        @CurrentUser('organizationId') organizationId: string,
         @Body() dto: CreateJobQuestionDto,
     ) {
         try {
@@ -81,7 +78,7 @@ export class JobQuestionsController {
     @Patch('reorder')
     async reorder(
         @Param('jobId', ParseUUIDPipe) jobId: string,
-        @CurrentOrganizationId() organizationId: string,
+        @CurrentUser('organizationId') organizationId: string,
         @Body() dto: ReorderQuestionsDto,
     ) {
         try {
@@ -106,7 +103,7 @@ export class JobQuestionsController {
     async update(
         @Param('jobId', ParseUUIDPipe) jobId: string,
         @Param('questionId', ParseUUIDPipe) questionId: string,
-        @CurrentOrganizationId() organizationId: string,
+        @CurrentUser('organizationId') organizationId: string,
         @Body() dto: UpdateJobQuestionDto,
     ) {
         try {
@@ -135,7 +132,7 @@ export class JobQuestionsController {
     async delete(
         @Param('jobId', ParseUUIDPipe) jobId: string,
         @Param('questionId', ParseUUIDPipe) questionId: string,
-        @CurrentOrganizationId() organizationId: string,
+        @CurrentUser('organizationId') organizationId: string,
     ) {
         try {
             return await this.questionsService.delete(

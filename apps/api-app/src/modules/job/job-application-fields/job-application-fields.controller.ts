@@ -8,10 +8,8 @@ import {
     ParseUUIDPipe,
     Patch,
     Post,
-    UseGuards,
 } from '@nestjs/common';
-import { RequestContextGuard } from '../../../common/request-context/request-context.guard';
-import { CurrentOrganizationId } from '../../../common/request-context/current-organization-id.decorator';
+import { CurrentUser } from '../../auth/common/decorators/current-user.decorator';
 import { toErrorMessage } from '../../../common/utils/error.util';
 import {
     CreateJobApplicationFieldDto,
@@ -21,7 +19,6 @@ import {
 import { JobApplicationFieldsService } from './job-application-fields.service';
 
 @Controller('jobs/:jobId/application-fields')
-@UseGuards(RequestContextGuard)
 export class JobApplicationFieldsController {
     private readonly logger = new Logger(JobApplicationFieldsController.name);
 
@@ -38,7 +35,7 @@ export class JobApplicationFieldsController {
     @Get()
     async findAll(
         @Param('jobId', ParseUUIDPipe) jobId: string,
-        @CurrentOrganizationId() organizationId: string,
+        @CurrentUser('organizationId') organizationId: string,
     ) {
         try {
             return await this.fieldsService.findAll(jobId, organizationId);
@@ -60,7 +57,7 @@ export class JobApplicationFieldsController {
     @Post()
     async create(
         @Param('jobId', ParseUUIDPipe) jobId: string,
-        @CurrentOrganizationId() organizationId: string,
+        @CurrentUser('organizationId') organizationId: string,
         @Body() dto: CreateJobApplicationFieldDto,
     ) {
         try {
@@ -83,7 +80,7 @@ export class JobApplicationFieldsController {
     @Patch('reorder')
     async reorder(
         @Param('jobId', ParseUUIDPipe) jobId: string,
-        @CurrentOrganizationId() organizationId: string,
+        @CurrentUser('organizationId') organizationId: string,
         @Body() dto: ReorderApplicationFieldsDto,
     ) {
         try {
@@ -107,7 +104,7 @@ export class JobApplicationFieldsController {
     async update(
         @Param('jobId', ParseUUIDPipe) jobId: string,
         @Param('fieldId', ParseUUIDPipe) fieldId: string,
-        @CurrentOrganizationId() organizationId: string,
+        @CurrentUser('organizationId') organizationId: string,
         @Body() dto: UpdateJobApplicationFieldDto,
     ) {
         try {
@@ -136,7 +133,7 @@ export class JobApplicationFieldsController {
     async delete(
         @Param('jobId', ParseUUIDPipe) jobId: string,
         @Param('fieldId', ParseUUIDPipe) fieldId: string,
-        @CurrentOrganizationId() organizationId: string,
+        @CurrentUser('organizationId') organizationId: string,
     ) {
         try {
             return await this.fieldsService.delete(jobId, fieldId, organizationId);

@@ -9,12 +9,10 @@ import {
     Patch,
     Post,
     UploadedFile,
-    UseGuards,
     UseInterceptors,
 } from '@nestjs/common';
+import { CurrentUser } from '../../auth/common/decorators/current-user.decorator';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { RequestContextGuard } from '../../../common/request-context/request-context.guard';
-import { CurrentOrganizationId } from '../../../common/request-context/current-organization-id.decorator';
 import { toErrorMessage } from '../../../common/utils/error.util';
 import {
     PatchEmailAutomationDto,
@@ -25,7 +23,6 @@ import {
 import { JobSettingsService } from './job-settings.service';
 
 @Controller('jobs/:jobId/settings')
-@UseGuards(RequestContextGuard)
 export class JobSettingsController {
     private readonly logger = new Logger(JobSettingsController.name);
 
@@ -40,7 +37,7 @@ export class JobSettingsController {
     @Get()
     async getSettings(
         @Param('jobId', ParseUUIDPipe) jobId: string,
-        @CurrentOrganizationId() organizationId: string,
+        @CurrentUser('organizationId') organizationId: string,
     ) {
         try {
             return await this.settingsService.getSettings(jobId, organizationId);
@@ -62,7 +59,7 @@ export class JobSettingsController {
     @Patch('general')
     async patchGeneral(
         @Param('jobId', ParseUUIDPipe) jobId: string,
-        @CurrentOrganizationId() organizationId: string,
+        @CurrentUser('organizationId') organizationId: string,
         @Body() dto: PatchGeneralSettingsDto,
     ) {
         try {
@@ -85,7 +82,7 @@ export class JobSettingsController {
     @Patch('thank-you')
     async patchThankYou(
         @Param('jobId', ParseUUIDPipe) jobId: string,
-        @CurrentOrganizationId() organizationId: string,
+        @CurrentUser('organizationId') organizationId: string,
         @Body() dto: PatchThankYouPageDto,
     ) {
         try {
@@ -108,7 +105,7 @@ export class JobSettingsController {
     @Patch('email-automation')
     async patchEmailAutomation(
         @Param('jobId', ParseUUIDPipe) jobId: string,
-        @CurrentOrganizationId() organizationId: string,
+        @CurrentUser('organizationId') organizationId: string,
         @Body() dto: PatchEmailAutomationDto,
     ) {
         try {
@@ -135,7 +132,7 @@ export class JobSettingsController {
     @Patch('webhook')
     async patchWebhook(
         @Param('jobId', ParseUUIDPipe) jobId: string,
-        @CurrentOrganizationId() organizationId: string,
+        @CurrentUser('organizationId') organizationId: string,
         @Body() dto: PatchWebhookSettingsDto,
     ) {
         try {
@@ -159,7 +156,7 @@ export class JobSettingsController {
     @UseInterceptors(FileInterceptor('file'))
     async uploadThankYouMedia(
         @Param('jobId', ParseUUIDPipe) jobId: string,
-        @CurrentOrganizationId() organizationId: string,
+        @CurrentUser('organizationId') organizationId: string,
         @UploadedFile() file: Express.Multer.File,
     ) {
         try {
@@ -185,7 +182,7 @@ export class JobSettingsController {
     @Delete('thank-you/media')
     async deleteThankYouMedia(
         @Param('jobId', ParseUUIDPipe) jobId: string,
-        @CurrentOrganizationId() organizationId: string,
+        @CurrentUser('organizationId') organizationId: string,
     ) {
         try {
             return await this.settingsService.deleteThankYouMedia(
@@ -211,7 +208,7 @@ export class JobSettingsController {
     @UseInterceptors(FileInterceptor('file'))
     async uploadSocialPreviewImage(
         @Param('jobId', ParseUUIDPipe) jobId: string,
-        @CurrentOrganizationId() organizationId: string,
+        @CurrentUser('organizationId') organizationId: string,
         @UploadedFile() file: Express.Multer.File,
     ) {
         try {
