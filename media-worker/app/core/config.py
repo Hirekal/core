@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -12,6 +13,11 @@ class Settings(BaseSettings):
     port: int = 8000
     download_timeout_seconds: float = 600.0
     ffmpeg_timeout_seconds: float = 600.0
+    temp_base_dir: str = "/tmp/media-worker"
+    stale_temp_max_age_hours: float = 6.0
+    temp_cleanup_interval_hours: float = 1.0
+    transcript_callback_url: Optional[str] = None
+    transcript_callback_timeout_seconds: float = 30.0
 
     model_config = SettingsConfigDict(
         env_file=".env",

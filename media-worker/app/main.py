@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -17,11 +19,35 @@ from app.core.exceptions import (
     WhisperError,
 )
 from app.core.logging import get_logger, setup_logging
+from app.services.callback_service import CallbackService
 from app.services.downloader_service import DownloaderService
 from app.services.ffmpeg_service import FFmpegService
 from app.services.whisper_service import WhisperService
+from app.utils.temp_directory import cleanup_stale_temp_dirs, ensure_temp_base_dir
 
 logger = get_logger(__name__)
+
+
+async def run_stale_temp_cleanup(settings: Settings) -> None:
+    deleted = await asyncio.to_thread(
+        cleanup_stale_temp_dirs,
+        Path(settings.temp_base_dir),
+        max_age_seconds=settings.stale_temp_max_age_hours * 3600,
+    )
+    if deleted == 0:
+        logger.info("Stale temp cleanup finished | deleted=0")
+
+
+async def periodic_stale_temp_cleanup(
+    settings: Settings,
+    stop_event: asyncio.Event,
+) -> None:
+    interval_seconds = settings.temp_cleanup_interval_hours * 3600
+    while not stop_event.is_set():
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=interval_seconds)
+        except asyncio.TimeoutError:
+            await run_stale_temp_cleanup(settings)
 
 
 @asynccontextmanager
@@ -29,15 +55,31 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings: Settings = app.state.settings
     setup_logging(settings)
 
+    ensure_temp_base_dir(Path(settings.temp_base_dir))
+    await run_stale_temp_cleanup(settings)
+
     whisper_service = WhisperService(settings.whisper_model)
     whisper_service.load_model()
 
     app.state.downloader_service = DownloaderService(settings)
     app.state.ffmpeg_service = FFmpegService(settings)
     app.state.whisper_service = whisper_service
+    app.state.callback_service = CallbackService(settings)
 
-    logger.info("Media worker started | model=%s", settings.whisper_model)
+    stop_event = asyncio.Event()
+    cleanup_task = asyncio.create_task(periodic_stale_temp_cleanup(settings, stop_event))
+
+    logger.info(
+        "Media worker started | model=%s callback_enabled=%s",
+        settings.whisper_model,
+        bool(settings.transcript_callback_url),
+    )
     yield
+
+    stop_event.set()
+    cleanup_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await cleanup_task
     logger.info("Media worker shutting down")
 
 

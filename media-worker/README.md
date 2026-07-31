@@ -100,6 +100,26 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 ## Docker
 
+### Docker Compose (recommended)
+
+Compose uses `hirekal/media-worker:prod` from Docker Hub.
+
+```bash
+cp .env.example .env
+docker compose pull
+docker compose up -d
+```
+
+Build from source instead (optional):
+
+```bash
+docker compose up --build -d
+```
+
+Compose loads env from `.env` (including optional `TRANSCRIPT_CALLBACK_URL`). Use `host.docker.internal` in callback URLs when the API runs on your host.
+
+### Docker CLI
+
 Build:
 
 ```bash
@@ -109,10 +129,7 @@ docker build -t hirekal/media-worker:local .
 Run:
 
 ```bash
-docker run --rm -p 8000:8000 \
-  -e WHISPER_MODEL=small \
-  -e LOG_LEVEL=INFO \
-  hirekal/media-worker:local
+docker run --rm -p 8000:8000 --env-file .env hirekal/media-worker:local
 ```
 
 ## Environment Variables
@@ -125,6 +142,33 @@ docker run --rm -p 8000:8000 \
 | `PORT` | `8000` | Bind port (local/dev) |
 | `DOWNLOAD_TIMEOUT_SECONDS` | `600` | Max seconds for video download |
 | `FFMPEG_TIMEOUT_SECONDS` | `600` | Max seconds for FFmpeg extraction |
+| `TEMP_BASE_DIR` | `/tmp/media-worker` | Base directory for per-request temp workspaces |
+| `STALE_TEMP_MAX_AGE_HOURS` | `6` | Delete leftover temp dirs older than this (startup + periodic sweep) |
+| `TEMP_CLEANUP_INTERVAL_HOURS` | `1` | How often to run the stale temp sweep |
+| `TRANSCRIPT_CALLBACK_URL` | *(unset)* | Optional URL to POST the completed transcript payload |
+| `TRANSCRIPT_CALLBACK_TIMEOUT_SECONDS` | `30` | Timeout for the callback POST |
+
+## Temp file cleanup
+
+Each request still uses a dedicated temp directory that is **always** removed in a `finally` block when the request finishes (success or failure).
+
+As a backup, the worker also sweeps stale temp directories on **startup** and on a **periodic interval** (not on every file arrival). It removes directories under `TEMP_BASE_DIR` and legacy `/tmp/media-worker-*` paths older than `STALE_TEMP_MAX_AGE_HOURS`.
+
+## Transcript callback
+
+When `TRANSCRIPT_CALLBACK_URL` is set, the worker POSTs the full `/transcribe` response body to that URL after a successful transcription:
+
+```json
+{
+  "job_id": "job_123",
+  "language": "en",
+  "duration": 118.42,
+  "text": "...",
+  "segments": [{ "start": 0.0, "end": 2.41, "text": "Hello" }]
+}
+```
+
+The caller still receives the same JSON from `/transcribe`. Callback failures are logged but do not fail the transcription response.
 
 ## API
 
@@ -190,7 +234,7 @@ Interactive docs: `http://localhost:8000/docs`
 | `422` | Invalid or unsupported video |
 | `500` | FFmpeg or Whisper failure |
 
-Temporary files are always cleaned up, including on errors.
+Temporary files are always cleaned up per request (including on errors), with periodic stale-dir sweeps as a backup.
 
 ## Design Notes
 
