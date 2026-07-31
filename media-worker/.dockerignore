@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Whisper model cache (downloaded at runtime)
+.cache/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

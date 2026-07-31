@@ -1,0 +1,86 @@
+name: Media Worker CI
+
+on:
+  push:
+    branches:
+      - main
+      - development
+    paths:
+      - media-worker/**
+      - .github/workflows/media-worker-ci.yml
+
+concurrency:
+  group: media-worker-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  media-worker-docker:
+    name: Build and push media-worker image
+    runs-on: ubuntu-latest
+    env:
+      DOCKERHUB_ORG: hirekal
+      IMAGE_NAME: media-worker
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compute image tags
+        id: tags
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHORT_SHA="${GITHUB_SHA::7}"
+          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+
+          case "${BRANCH_NAME}" in
+            main)
+              TAG_1="prod"
+              TAG_2="prod-${SHORT_SHA}"
+              ;;
+            development)
+              TAG_1="dev"
+              TAG_2="dev-${SHORT_SHA}"
+              ;;
+            *)
+              echo "Unexpected branch: ${BRANCH_NAME}" >&2
+              exit 1
+              ;;
+          esac
+
+          FULL_TAGS="${DOCKERHUB_ORG}/${IMAGE_NAME}:${TAG_1}"
+          FULL_TAGS+=$'\n'"${DOCKERHUB_ORG}/${IMAGE_NAME}:${TAG_2}"
+
+          {
+            echo "tags<<EOF"
+            echo "${FULL_TAGS}"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+        env:
+          DOCKERHUB_ORG: ${{ env.DOCKERHUB_ORG }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push media-worker
+        uses: docker/build-push-action@v6
+        with:
+          context: media-worker
+          file: media-worker/Dockerfile
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.tags.outputs.tags }}
+          build-args: |
+            GITHUB_REPOSITORY=${{ github.repository }}
+            GITHUB_SHA=${{ github.sha }}
+          cache-from: type=gha,scope=media-worker
+          cache-to: type=gha,mode=max,scope=media-worker
