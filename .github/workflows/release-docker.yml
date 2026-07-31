@@ -27,9 +27,15 @@ jobs:
           - name: api
             dockerfile: apps/api-app/Dockerfile
             image: api
+            context: .
           - name: console
             dockerfile: apps/console-app/Dockerfile
             image: console
+            context: .
+          - name: media-worker
+            dockerfile: media-worker/Dockerfile
+            image: media-worker
+            context: media-worker
     steps:
       - name: Checkout release tag
         uses: actions/checkout@v4
@@ -69,7 +75,7 @@ jobs:
       - name: Build and push ${{ matrix.name }}
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           push: true
           platforms: linux/amd64,linux/arm64

@@ -70,6 +70,10 @@ npm run dev
 2. Follow [Conventional Commits](https://www.conventionalcommits.org/) for commit messages
 3. Open a pull request
 
+## Deployment
+
+See [deploy.md](./deploy.md) for Docker Compose commands, image tags, migrations, and environment setup.
+
 ## License
 
 [MIT](LICENSE.md)
