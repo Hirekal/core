@@ -1,8 +1,12 @@
 /**
  * @fileoverview DayJS-based date helpers.
  * Centralizes all date creation, comparison, and formatting for the auth module.
+ *
+ * Use `import dayjs = require('dayjs')` so Nest's CommonJS emit does not look for
+ * a non-existent `dayjs.default` (which caused signup to fail at runtime).
  */
-import dayjs, { Dayjs } from 'dayjs';
+import dayjs = require('dayjs');
+import type { Dayjs } from 'dayjs';
 
 export type DateInput = string | number | Date | Dayjs;
 

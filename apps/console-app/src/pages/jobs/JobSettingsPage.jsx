@@ -12,23 +12,46 @@ export default function JobSettingsPage() {
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    jobService.getJobById(id).then((data) => {
-      setJob(data);
-      setSettings(data?.settings || {});
-      setLoading(false);
-    });
+    setLoading(true);
+    setError('');
+    jobService
+      .getJobById(id)
+      .then((data) => {
+        setJob(data);
+        setSettings(data?.settings || {});
+      })
+      .catch((err) => {
+        setError(err.message || 'Failed to load job settings');
+        setJob(null);
+      })
+      .finally(() => setLoading(false));
   }, [id]);
 
   const handleSave = async () => {
     setSaving(true);
-    await jobService.updateJobSettings(id, settings);
-    setSaving(false);
+    setError('');
+    try {
+      const updated = await jobService.updateJobSettings(id, settings);
+      setJob(updated);
+      setSettings(updated?.settings || settings);
+    } catch (err) {
+      setError(err.message || 'Failed to save settings');
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (loading) return <LoadingSpinner />;
-  if (!job) return <div className="text-center py-16 text-muted">Job not found</div>;
+  if (!job) {
+    return (
+      <div className="text-center py-16 text-muted">
+        {error || 'Job not found'}
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-6xl xl:max-w-7xl">
@@ -46,6 +69,12 @@ export default function JobSettingsPage() {
           </Button>
         }
       />
+
+      {error && (
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+          {error}
+        </div>
+      )}
 
       <div className="flex gap-10 xl:gap-12">
         <SettingsNav basePath={`/jobs/${id}/settings`} />

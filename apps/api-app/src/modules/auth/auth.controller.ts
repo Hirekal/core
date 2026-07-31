@@ -29,7 +29,6 @@ import { Auth } from './common/decorators/auth.decorator';
 import { CurrentUser } from './common/decorators/current-user.decorator';
 import { User } from './users/entities/user.entity';
 import { LOG_MESSAGES } from './common/constants/messages';
-import { toErrorMessage } from '../../common/utils/error.util';
 
 @Controller('auth')
 export class AuthController {
@@ -42,231 +41,91 @@ export class AuthController {
      */
     constructor(private readonly authService: AuthService) { }
 
-    /**
-     * Registers a new account and sends an email verification code.
-     *
-     * @param dto - Signup payload
-     * @returns Created user (and org for new accounts)
-     */
+    /** Registers a new account and sends an email verification code. */
     @Public()
     @Post('signup')
-    async signup(@Body() dto: SignupDto) {
-        try {
-            return await this.authService.signup(dto);
-        } catch (error) {
-            this.logger.error(
-                `${LOG_MESSAGES.CONTROLLER.AUTH_SIGNUP_FAILED}: ${toErrorMessage(error)}`,
-            );
-            throw error;
-        }
+    signup(@Body() dto: SignupDto) {
+        return this.authService.signup(dto);
     }
 
-    /**
-     * Authenticates a verified user and issues access/refresh tokens.
-     *
-     * @param dto - Signin credentials
-     * @param req - Incoming HTTP request (for client IP)
-     * @returns User profile and tokens
-     */
+    /** Authenticates a verified user and issues access/refresh tokens. */
     @Public()
     @Post('signin')
     @HttpCode(HttpStatus.OK)
-    async signin(@Body() dto: SigninDto, @Req() req: Request) {
-        try {
-            return await this.authService.signin(dto, req.ip);
-        } catch (error) {
-            this.logger.error(
-                `${LOG_MESSAGES.CONTROLLER.AUTH_SIGNIN_FAILED}: ${toErrorMessage(error)}`,
-            );
-            throw error;
-        }
+    signin(@Body() dto: SigninDto, @Req() req: Request) {
+        return this.authService.signin(dto, req.ip);
     }
 
-    /**
-     * Revokes the current session (or all sessions when no refresh token is sent).
-     *
-     * @param user - Authenticated user from JWT
-     * @param body - Optional refresh token to revoke a single session
-     * @returns Logout confirmation message
-     */
+    /** Revokes the current session (or all sessions when no refresh token is sent). */
     @Auth()
     @Post('logout')
     @HttpCode(HttpStatus.OK)
-    async logout(@CurrentUser() user: User, @Body() body: RefreshTokenDto) {
-        try {
-            return await this.authService.logout(user.id, body?.refreshToken);
-        } catch (error) {
-            this.logger.error(
-                `${LOG_MESSAGES.CONTROLLER.AUTH_LOGOUT_FAILED}: ${toErrorMessage(error)}`,
-            );
-            throw error;
-        }
+    logout(@CurrentUser() user: User, @Body() body: RefreshTokenDto) {
+        return this.authService.logout(user.id, body?.refreshToken);
     }
 
-    /**
-     * Exchanges a refresh token for a new access/refresh pair.
-     *
-     * @param dto - Refresh token payload
-     * @param req - Incoming HTTP request (for client IP)
-     * @returns Newly issued tokens
-     */
+    /** Exchanges a refresh token for a new access/refresh pair. */
     @Public()
     @Post('refresh')
     @HttpCode(HttpStatus.OK)
-    async refresh(@Body() dto: RefreshTokenDto, @Req() req: Request) {
-        try {
-            return await this.authService.refreshToken(dto.refreshToken, req.ip);
-        } catch (error) {
-            this.logger.error(
-                `${LOG_MESSAGES.CONTROLLER.AUTH_REFRESH_FAILED}: ${toErrorMessage(error)}`,
-            );
-            throw error;
-        }
+    refresh(@Body() dto: RefreshTokenDto, @Req() req: Request) {
+        return this.authService.refreshToken(dto.refreshToken, req.ip);
     }
 
-    /**
-     * Returns the authenticated user's profile.
-     *
-     * @param user - Authenticated user from JWT
-     * @returns Sanitized user profile
-     */
+    /** Returns the authenticated user's profile. */
     @Auth()
     @Get('profile')
-    async getProfile(@CurrentUser() user: User) {
-        try {
-            return await this.authService.getProfile(user.id);
-        } catch (error) {
-            this.logger.error(
-                `${LOG_MESSAGES.CONTROLLER.AUTH_PROFILE_GET_FAILED}: ${toErrorMessage(error)}`,
-            );
-            throw error;
-        }
+    getProfile(@CurrentUser() user: User) {
+        return this.authService.getProfile(user.id);
     }
 
-    /**
-     * Updates the authenticated user's profile (name/metadata).
-     *
-     * @param user - Authenticated user from JWT
-     * @param dto - Profile fields to update
-     * @returns Updated sanitized profile
-     */
+    /** Updates the authenticated user's profile (name/metadata). */
     @Auth()
     @Patch('profile')
-    async updateProfile(@CurrentUser() user: User, @Body() dto: UpdateProfileDto) {
-        try {
-            this.logger.log(
-                LOG_MESSAGES.AUTH.PROFILE_PATCH_REQUEST(user.id, JSON.stringify(dto)),
-            );
-            return await this.authService.updateProfile(user.id, dto);
-        } catch (error) {
-            this.logger.error(
-                `${LOG_MESSAGES.CONTROLLER.AUTH_PROFILE_PATCH_FAILED}: ${toErrorMessage(error)}`,
-            );
-            throw error;
-        }
+    updateProfile(@CurrentUser() user: User, @Body() dto: UpdateProfileDto) {
+        this.logger.log(
+            LOG_MESSAGES.AUTH.PROFILE_PATCH_REQUEST(user.id, JSON.stringify(dto)),
+        );
+        return this.authService.updateProfile(user.id, dto);
     }
 
-    /**
-     * Changes the authenticated user's password using the current password.
-     *
-     * @param user - Authenticated user from JWT
-     * @param dto - Current and new password
-     * @returns Success message
-     */
+    /** Changes the authenticated user's password using the current password. */
     @Auth()
     @Post('change-password')
     @HttpCode(HttpStatus.OK)
-    async changePassword(
-        @CurrentUser() user: User,
-        @Body() dto: ChangePasswordDto,
-    ) {
-        try {
-            return await this.authService.changePassword(user.id, dto);
-        } catch (error) {
-            this.logger.error(
-                `${LOG_MESSAGES.CONTROLLER.AUTH_CHANGE_PASSWORD_FAILED}: ${toErrorMessage(error)}`,
-            );
-            throw error;
-        }
+    changePassword(@CurrentUser() user: User, @Body() dto: ChangePasswordDto) {
+        return this.authService.changePassword(user.id, dto);
     }
 
-    /**
-     * Starts password reset by emailing a one-time code.
-     *
-     * @param dto - Email payload
-     * @returns Generic success message
-     */
+    /** Starts password reset by emailing a one-time code. */
     @Public()
     @Post('forgot-password')
     @HttpCode(HttpStatus.OK)
-    async forgotPassword(@Body() dto: ForgotPasswordDto) {
-        try {
-            return await this.authService.forgotPassword(dto);
-        } catch (error) {
-            this.logger.error(
-                `${LOG_MESSAGES.CONTROLLER.AUTH_FORGOT_PASSWORD_FAILED}: ${toErrorMessage(error)}`,
-            );
-            throw error;
-        }
+    forgotPassword(@Body() dto: ForgotPasswordDto) {
+        return this.authService.forgotPassword(dto);
     }
 
-    /**
-     * Resends an email verification code for an unverified account.
-     *
-     * @param dto - Email payload
-     * @returns Generic success message
-     */
+    /** Resends an email verification code for an unverified account. */
     @Public()
     @Post('resend-verification')
     @HttpCode(HttpStatus.OK)
-    async resendVerification(@Body() dto: ResendVerificationDto) {
-        try {
-            return await this.authService.resendVerification(dto);
-        } catch (error) {
-            this.logger.error(
-                `${LOG_MESSAGES.CONTROLLER.AUTH_RESEND_VERIFICATION_FAILED}: ${toErrorMessage(error)}`,
-            );
-            throw error;
-        }
+    resendVerification(@Body() dto: ResendVerificationDto) {
+        return this.authService.resendVerification(dto);
     }
 
-    /**
-     * Verifies a one-time email or password-reset code.
-     *
-     * @param dto - Email, code, and code type
-     * @returns Verification result
-     */
+    /** Verifies a one-time email or password-reset code. */
     @Public()
     @Post('verify-code')
     @HttpCode(HttpStatus.OK)
-    async verifyCode(@Body() dto: VerifyCodeDto) {
-        try {
-            return await this.authService.verifyCode(dto);
-        } catch (error) {
-            this.logger.error(
-                `${LOG_MESSAGES.CONTROLLER.AUTH_VERIFY_CODE_FAILED}: ${toErrorMessage(error)}`,
-            );
-            throw error;
-        }
+    verifyCode(@Body() dto: VerifyCodeDto) {
+        return this.authService.verifyCode(dto);
     }
 
-    /**
-     * Resets a password after validating a reset code.
-     *
-     * @param dto - Email, code, and new password
-     * @returns Success message
-     */
+    /** Resets a password after validating a reset code. */
     @Public()
     @Post('reset-password')
     @HttpCode(HttpStatus.OK)
-    async resetPassword(@Body() dto: ResetPasswordDto) {
-        try {
-            return await this.authService.resetPassword(dto);
-        } catch (error) {
-            this.logger.error(
-                `${LOG_MESSAGES.CONTROLLER.AUTH_RESET_PASSWORD_FAILED}: ${toErrorMessage(error)}`,
-            );
-            throw error;
-        }
+    resetPassword(@Body() dto: ResetPasswordDto) {
+        return this.authService.resetPassword(dto);
     }
 }

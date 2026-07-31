@@ -82,6 +82,7 @@ export class UsersService {
     try {
       const users = await this.usersRepository.find({
         where: organizationId ? { organizationId } : {},
+        relations: { userRoles: { role: true } },
         order: { createdAt: 'DESC' },
       });
       return users.map((user) => this.sanitize(user));

@@ -17,7 +17,7 @@ export class CreateJobApplicationFields1779000003000
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.createTable(
       new Table({
-        name: 'job_application_fields',
+        name: 'jobApplicationFields',
         columns: [
           ...BASE_ENTITY_COLUMNS,
           { name: 'jobId', type: 'uuid', isNullable: false },
@@ -43,7 +43,7 @@ export class CreateJobApplicationFields1779000003000
     );
 
     await queryRunner.createIndex(
-      'job_application_fields',
+      'jobApplicationFields',
       new TableIndex({
         name: 'IDX_job_application_fields_jobId_sortOrder',
         columnNames: ['jobId', 'sortOrder'],
@@ -51,7 +51,7 @@ export class CreateJobApplicationFields1779000003000
     );
 
     await queryRunner.createForeignKey(
-      'job_application_fields',
+      'jobApplicationFields',
       new TableForeignKey({
         name: 'FK_job_application_fields_jobId',
         columnNames: ['jobId'],
@@ -64,13 +64,13 @@ export class CreateJobApplicationFields1779000003000
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.dropForeignKey(
-      'job_application_fields',
+      'jobApplicationFields',
       'FK_job_application_fields_jobId',
     );
     await queryRunner.dropIndex(
-      'job_application_fields',
+      'jobApplicationFields',
       'IDX_job_application_fields_jobId_sortOrder',
     );
-    await queryRunner.dropTable('job_application_fields');
+    await queryRunner.dropTable('jobApplicationFields');
   }
 }

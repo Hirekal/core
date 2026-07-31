@@ -1,10 +1,49 @@
+import { HttpException, Logger } from '@nestjs/common';
 import { QueryFailedError } from 'typeorm';
 
 /**
  * Convert an unknown thrown value into a safe log string.
  */
 export function toErrorMessage(error: unknown): string {
+  if (error instanceof HttpException) {
+    const response = error.getResponse();
+    if (typeof response === 'string') {
+      return response;
+    }
+    if (
+      typeof response === 'object' &&
+      response !== null &&
+      'message' in response
+    ) {
+      const message = (response as { message?: string | string[] }).message;
+      return Array.isArray(message) ? message.join(', ') : String(message);
+    }
+  }
   return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * True for Nest HTTP exceptions (expected 4xx client errors).
+ */
+export function isHttpException(error: unknown): error is HttpException {
+  return error instanceof HttpException;
+}
+
+/**
+ * Logs expected client errors as a one-line warn; server/unexpected errors keep a stack trace.
+ */
+export function logServiceError(
+  logger: Logger,
+  context: string,
+  error: unknown,
+): void {
+  if (isHttpException(error) && error.getStatus() < 500) {
+    logger.warn(`${context}: ${toErrorMessage(error)}`);
+    return;
+  }
+
+  const stack = error instanceof Error ? error.stack : undefined;
+  logger.error(`${context}: ${toErrorMessage(error)}`, stack);
 }
 
 /**

@@ -3,7 +3,7 @@ import { BaseEntity } from '../../../../common/entities/base.entity';
 import type { Job } from '../../entities/job.entity';
 import { Column, Entity, JoinColumn, ManyToOne, Relation } from 'typeorm';
 
-@Entity('job_application_fields')
+@Entity('jobApplicationFields')
 export class JobApplicationField extends BaseEntity {
     @Column({ type: 'uuid' })
     jobId!: string;

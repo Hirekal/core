@@ -15,7 +15,7 @@ export class CreateJobQuestions1779000002000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.createTable(
       new Table({
-        name: 'job_questions',
+        name: 'jobQuestions',
         columns: [
           ...BASE_ENTITY_COLUMNS,
           { name: 'jobId', type: 'uuid', isNullable: false },
@@ -37,7 +37,7 @@ export class CreateJobQuestions1779000002000 implements MigrationInterface {
     );
 
     await queryRunner.createIndex(
-      'job_questions',
+      'jobQuestions',
       new TableIndex({
         name: 'IDX_job_questions_jobId_sortOrder',
         columnNames: ['jobId', 'sortOrder'],
@@ -45,7 +45,7 @@ export class CreateJobQuestions1779000002000 implements MigrationInterface {
     );
 
     await queryRunner.createForeignKey(
-      'job_questions',
+      'jobQuestions',
       new TableForeignKey({
         name: 'FK_job_questions_jobId',
         columnNames: ['jobId'],
@@ -58,13 +58,13 @@ export class CreateJobQuestions1779000002000 implements MigrationInterface {
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.dropForeignKey(
-      'job_questions',
+      'jobQuestions',
       'FK_job_questions_jobId',
     );
     await queryRunner.dropIndex(
-      'job_questions',
+      'jobQuestions',
       'IDX_job_questions_jobId_sortOrder',
     );
-    await queryRunner.dropTable('job_questions');
+    await queryRunner.dropTable('jobQuestions');
   }
 }

@@ -2,7 +2,7 @@ import { BaseEntity } from '../../../../common/entities/base.entity';
 import type { Job } from '../../entities/job.entity';
 import { Column, Entity, JoinColumn, ManyToOne, Relation } from 'typeorm';
 
-@Entity('job_pipeline_stages')
+@Entity('jobPipelineStages')
 export class JobPipelineStage extends BaseEntity {
     @Column({ type: 'uuid' })
     jobId!: string;

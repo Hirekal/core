@@ -15,7 +15,7 @@ export class CreateJobSettings1779000005000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.createTable(
       new Table({
-        name: 'job_settings',
+        name: 'jobSettings',
         columns: [
           ...BASE_ENTITY_COLUMNS,
           { name: 'jobId', type: 'uuid', isNullable: false },
@@ -29,7 +29,7 @@ export class CreateJobSettings1779000005000 implements MigrationInterface {
     );
 
     await queryRunner.createUniqueConstraint(
-      'job_settings',
+      'jobSettings',
       new TableUnique({
         name: 'UQ_job_settings_jobId',
         columnNames: ['jobId'],
@@ -37,7 +37,7 @@ export class CreateJobSettings1779000005000 implements MigrationInterface {
     );
 
     await queryRunner.createForeignKey(
-      'job_settings',
+      'jobSettings',
       new TableForeignKey({
         name: 'FK_job_settings_jobId',
         columnNames: ['jobId'],
@@ -49,8 +49,8 @@ export class CreateJobSettings1779000005000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.dropForeignKey('job_settings', 'FK_job_settings_jobId');
-    await queryRunner.dropUniqueConstraint('job_settings', 'UQ_job_settings_jobId');
-    await queryRunner.dropTable('job_settings');
+    await queryRunner.dropForeignKey('jobSettings', 'FK_job_settings_jobId');
+    await queryRunner.dropUniqueConstraint('jobSettings', 'UQ_job_settings_jobId');
+    await queryRunner.dropTable('jobSettings');
   }
 }

@@ -65,6 +65,7 @@ import {
     ORGANIZATION_NAME_SUFFIX,
 } from './common/constants/app.constants';
 import { addMs, isBeforeNow } from './common/utils/date.util';
+import { logServiceError } from '../../common/utils/error.util';
 
 /**
  * Coordinates authentication workflows across users, sessions, roles, and email verification.
@@ -172,7 +173,11 @@ export class AuthService {
                     : {}),
             };
         } catch (error) {
-            this.logger.error(LOG_MESSAGES.AUTH.SIGNUP_FAILED(dto.email), error);
+            logServiceError(
+                this.logger,
+                LOG_MESSAGES.AUTH.SIGNUP_FAILED(dto.email),
+                error,
+            );
             throw error;
         }
     }
@@ -216,7 +221,11 @@ export class AuthService {
                 ...tokens,
             };
         } catch (error) {
-            this.logger.error(LOG_MESSAGES.AUTH.SIGNIN_FAILED(dto.email), error);
+            logServiceError(
+                this.logger,
+                LOG_MESSAGES.AUTH.SIGNIN_FAILED(dto.email),
+                error,
+            );
             throw error;
         }
     }
@@ -251,7 +260,11 @@ export class AuthService {
             await this.userSessionsService.revokeByUserId(userId);
             return { message: SUCCESS_MESSAGES.AUTH.LOGGED_OUT };
         } catch (error) {
-            this.logger.error(LOG_MESSAGES.AUTH.LOGOUT_FAILED(userId), error);
+            logServiceError(
+                this.logger,
+                LOG_MESSAGES.AUTH.LOGOUT_FAILED(userId),
+                error,
+            );
             throw error;
         }
     }
@@ -298,7 +311,11 @@ export class AuthService {
             );
             return this.issueTokens(user, ipAddress);
         } catch (error) {
-            this.logger.error(LOG_MESSAGES.AUTH.REFRESH_FLOW_FAILED, error);
+            logServiceError(
+                this.logger,
+                LOG_MESSAGES.AUTH.REFRESH_FLOW_FAILED,
+                error,
+            );
             throw error;
         }
     }
@@ -313,7 +330,11 @@ export class AuthService {
         try {
             return this.usersService.findOne(userId);
         } catch (error) {
-            this.logger.error(LOG_MESSAGES.AUTH.GET_PROFILE_FAILED(userId), error);
+            logServiceError(
+                this.logger,
+                LOG_MESSAGES.AUTH.GET_PROFILE_FAILED(userId),
+                error,
+            );
             throw error;
         }
     }
@@ -335,7 +356,11 @@ export class AuthService {
             await this.usersService.update(userId, profilePatch);
             return this.usersService.findOne(userId);
         } catch (error) {
-            this.logger.error(LOG_MESSAGES.AUTH.UPDATE_PROFILE_FAILED(userId), error);
+            logServiceError(
+                this.logger,
+                LOG_MESSAGES.AUTH.UPDATE_PROFILE_FAILED(userId),
+                error,
+            );
             throw error;
         }
     }
@@ -377,7 +402,8 @@ export class AuthService {
 
             return { message: SUCCESS_MESSAGES.AUTH.PASSWORD_CHANGED };
         } catch (error) {
-            this.logger.error(
+            logServiceError(
+                this.logger,
                 LOG_MESSAGES.AUTH.CHANGE_PASSWORD_FAILED(userId),
                 error,
             );
@@ -411,7 +437,8 @@ export class AuthService {
                     : {}),
             };
         } catch (error) {
-            this.logger.error(
+            logServiceError(
+                this.logger,
                 LOG_MESSAGES.AUTH.RESEND_VERIFICATION_FAILED(dto.email),
                 error,
             );
@@ -455,7 +482,8 @@ export class AuthService {
                     : {}),
             };
         } catch (error) {
-            this.logger.error(
+            logServiceError(
+                this.logger,
                 LOG_MESSAGES.AUTH.FORGOT_PASSWORD_FAILED(dto.email),
                 error,
             );
@@ -499,7 +527,11 @@ export class AuthService {
                 type: verified.type,
             };
         } catch (error) {
-            this.logger.error(LOG_MESSAGES.AUTH.VERIFY_CODE_FAILED(dto.email), error);
+            logServiceError(
+                this.logger,
+                LOG_MESSAGES.AUTH.VERIFY_CODE_FAILED(dto.email),
+                error,
+            );
             throw error;
         }
     }
@@ -534,7 +566,8 @@ export class AuthService {
 
             return { message: SUCCESS_MESSAGES.AUTH.PASSWORD_RESET };
         } catch (error) {
-            this.logger.error(
+            logServiceError(
+                this.logger,
                 LOG_MESSAGES.AUTH.RESET_PASSWORD_FAILED(dto.email),
                 error,
             );
@@ -635,7 +668,11 @@ export class AuthService {
                 refreshTokenExpiresAt,
             };
         } catch (error) {
-            this.logger.error(LOG_MESSAGES.AUTH.ISSUE_TOKENS_FAILED(user.id), error);
+            logServiceError(
+                this.logger,
+                LOG_MESSAGES.AUTH.ISSUE_TOKENS_FAILED(user.id),
+                error,
+            );
             throw error;
         }
     }

@@ -18,9 +18,12 @@
     "build": "npm run build:api && npm run build:console",
     "build:api": "nest build api-app",
     "build:console": "npm run build -w @hirekal/console-app",
-    "start:prod:api": "npm run build:api && node dist/apps/api-app/main.js",
+    "start:prod:api": "npm run build:api && node -r dotenv/config dist/apps/api-app/main.js dotenv_config_path=apps/api-app/.env",
     "start:api": "nest start api-app",
     "start:debug:api": "nest start api-app --debug --watch",
+    "migration:run": "npm run migration:run -w @hirekal/api-app",
+    "migration:revert": "npm run migration:revert -w @hirekal/api-app",
+    "migration:show": "npm run migration:show -w @hirekal/api-app",
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "prepare": "husky"

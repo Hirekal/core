@@ -6,6 +6,7 @@ import LoginPage from '../pages/auth/LoginPage';
 import SignUpPage from '../pages/auth/SignUpPage';
 import ForgotPasswordPage from '../pages/auth/ForgotPasswordPage';
 import ResetPasswordPage from '../pages/auth/ResetPasswordPage';
+import VerifyEmailPage from '../pages/auth/VerifyEmailPage';
 
 import JobListingPage from '../pages/jobs/JobListingPage';
 import JobDetailPage from '../pages/jobs/JobDetailPage';
@@ -35,6 +36,7 @@ export default function AppRoutes() {
     <Routes>
       <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
       <Route path="/signup" element={<PublicRoute><SignUpPage /></PublicRoute>} />
+      <Route path="/verify-email" element={<PublicRoute><VerifyEmailPage /></PublicRoute>} />
       <Route path="/forgot-password" element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />
       <Route path="/reset-password" element={<PublicRoute><ResetPasswordPage /></PublicRoute>} />
 

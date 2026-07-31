@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
 import { useAuth } from '../../context/AuthContext';
@@ -7,13 +7,15 @@ import { validateLoginFields } from '../../utils/validators';
 import { AuthLayout } from './SignUpPage';
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('sarah.chen@acme.com');
-  const [password, setPassword] = useState('password');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const successMessage = location.state?.message || '';
 
   const clearFieldError = (field) => {
     if (fieldErrors[field]) {
@@ -37,16 +39,41 @@ export default function LoginPage() {
       await login(email.trim(), password);
       navigate('/jobs');
     } catch (err) {
-      setError(err.message);
+      const message = err.message || 'Sign in failed';
+      setError(message);
+      if (/not verified/i.test(message)) {
+        setFieldErrors({});
+      }
     } finally {
       setLoading(false);
     }
   };
 
+  const showVerifyLink = /not verified/i.test(error);
+
   return (
     <AuthLayout title="Welcome back" subtitle="Sign in to your Hirekal account">
       <form onSubmit={handleSubmit} noValidate className="space-y-4">
-        {error && <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{error}</div>}
+        {successMessage && (
+          <div className="rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700 dark:bg-green-950/40 dark:text-green-400">
+            {successMessage}
+          </div>
+        )}
+        {error && (
+          <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600 dark:bg-red-950/40 dark:text-red-400">
+            {error}
+            {showVerifyLink && (
+              <div className="mt-2">
+                <Link
+                  to={`/verify-email?email=${encodeURIComponent(email.trim())}`}
+                  className="font-medium underline"
+                >
+                  Verify your email
+                </Link>
+              </div>
+            )}
+          </div>
+        )}
         <Input
           label="Email"
           type="text"
@@ -73,15 +100,19 @@ export default function LoginPage() {
           required
         />
         <div className="text-right">
-          <Link to="/forgot-password" className="text-sm text-accent hover:underline">Forgot password?</Link>
+          <Link to="/forgot-password" className="text-sm text-accent hover:underline">
+            Forgot password?
+          </Link>
         </div>
         <Button type="submit" className="w-full" disabled={loading}>
           {loading ? 'Signing in...' : 'Sign In'}
         </Button>
       </form>
       <p className="mt-6 text-center text-sm text-muted">
-        Don't have an account?{' '}
-        <Link to="/signup" className="text-accent hover:underline">Sign up</Link>
+        Don&apos;t have an account?{' '}
+        <Link to="/signup" className="text-accent hover:underline">
+          Sign up
+        </Link>
       </p>
     </AuthLayout>
   );

@@ -53,7 +53,7 @@ export interface WebhookSettings {
     includeAiTranscripts: boolean;
 }
 
-@Entity('job_settings')
+@Entity('jobSettings')
 export class JobSettings extends BaseEntity {
     @Column({ type: 'uuid', unique: true })
     jobId!: string;

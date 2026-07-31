@@ -4,24 +4,19 @@ import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
 import { AuthLayout } from './SignUpPage';
 import * as authService from '../../services/authService';
-import {
-  validateEmail,
-  validatePasswordResetFields,
-  validateRequired,
-} from '../../utils/validators';
+import { validateEmail, validateRequired } from '../../utils/validators';
 
-export default function ResetPasswordPage() {
+export default function VerifyEmailPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
   const [email, setEmail] = useState(searchParams.get('email') || '');
   const [code, setCode] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
-  const [done, setDone] = useState(false);
+  const [resending, setResending] = useState(false);
 
   const clearFieldError = (field) => {
     if (fieldErrors[field]) {
@@ -32,13 +27,12 @@ export default function ResetPasswordPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setMessage('');
 
-    const errors = {
-      ...(validatePasswordResetFields({ password, confirmPassword }) || {}),
-    };
+    const errors = {};
     const emailError = validateEmail(email);
     if (emailError) errors.email = emailError;
-    const codeError = validateRequired(code, 'Reset code');
+    const codeError = validateRequired(code, 'Verification code');
     if (codeError) errors.code = codeError;
 
     if (Object.keys(errors).length) {
@@ -48,10 +42,16 @@ export default function ResetPasswordPage() {
 
     setFieldErrors({});
     setLoading(true);
-
     try {
-      await authService.resetPassword(email.trim(), code.trim(), password);
-      setDone(true);
+      await authService.verifyCode(
+        email.trim(),
+        code.trim(),
+        authService.CODE_TYPES.EMAIL_VERIFICATION,
+      );
+      navigate('/login', {
+        replace: true,
+        state: { message: 'Email verified. You can sign in now.' },
+      });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -59,28 +59,41 @@ export default function ResetPasswordPage() {
     }
   };
 
-  if (done) {
-    return (
-      <AuthLayout title="Password updated" subtitle="You can now sign in">
-        <div className="space-y-4 text-center">
-          <p className="text-sm text-muted">Your password has been successfully updated.</p>
-          <Button className="w-full" onClick={() => navigate('/login')}>
-            Go to Login
-          </Button>
-        </div>
-      </AuthLayout>
-    );
-  }
+  const handleResend = async () => {
+    setError('');
+    setMessage('');
+
+    const emailError = validateEmail(email);
+    if (emailError) {
+      setFieldErrors({ email: emailError });
+      return;
+    }
+
+    setResending(true);
+    try {
+      await authService.resendVerification(email.trim());
+      setMessage('If this email needs verification, a new code has been sent.');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setResending(false);
+    }
+  };
 
   return (
-    <AuthLayout title="Set new password" subtitle="Enter the code from your email">
-      {error && (
-        <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600 dark:bg-red-950/40 dark:text-red-400">
-          {error}
-        </div>
-      )}
-
+    <AuthLayout title="Verify your email" subtitle="Enter the code we sent to your inbox">
       <form onSubmit={handleSubmit} noValidate className="space-y-4">
+        {error && (
+          <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600 dark:bg-red-950/40 dark:text-red-400">
+            {error}
+          </div>
+        )}
+        {message && (
+          <div className="rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700 dark:bg-green-950/40 dark:text-green-400">
+            {message}
+          </div>
+        )}
+
         <Input
           label="Email"
           type="text"
@@ -96,7 +109,7 @@ export default function ResetPasswordPage() {
         />
 
         <Input
-          label="Reset code"
+          label="Verification code"
           autoComplete="one-time-code"
           value={code}
           onChange={(e) => {
@@ -107,44 +120,26 @@ export default function ResetPasswordPage() {
           required
         />
 
-        <Input
-          label="New Password"
-          type="password"
-          autoComplete="new-password"
-          value={password}
-          onChange={(e) => {
-            setPassword(e.target.value);
-            clearFieldError('password');
-          }}
-          error={fieldErrors.password}
-          required
-        />
-
-        <Input
-          label="Confirm Password"
-          type="password"
-          autoComplete="new-password"
-          value={confirmPassword}
-          onChange={(e) => {
-            setConfirmPassword(e.target.value);
-            clearFieldError('confirmPassword');
-          }}
-          error={fieldErrors.confirmPassword}
-          required
-        />
-
         <Button type="submit" className="w-full" disabled={loading}>
-          {loading ? 'Updating...' : 'Update Password'}
+          {loading ? 'Verifying...' : 'Verify email'}
         </Button>
       </form>
 
+      <div className="mt-4 text-center">
+        <button
+          type="button"
+          onClick={handleResend}
+          disabled={resending}
+          className="text-sm text-accent hover:underline disabled:opacity-60"
+        >
+          {resending ? 'Sending...' : 'Resend code'}
+        </button>
+      </div>
+
       <p className="mt-6 text-center text-sm text-muted">
-        <Link to="/forgot-password" className="text-accent hover:underline">
-          Resend code
-        </Link>
-        {' · '}
+        Already verified?{' '}
         <Link to="/login" className="text-accent hover:underline">
-          Back to login
+          Sign in
         </Link>
       </p>
     </AuthLayout>

@@ -1,284 +1,416 @@
-import { dummyJobs } from '../data/dummyJobs';
+import { apiRequest, apiUpload } from './apiClient';
 import {
-  persistIntroMediaForJob,
-  resolveJobMedia,
-  copyIntroMedia,
-  deleteIntroMedia,
-  isLocalMediaUrl,
-} from '../utils/jobMediaStorage';
+    isApiId,
+    jobFormToApi,
+    jobToUi,
+    stagesToUi,
+    toApiSortBy,
+    toApiStatus,
+} from './jobMappers';
+import { isLocalMediaUrl } from '../utils/jobMediaStorage';
 
-const STORAGE_KEY = 'hirekal_jobs';
-const PREVIEW_PREFIX = 'hirekal_preview_';
-
-const delay = (ms = 300) => new Promise((resolve) => setTimeout(resolve, ms));
-
-function sanitizeJobForStorage(job) {
-  const copy = { ...job };
-  if (copy.introMedia?.url && isLocalMediaUrl(copy.introMedia.url)) {
-    const { url: _url, ...rest } = copy.introMedia;
-    copy.introMedia = rest.storageKey ? rest : null;
-  }
-  return copy;
-}
-
-function readStore() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.map(sanitizeJobForStorage);
-      }
+/**
+ * Converts a data/blob URL into a File for multipart upload.
+ *
+ * @param {{ url?: string, type?: string, fileName?: string }} introMedia
+ * @returns {Promise<File|null>}
+ */
+async function introMediaToFile(introMedia) {
+    if (!introMedia?.url || !isLocalMediaUrl(introMedia.url)) {
+        return null;
     }
-  } catch {
-    // ignore corrupt storage
-  }
-  return [...dummyJobs];
+
+    const response = await fetch(introMedia.url);
+    const blob = await response.blob();
+    const extension = introMedia.type === 'video' ? 'webm' : 'png';
+    const fileName = introMedia.fileName || `intro.${extension}`;
+    return new File([blob], fileName, { type: blob.type || `application/octet-stream` });
 }
 
-function writeStore() {
-  const payload = jobsStore.map(sanitizeJobForStorage);
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-  } catch {
-    // ignore quota errors — IndexedDB holds media
-  }
+/**
+ * Uploads intro media when the UI holds a local data/blob URL.
+ * Media failures are returned as warnings so job create/update can still succeed.
+ *
+ * @param {string} jobId
+ * @param {object|null|undefined} introMedia
+ * @returns {Promise<{ warning?: string }>}
+ */
+async function syncIntroMedia(jobId, introMedia) {
+    try {
+        if (introMedia === null) {
+            await apiRequest(`/jobs/${jobId}/media/intro`, {
+                method: 'DELETE',
+                auth: true,
+            });
+            return {};
+        }
+
+        const file = await introMediaToFile(introMedia);
+        if (!file) {
+            return {};
+        }
+
+        await apiUpload(`/jobs/${jobId}/media/intro`, file);
+        return {};
+    } catch (error) {
+        return {
+            warning:
+                error.message ||
+                'Job saved, but intro media upload failed. Configure Cloudflare R2 or remove the intro media.',
+        };
+    }
 }
 
-let jobsStore = readStore();
+/**
+ * Syncs UI custom stages to the job stages API.
+ *
+ * @param {string} jobId
+ * @param {Array} customStages
+ * @returns {Promise<Array>}
+ */
+async function syncPipelineStages(jobId, customStages = []) {
+    const existing = await apiRequest(`/jobs/${jobId}/stages`, { auth: true });
+    const existingList = Array.isArray(existing) ? existing : [];
+    const existingById = new Map(existingList.map((stage) => [stage.id, stage]));
+    const keepIds = [];
 
+    for (let index = 0; index < customStages.length; index += 1) {
+        const stage = customStages[index];
+        const sortOrder = stage.order ?? index + 1;
+
+        if (isApiId(stage.id) && existingById.has(stage.id)) {
+            await apiRequest(`/jobs/${jobId}/stages/${stage.id}`, {
+                method: 'PATCH',
+                auth: true,
+                body: {
+                    name: stage.name,
+                    active: stage.active !== false,
+                    sortOrder,
+                },
+            });
+            keepIds.push(stage.id);
+        } else {
+            const created = await apiRequest(`/jobs/${jobId}/stages`, {
+                method: 'POST',
+                auth: true,
+                body: {
+                    name: stage.name,
+                    active: stage.active !== false,
+                    sortOrder,
+                },
+            });
+            keepIds.push(created.id);
+        }
+    }
+
+    for (const stage of existingList) {
+        if (!keepIds.includes(stage.id) && !stage.isDefault) {
+            await apiRequest(`/jobs/${jobId}/stages/${stage.id}`, {
+                method: 'DELETE',
+                auth: true,
+            });
+        }
+    }
+
+    if (keepIds.length) {
+        await apiRequest(`/jobs/${jobId}/stages/reorder`, {
+            method: 'PATCH',
+            auth: true,
+            body: { stageIds: keepIds },
+        });
+    }
+
+    const refreshed = await apiRequest(`/jobs/${jobId}/stages`, { auth: true });
+    return stagesToUi(Array.isArray(refreshed) ? refreshed : []);
+}
+
+/**
+ * Caches a job snapshot for the public-style preview route (best-effort).
+ *
+ * @param {object} job
+ */
 export async function cacheJobForPreview(job) {
-  if (!job?.id) return;
-  const resolved = await resolveJobMedia(job);
-  try {
-    localStorage.setItem(`${PREVIEW_PREFIX}${job.id}`, JSON.stringify(sanitizeJobForStorage(resolved)));
-  } catch {
-    // ignore
-  }
-}
-
-export async function getJobForPreview(id) {
-  await delay(100);
-  let job = null;
-  try {
-    const cached = localStorage.getItem(`${PREVIEW_PREFIX}${id}`);
-    if (cached) {
-      job = JSON.parse(cached);
+    if (!job?.id) return;
+    try {
+        localStorage.setItem(`hirekal_preview_${job.id}`, JSON.stringify(job));
+    } catch {
+        // ignore quota errors
     }
-  } catch {
-    // ignore
-  }
-  if (!job) {
-    job = jobsStore.find((j) => j.id === id) || null;
-  }
-  return resolveJobMedia(job);
 }
 
+/**
+ * Loads a job for the application preview page.
+ *
+ * @param {string} id
+ * @returns {Promise<object|null>}
+ */
+export async function getJobForPreview(id) {
+    try {
+        const cached = localStorage.getItem(`hirekal_preview_${id}`);
+        if (cached) {
+            return JSON.parse(cached);
+        }
+    } catch {
+        // ignore
+    }
+
+    const data = await apiRequest(`/jobs/${id}/preview`, { auth: true });
+    return jobToUi({ ...data, status: data.status || 'ACTIVE' });
+}
+
+/**
+ * Lists jobs for the current organization.
+ *
+ * @param {object} [filters]
+ * @returns {Promise<object[]>}
+ */
 export async function getJobs(filters = {}) {
-  await delay();
-  let result = [...jobsStore];
+    const params = new URLSearchParams();
 
-  if (filters.status && filters.status !== 'all') {
-    result = result.filter((j) => j.status === filters.status);
-  }
+    const status = toApiStatus(filters.status || 'all');
+    if (status) params.set('status', status);
 
-  if (filters.search) {
-    const q = filters.search.toLowerCase();
-    result = result.filter(
-      (j) =>
-        j.title.toLowerCase().includes(q) ||
-        j.company.toLowerCase().includes(q) ||
-        j.location.toLowerCase().includes(q)
-    );
-  }
+    if (filters.search) params.set('search', filters.search);
+    params.set('sortBy', toApiSortBy(filters.sortBy || 'updated'));
+    params.set('order', 'desc');
+    params.set('page', String(filters.page || 1));
+    params.set('limit', String(filters.limit || 100));
 
-  if (filters.sortBy) {
-    result.sort((a, b) => {
-      switch (filters.sortBy) {
-        case 'title':
-          return a.title.localeCompare(b.title);
-        case 'applications':
-          return b.applicationCount - a.applicationCount;
-        case 'created':
-          return new Date(b.createdAt) - new Date(a.createdAt);
-        case 'updated':
-        default:
-          return new Date(b.updatedAt) - new Date(a.updatedAt);
-      }
-    });
-  }
-
-  return result;
+    const data = await apiRequest(`/jobs?${params.toString()}`, { auth: true });
+    const items = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
+    return items.map(jobToUi);
 }
 
+/**
+ * Fetches a full job by id.
+ *
+ * @param {string} id
+ * @returns {Promise<object|null>}
+ */
 export async function getJobById(id) {
-  await delay();
-  const job = jobsStore.find((j) => j.id === id) || null;
-  return resolveJobMedia(job);
+    const data = await apiRequest(`/jobs/${id}`, { auth: true });
+    return jobToUi(data);
 }
 
+/**
+ * Creates a job, then uploads intro media when needed.
+ *
+ * @param {object} jobData
+ * @returns {Promise<object>}
+ */
 export async function createJob(jobData) {
-  await delay(500);
-  const id = `job-${Date.now()}`;
-  const introMedia = jobData.introMedia
-    ? await persistIntroMediaForJob(id, jobData.introMedia, null)
-    : null;
+    const body = jobFormToApi(jobData, { includeNested: true });
+    const created = await apiRequest('/jobs', {
+        method: 'POST',
+        auth: true,
+        body,
+    });
 
-  const newJob = {
-    ...jobData,
-    introMedia,
-    id,
-    applicationCount: 0,
-    visitorCount: 0,
-    viewers: 0,
-    applicationsStarted: 0,
-    applicationsSubmitted: 0,
-    shareLink: `https://apply.hirekal.io/j/${jobData.title.toLowerCase().replace(/\s+/g, '-')}`,
-    status: jobData.status || 'active',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-  jobsStore = [newJob, ...jobsStore];
-  writeStore();
-  return resolveJobMedia(newJob);
+    let warning;
+    if (jobData.introMedia?.url && isLocalMediaUrl(jobData.introMedia.url)) {
+        ({ warning } = await syncIntroMedia(created.id, jobData.introMedia));
+    }
+
+    const job = await getJobById(created.id);
+    if (warning) job.mediaWarning = warning;
+    return job;
 }
 
+/**
+ * Updates a job and optional nested questions/fields; syncs intro media.
+ *
+ * @param {string} id
+ * @param {object} jobData
+ * @returns {Promise<object|null>}
+ */
 export async function updateJob(id, jobData) {
-  await delay(500);
-  const index = jobsStore.findIndex((j) => j.id === id);
-  if (index === -1) return null;
+    const body = jobFormToApi(jobData, { includeNested: true });
+    await apiRequest(`/jobs/${id}`, {
+        method: 'PATCH',
+        auth: true,
+        body,
+    });
 
-  const previousIntro = jobsStore[index].introMedia;
-  const introMedia = jobData.introMedia !== undefined
-    ? await persistIntroMediaForJob(id, jobData.introMedia, previousIntro)
-    : previousIntro;
+    let warning;
+    if (jobData.introMedia !== undefined) {
+        ({ warning } = await syncIntroMedia(id, jobData.introMedia));
+    }
 
-  jobsStore[index] = {
-    ...jobsStore[index],
-    ...jobData,
-    introMedia,
-    updatedAt: new Date().toISOString(),
-  };
-  writeStore();
-  return resolveJobMedia(jobsStore[index]);
+    const job = await getJobById(id);
+    if (warning) job.mediaWarning = warning;
+    return job;
 }
 
+/**
+ * Duplicates a job on the server.
+ *
+ * @param {string} id
+ * @returns {Promise<object|null>}
+ */
 export async function duplicateJob(id) {
-  await delay(500);
-  const original = jobsStore.find((j) => j.id === id);
-  if (!original) return null;
-  const newId = `job-${Date.now()}`;
-
-  let introMedia = original.introMedia;
-  if (original.introMedia?.storageKey) {
-    introMedia = await copyIntroMedia(id, newId);
-  } else if (original.introMedia) {
-    introMedia = { ...original.introMedia };
-  }
-
-  const duplicate = {
-    ...JSON.parse(JSON.stringify({ ...original, introMedia })),
-    id: newId,
-    title: `${original.title} (Copy)`,
-    applicationCount: 0,
-    visitorCount: 0,
-    viewers: 0,
-    applicationsStarted: 0,
-    applicationsSubmitted: 0,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-  if (duplicate.introMedia?.url && isLocalMediaUrl(duplicate.introMedia.url)) {
-    delete duplicate.introMedia.url;
-  }
-  jobsStore = [duplicate, ...jobsStore];
-  writeStore();
-  return resolveJobMedia(duplicate);
+    const data = await apiRequest(`/jobs/${id}/duplicate`, {
+        method: 'POST',
+        auth: true,
+    });
+    return jobToUi(data);
 }
 
+/**
+ * Persists job settings sections and pipeline stages.
+ *
+ * @param {string} id
+ * @param {object} settings
+ * @returns {Promise<object|null>}
+ */
 export async function updateJobSettings(id, settings) {
-  await delay(400);
-  const index = jobsStore.findIndex((j) => j.id === id);
-  if (index === -1) return null;
-  jobsStore[index] = {
-    ...jobsStore[index],
-    settings: { ...jobsStore[index].settings, ...settings },
-    updatedAt: new Date().toISOString(),
-  };
-  writeStore();
-  return jobsStore[index];
+    const {
+        general,
+        thankYouPage,
+        emailAutomation,
+        webhook,
+        customStages,
+        questionRetakes,
+        transcriptionLanguage,
+        aiTranscripts,
+    } = settings || {};
+
+    await apiRequest(`/jobs/${id}`, {
+        method: 'PATCH',
+        auth: true,
+        body: jobFormToApi(
+            {
+                settings: {
+                    questionRetakes,
+                    transcriptionLanguage,
+                    aiTranscripts,
+                },
+            },
+            { includeNested: false },
+        ),
+    });
+
+    if (general) {
+        await apiRequest(`/jobs/${id}/settings/general`, {
+            method: 'PATCH',
+            auth: true,
+            body: general,
+        });
+    }
+
+    if (thankYouPage) {
+        const { mediaType, mediaUrl, storageKey, fileName, description, autoRedirectUrl } =
+            thankYouPage;
+        await apiRequest(`/jobs/${id}/settings/thank-you`, {
+            method: 'PATCH',
+            auth: true,
+            body: {
+                mediaType,
+                mediaUrl,
+                storageKey,
+                fileName,
+                description,
+                autoRedirectUrl,
+            },
+        });
+    }
+
+    if (emailAutomation) {
+        await apiRequest(`/jobs/${id}/settings/email-automation`, {
+            method: 'PATCH',
+            auth: true,
+            body: emailAutomation,
+        });
+    }
+
+    if (webhook) {
+        const { logs: _logs, ...webhookBody } = webhook;
+        await apiRequest(`/jobs/${id}/settings/webhook`, {
+            method: 'PATCH',
+            auth: true,
+            body: webhookBody,
+        });
+    }
+
+    if (Array.isArray(customStages)) {
+        await syncPipelineStages(id, customStages);
+    }
+
+    return getJobById(id);
 }
 
+/**
+ * Placeholder CSV export (candidates API not wired yet).
+ *
+ * @param {string} jobId
+ * @returns {Promise<{ success: boolean, filename: string }>}
+ */
 export async function exportApplicationsCsv(jobId) {
-  await delay(800);
-  return { success: true, filename: `applications-${jobId}.csv` };
+    return { success: true, filename: `applications-${jobId}.csv` };
 }
 
+/**
+ * Soft-deletes an archived job.
+ *
+ * @param {string} id
+ * @returns {Promise<{ success: boolean }>}
+ */
 export async function deleteJob(id) {
-  await delay(400);
-  const job = jobsStore.find((j) => j.id === id);
-  if (!job) return { success: false };
-  if (job.introMedia?.storageKey) {
-    await deleteIntroMedia(job.introMedia.storageKey);
-  }
-  jobsStore = jobsStore.filter((j) => j.id !== id);
-  writeStore();
-  try {
-    localStorage.removeItem(`${PREVIEW_PREFIX}${id}`);
-  } catch {
-    // ignore
-  }
-  return { success: true };
+    await apiRequest(`/jobs/${id}`, {
+        method: 'DELETE',
+        auth: true,
+    });
+    try {
+        localStorage.removeItem(`hirekal_preview_${id}`);
+    } catch {
+        // ignore
+    }
+    return { success: true };
 }
 
+/**
+ * @param {string} id
+ * @returns {Promise<object|null>}
+ */
 export async function pauseJob(id) {
-  await delay(400);
-  const index = jobsStore.findIndex((j) => j.id === id);
-  if (index === -1) return null;
-  jobsStore[index] = {
-    ...jobsStore[index],
-    status: 'paused',
-    updatedAt: new Date().toISOString(),
-  };
-  writeStore();
-  return jobsStore[index];
+    const data = await apiRequest(`/jobs/${id}/pause`, {
+        method: 'POST',
+        auth: true,
+    });
+    return jobToUi(data);
 }
 
+/**
+ * @param {string} id
+ * @returns {Promise<object|null>}
+ */
 export async function resumeJob(id) {
-  await delay(400);
-  const index = jobsStore.findIndex((j) => j.id === id);
-  if (index === -1) return null;
-  jobsStore[index] = {
-    ...jobsStore[index],
-    status: 'active',
-    updatedAt: new Date().toISOString(),
-  };
-  writeStore();
-  return jobsStore[index];
+    const data = await apiRequest(`/jobs/${id}/resume`, {
+        method: 'POST',
+        auth: true,
+    });
+    return jobToUi(data);
 }
 
+/**
+ * @param {string} id
+ * @returns {Promise<object|null>}
+ */
 export async function archiveJob(id) {
-  await delay(400);
-  const index = jobsStore.findIndex((j) => j.id === id);
-  if (index === -1) return null;
-  jobsStore[index] = {
-    ...jobsStore[index],
-    status: 'archived',
-    updatedAt: new Date().toISOString(),
-  };
-  writeStore();
-  return jobsStore[index];
+    const data = await apiRequest(`/jobs/${id}/archive`, {
+        method: 'POST',
+        auth: true,
+    });
+    return jobToUi(data);
 }
 
+/**
+ * @param {string} id
+ * @returns {Promise<object|null>}
+ */
 export async function restoreJob(id) {
-  await delay(400);
-  const index = jobsStore.findIndex((j) => j.id === id);
-  if (index === -1) return null;
-  jobsStore[index] = {
-    ...jobsStore[index],
-    status: 'active',
-    updatedAt: new Date().toISOString(),
-  };
-  writeStore();
-  return jobsStore[index];
+    const data = await apiRequest(`/jobs/${id}/restore`, {
+        method: 'POST',
+        auth: true,
+    });
+    return jobToUi(data);
 }

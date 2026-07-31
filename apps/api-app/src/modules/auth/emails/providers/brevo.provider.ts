@@ -39,11 +39,12 @@ export class BrevoEmailProvider {
      * @param configService - Nest config for Brevo credentials and sender
      */
     constructor(private readonly configService: ConfigService) {
-        const apiKey = this.configService.get<string>('BREVO_API_KEY');
+        const apiKey = this.configService.get<string>('BREVO_API_KEY')?.trim();
         this.senderEmail =
-            this.configService.get<string>('BREVO_SENDER_EMAIL') ?? '';
+            this.configService.get<string>('BREVO_SENDER_EMAIL')?.trim() ?? '';
         this.senderName =
-            this.configService.get<string>('BREVO_SENDER_NAME') ?? 'Hirekal';
+            this.configService.get<string>('BREVO_SENDER_NAME')?.trim() ??
+            'Hirekal';
 
         if (apiKey && this.senderEmail) {
             this.client = new BrevoClient({ apiKey });

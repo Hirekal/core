@@ -83,15 +83,21 @@ export default function JobDetailPage() {
 
   const loadData = async () => {
     setLoading(true);
-    const [jobData, candidatesData, stagesData] = await Promise.all([
-      jobService.getJobById(id),
-      candidateService.getCandidates({ jobId: id }),
-      candidateService.getStages(id),
-    ]);
-    setJob(jobData);
-    setCandidates(candidatesData);
-    setStages(stagesData);
-    setLoading(false);
+    try {
+      const [jobData, candidatesData, stagesData] = await Promise.all([
+        jobService.getJobById(id),
+        candidateService.getCandidates({ jobId: id }),
+        candidateService.getStages(id),
+      ]);
+      setJob(jobData);
+      setCandidates(candidatesData);
+      setStages(stagesData);
+    } catch (err) {
+      window.alert(err.message || 'Failed to load job');
+      setJob(null);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { loadData(); }, [id]);
@@ -248,32 +254,54 @@ export default function JobDetailPage() {
 
   const handleDeleteJob = async () => {
     setDeleting(true);
-    await jobService.deleteJob(id);
-    setDeleting(false);
-    navigate('/jobs');
+    try {
+      await jobService.deleteJob(id);
+      navigate('/jobs');
+    } catch (err) {
+      window.alert(err.message || 'Failed to delete job');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const handlePauseJob = async () => {
-    const updated = await jobService.pauseJob(id);
-    if (updated) setJob(updated);
+    try {
+      const updated = await jobService.pauseJob(id);
+      if (updated) setJob(updated);
+    } catch (err) {
+      window.alert(err.message || 'Failed to pause job');
+    }
   };
 
   const handleResumeJob = async () => {
-    const updated = await jobService.resumeJob(id);
-    if (updated) setJob(updated);
+    try {
+      const updated = await jobService.resumeJob(id);
+      if (updated) setJob(updated);
+    } catch (err) {
+      window.alert(err.message || 'Failed to resume job');
+    }
   };
 
   const handleArchiveJob = async () => {
     setArchiving(true);
-    const updated = await jobService.archiveJob(id);
-    setArchiving(false);
-    setShowArchiveModal(false);
-    if (updated) setJob(updated);
+    try {
+      const updated = await jobService.archiveJob(id);
+      setShowArchiveModal(false);
+      if (updated) setJob(updated);
+    } catch (err) {
+      window.alert(err.message || 'Failed to archive job');
+    } finally {
+      setArchiving(false);
+    }
   };
 
   const handleRestoreJob = async () => {
-    const updated = await jobService.restoreJob(id);
-    if (updated) setJob(updated);
+    try {
+      const updated = await jobService.restoreJob(id);
+      if (updated) setJob(updated);
+    } catch (err) {
+      window.alert(err.message || 'Failed to restore job');
+    }
   };
 
   return (

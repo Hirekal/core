@@ -1,37 +1,24 @@
+/**
+ * @fileoverview TypeORM CLI DataSource (migration:run / revert / show).
+ * Nest runtime wiring lives in app.module.ts — do not import this file from Nest.
+ */
 import 'reflect-metadata';
-import { ConfigService } from '@nestjs/config';
 import { config as loadEnv } from 'dotenv';
-import { DataSource, DataSourceOptions } from 'typeorm';
+import { resolve } from 'path';
+import { DataSource } from 'typeorm';
 
-// TypeORM CLI runs outside Nest DI — load .env then read via ConfigService
-loadEnv();
+loadEnv({ path: resolve(__dirname, '../../.env') });
 
-/**
- * Resolve DATABASE_URL via ConfigService (required — no hardcoded default).
- */
-export function getDatabaseUrl(configService: ConfigService): string {
-    const url = configService.get<string>('DATABASE_URL');
-    if (!url) {
-        throw new Error('DATABASE_URL is required');
-    }
-    return url;
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) {
+    throw new Error('DATABASE_URL is required');
 }
 
-/**
- * Shared Postgres TypeORM options for the TypeORM CLI.
- */
-export function buildTypeOrmDataSourceOptions(
-    configService: ConfigService,
-): DataSourceOptions {
-    return {
-        type: 'postgres',
-        url: getDatabaseUrl(configService),
-        entities: ['src/modules/**/*.entity.ts'],
-        migrations: ['src/migrations/*.ts'],
-        synchronize: false,
-    };
-}
-
-const configService = new ConfigService();
-
-export default new DataSource(buildTypeOrmDataSourceOptions(configService));
+export default new DataSource({
+    type: 'postgres',
+    url: databaseUrl,
+    // Paths relative to apps/api-app (npm workspace cwd for migration scripts)
+    entities: ['src/modules/**/*.entity{.ts,.js}'],
+    migrations: ['src/migrations/*{.ts,.js}'],
+    synchronize: false,
+});

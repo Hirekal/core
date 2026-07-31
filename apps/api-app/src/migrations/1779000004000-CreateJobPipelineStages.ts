@@ -18,7 +18,7 @@ export class CreateJobPipelineStages1779000004000
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.createTable(
       new Table({
-        name: 'job_pipeline_stages',
+        name: 'jobPipelineStages',
         columns: [
           ...BASE_ENTITY_COLUMNS,
           { name: 'jobId', type: 'uuid', isNullable: false },
@@ -33,7 +33,7 @@ export class CreateJobPipelineStages1779000004000
     );
 
     await queryRunner.createUniqueConstraint(
-      'job_pipeline_stages',
+      'jobPipelineStages',
       new TableUnique({
         name: 'UQ_job_pipeline_stages_jobId_slug',
         columnNames: ['jobId', 'slug'],
@@ -41,7 +41,7 @@ export class CreateJobPipelineStages1779000004000
     );
 
     await queryRunner.createIndex(
-      'job_pipeline_stages',
+      'jobPipelineStages',
       new TableIndex({
         name: 'IDX_job_pipeline_stages_jobId_sortOrder',
         columnNames: ['jobId', 'sortOrder'],
@@ -49,7 +49,7 @@ export class CreateJobPipelineStages1779000004000
     );
 
     await queryRunner.createForeignKey(
-      'job_pipeline_stages',
+      'jobPipelineStages',
       new TableForeignKey({
         name: 'FK_job_pipeline_stages_jobId',
         columnNames: ['jobId'],
@@ -62,17 +62,17 @@ export class CreateJobPipelineStages1779000004000
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.dropForeignKey(
-      'job_pipeline_stages',
+      'jobPipelineStages',
       'FK_job_pipeline_stages_jobId',
     );
     await queryRunner.dropIndex(
-      'job_pipeline_stages',
+      'jobPipelineStages',
       'IDX_job_pipeline_stages_jobId_sortOrder',
     );
     await queryRunner.dropUniqueConstraint(
-      'job_pipeline_stages',
+      'jobPipelineStages',
       'UQ_job_pipeline_stages_jobId_slug',
     );
-    await queryRunner.dropTable('job_pipeline_stages');
+    await queryRunner.dropTable('jobPipelineStages');
   }
 }
