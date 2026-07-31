@@ -12,6 +12,7 @@ import JobListingPage from '../pages/jobs/JobListingPage';
 import JobDetailPage from '../pages/jobs/JobDetailPage';
 import AddEditJobPage from '../pages/jobs/AddEditJobPage';
 import ApplicationPreviewPage from '../pages/jobs/ApplicationPreviewPage';
+import PublicApplyPage from '../pages/jobs/PublicApplyPage';
 import JobSettingsPage from '../pages/jobs/JobSettingsPage';
 import JobSettingsGeneralPage from '../pages/jobs/JobSettingsGeneralPage';
 import JobSettingsThankYouPage from '../pages/jobs/JobSettingsThankYouPage';
@@ -57,6 +58,7 @@ export default function AppRoutes() {
         }
       />
       <Route path="/jobs/:id/preview" element={<ApplicationPreviewPage />} />
+      <Route path="/j/:slug" element={<PublicApplyPage />} />
       <Route
         path="/jobs/:id/edit"
         element={

@@ -1,112 +1,112 @@
-import { dummyCandidates } from '../data/dummyCandidates';
-import { dummyStages } from '../data/dummyStages';
+import * as applicationService from './applicationService';
 import { getActivePipelineStages, resolveJobStages } from '../utils/stages';
 import * as jobService from './jobService';
 
-const delay = (ms = 300) => new Promise((resolve) => setTimeout(resolve, ms));
-
-let candidatesStore = [...dummyCandidates];
-let stagesStore = [...dummyStages];
-
 export async function getCandidates(filters = {}) {
-    await delay();
-    let result = [...candidatesStore];
-
-    if (filters.jobId) {
-        result = result.filter((c) => c.jobId === filters.jobId);
+    if (!filters.jobId) {
+        return [];
     }
 
-    if (filters.stageId) {
-        result = result.filter((c) => c.stageId === filters.stageId);
-    }
+    const items = await applicationService.getJobApplications(filters.jobId, {
+        stageId: filters.stageId,
+        search: filters.search,
+        sortBy: filters.sortBy,
+    });
 
-    if (filters.search) {
-        const q = filters.search.toLowerCase();
-        result = result.filter(
-            (c) =>
-                c.firstName.toLowerCase().includes(q) ||
-                c.lastName.toLowerCase().includes(q) ||
-                c.email.toLowerCase().includes(q)
-        );
-    }
-
-    if (filters.sortBy) {
-        result.sort((a, b) => {
-            switch (filters.sortBy) {
-                case 'name':
-                    return `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`);
-                case 'stage':
-                    return (a.stageId || '').localeCompare(b.stageId || '');
-                case 'submitted':
-                default:
-                    return new Date(b.submittedAt || b.startedAt || 0) - new Date(a.submittedAt || a.startedAt || 0);
-            }
-        });
-    }
-
-    return result;
+    return items.map(mapApplicationToCandidate);
 }
 
 export async function getCandidateById(id) {
-    await delay();
-    return candidatesStore.find((c) => c.id === id) || null;
+    const application = await applicationService.getApplicationById(id);
+    return mapApplicationToCandidate(application);
 }
 
 export async function updateCandidateStage(id, stageId) {
-    await delay(400);
-    const index = candidatesStore.findIndex((c) => c.id === id);
-    if (index === -1) return null;
-    candidatesStore[index] = { ...candidatesStore[index], stageId };
-    return candidatesStore[index];
+    await applicationService.updateApplicationStage(id, stageId);
+    return getCandidateById(id);
 }
 
 export async function updateCandidateRating(id, rating) {
-    await delay(200);
-    const index = candidatesStore.findIndex((c) => c.id === id);
-    if (index === -1) return null;
-    candidatesStore[index] = { ...candidatesStore[index], rating };
-    return candidatesStore[index];
+    await applicationService.updateApplicationRating(id, rating);
+    return getCandidateById(id);
 }
 
 export async function addCandidateNote(id, note) {
-    await delay(300);
-    const index = candidatesStore.findIndex((c) => c.id === id);
-    if (index === -1) return null;
-    const newNote = {
-        id: `note-${Date.now()}`,
-        ...note,
-        createdAt: new Date().toISOString(),
-    };
-    candidatesStore[index] = {
-        ...candidatesStore[index],
-        notes: [...(candidatesStore[index].notes || []), newNote],
-    };
-    return candidatesStore[index];
+    await applicationService.addApplicationNote(id, note.text);
+    return getCandidateById(id);
 }
 
 export async function deleteCandidate(id) {
-    await delay(400);
-    candidatesStore = candidatesStore.filter((c) => c.id !== id);
+    await applicationService.deleteApplication(id);
     return { success: true };
 }
 
 export async function getStages(jobId) {
-    await delay();
     if (jobId) {
         const job = await jobService.getJobById(jobId);
         const stages = job?.settings?.customStages || job?.pipelineStages;
         return getActivePipelineStages(resolveJobStages(stages));
     }
-    return getActivePipelineStages(stagesStore);
+    return [];
 }
 
 export async function updateStages(stages) {
-    await delay(400);
-    stagesStore = stages;
-    return stagesStore;
+    return stages;
 }
 
-export async function getStageById(id) {
-    await delay(100);
-    return stagesStore.find((s) => s.id === id) || null;
+export async function getStageById(id, jobId) {
+    const stages = await getStages(jobId);
+    return stages.find((s) => s.id === id) || null;
+}
+
+function resolveVideoUrl(source) {
+    if (!source) return null;
+    return (
+        source.videoUrl
+        || source.mediaUrl
+        || (typeof source.answer === 'string' && source.answer.startsWith('http')
+            ? source.answer
+            : null)
+    );
+}
+
+function normalizeAnswer(answer) {
+    if (!answer) return answer;
+
+    const videoUrl = answer.type === 'video' ? resolveVideoUrl(answer) : null;
+
+    return {
+        ...answer,
+        videoUrl,
+        mediaUrl: answer.mediaUrl || videoUrl,
+    };
+}
+
+function mapApplicationToCandidate(application) {
+    if (!application) return null;
+
+    const answers = (application.answers || []).map(normalizeAnswer);
+    const videoAnswer = answers.find((a) => a.type === 'video' && a.videoUrl);
+
+    return {
+        id: application.id,
+        jobId: application.jobId,
+        firstName: application.firstName || '',
+        lastName: application.lastName || '',
+        email: application.email || '',
+        phone: application.phone || '',
+        stageId: application.stageId,
+        rating: application.rating,
+        submittedAt: application.submittedAt,
+        startedAt: application.startedAt,
+        videoThumbnail: application.videoThumbnail || null,
+        videoUrl: application.videoUrl || videoAnswer?.videoUrl || null,
+        notes: (application.notes || []).map((note) => ({
+            id: note.id,
+            text: note.text,
+            author: note.authorId ? 'Team member' : 'Team member',
+            createdAt: note.createdAt,
+        })),
+        answers,
+    };
 }

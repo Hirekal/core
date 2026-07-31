@@ -31,6 +31,7 @@ import * as jobService from '../../services/jobService';
 import * as candidateService from '../../services/candidateService';
 import { formatDate, formatRelative } from '../../utils/formatDate';
 import { openJobPreview } from '../../utils/openJobPreview';
+import { getPublicApplyUrl } from '../../utils/applyLink';
 
 function MetaChip({ icon: Icon, children }) {
   return (
@@ -219,9 +220,17 @@ export default function JobDetailPage() {
   const activeStageName = stages.find((s) => s.id === activeStage)?.name || 'this stage';
 
   const handleCopyLink = () => {
-    navigator.clipboard.writeText(job.shareLink);
+    const applyUrl = getPublicApplyUrl(job);
+    navigator.clipboard.writeText(applyUrl);
     setCopyToast(true);
     setTimeout(() => setCopyToast(false), 2000);
+  };
+
+  const handleOpenApplyPage = () => {
+    const applyUrl = getPublicApplyUrl(job);
+    if (applyUrl) {
+      window.open(applyUrl, '_blank', 'noopener,noreferrer');
+    }
   };
 
   const handleStageChange = async (stageId) => {
@@ -367,12 +376,17 @@ export default function JobDetailPage() {
             </div>
             <div className="min-w-0">
               <h2 className="text-sm font-semibold text-heading">Shareable Application Link</h2>
-              <p className="mt-1 truncate text-sm text-muted">{job.shareLink}</p>
+              <p className="mt-1 truncate text-sm text-muted">{getPublicApplyUrl(job)}</p>
             </div>
           </div>
-          <Button variant="secondary" size="sm" onClick={handleCopyLink} className="shrink-0">
-            <Copy size={16} /> Copy Link
-          </Button>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <Button variant="secondary" size="sm" onClick={handleOpenApplyPage}>
+              <ExternalLink size={16} /> Open Apply Page
+            </Button>
+            <Button variant="secondary" size="sm" onClick={handleCopyLink}>
+              <Copy size={16} /> Copy Link
+            </Button>
+          </div>
         </div>
       </section>
 

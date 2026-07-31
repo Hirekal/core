@@ -1,26 +1,14 @@
 import { apiRequest, putToSignedUrl } from './apiClient';
+import { mediaToUploadFile } from '../utils/mediaHelpers';
 
 /**
- * Converts a data/blob URL into a File for direct R2 upload.
+ * Converts recorded/uploaded media into a File for direct R2 upload.
  *
- * @param {{ url?: string, type?: string, fileName?: string }} media
+ * @param {{ blob?: Blob, url?: string, type?: string, fileName?: string }} media
  * @returns {Promise<File|null>}
  */
 export async function mediaToFile(media) {
-  if (!media?.url) return null;
-
-  const response = await fetch(media.url);
-  const blob = await response.blob();
-  const extension = media.type === 'video' ? 'webm' : 'png';
-  const fileName = media.fileName || `media.${extension}`;
-  const contentType =
-    blob.type && blob.type !== 'application/octet-stream'
-      ? blob.type
-      : media.type === 'video'
-        ? 'video/webm'
-        : 'image/png';
-
-  return new File([blob], fileName, { type: contentType });
+  return mediaToUploadFile(media);
 }
 
 /**

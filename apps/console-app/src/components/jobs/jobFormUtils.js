@@ -40,20 +40,57 @@ Let's get started! 🎥`;
 export const DEFAULT_APPLICATION_SECTION_TITLE = 'Complete your application';
 
 export function normalizeQuestions(questions = []) {
-  const standard = questions.filter((q) => !MEDIA_TYPES.has(q.type));
-  const existingDefault = questions.find((q) => q.id === DEFAULT_MEDIA_QUESTION.id || q.builtIn);
-  const firstMedia = questions.find((q) => MEDIA_TYPES.has(q.type));
+  const standard = questions.filter(
+    (q) => !MEDIA_TYPES.has(q.type) && !q.builtIn,
+  );
+  const builtInVideo = questions.find((q) => q.builtIn);
+  const strayMedia = questions.find((q) => !q.builtIn && MEDIA_TYPES.has(q.type));
 
   const defaultMedia = {
     ...DEFAULT_MEDIA_QUESTION,
-    label: existingDefault?.label || firstMedia?.label || DEFAULT_MEDIA_QUESTION.label,
+    ...(builtInVideo || {}),
+    id: builtInVideo?.id || DEFAULT_MEDIA_QUESTION.id,
+    label:
+      builtInVideo?.label ||
+      strayMedia?.label ||
+      DEFAULT_MEDIA_QUESTION.label,
   };
 
   return [...standard, defaultMedia];
 }
 
+function dedupeApplicationFields(fields) {
+  const result = [];
+  const indexByKey = new Map();
+
+  for (const field of fields) {
+    const dedupeKey = field.builtIn
+      ? field.fieldKey || field.id
+      : field.apiId || field.id;
+
+    if (!dedupeKey) {
+      result.push(field);
+      continue;
+    }
+
+    const existingIndex = indexByKey.get(dedupeKey);
+    if (existingIndex === undefined) {
+      indexByKey.set(dedupeKey, result.length);
+      result.push(field);
+      continue;
+    }
+
+    const existing = result[existingIndex];
+    if (field.builtIn && !existing.builtIn) {
+      result[existingIndex] = field;
+    }
+  }
+
+  return result.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+}
+
 export function normalizeApplicationFields(fields) {
-  if (Array.isArray(fields)) return fields;
+  if (Array.isArray(fields)) return dedupeApplicationFields(fields);
   if (!fields || typeof fields !== 'object') return [...DEFAULT_APPLICATION_FIELDS];
 
   const builtIn = DEFAULT_APPLICATION_FIELDS.map((def) => ({
@@ -62,5 +99,5 @@ export function normalizeApplicationFields(fields) {
   }));
 
   const custom = (fields.custom || []).map((f) => ({ ...f, builtIn: false }));
-  return [...builtIn, ...custom];
+  return dedupeApplicationFields([...builtIn, ...custom]);
 }

@@ -14,6 +14,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { JwtService } from '@nestjs/jwt';
 import type { Request, Response } from 'express';
 import { AuthService } from '../../auth.service';
+import { logServiceError } from '../../../../common/utils/error.util';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { AUTH_MODULE_OPTIONS } from '../interfaces/auth-module-options.interface';
 import type { AuthModuleOptions } from '../interfaces/auth-module-options.interface';
@@ -97,7 +98,11 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
         ERROR_MESSAGES.AUTH.INVALID_OR_MISSING_TOKEN,
       );
     } catch (error) {
-      this.logger.error(LOG_MESSAGES.GUARD.CAN_ACTIVATE_FAILED, error);
+      logServiceError(
+        this.logger,
+        LOG_MESSAGES.GUARD.CAN_ACTIVATE_FAILED,
+        error,
+      );
       throw error;
     }
   }

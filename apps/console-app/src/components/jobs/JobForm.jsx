@@ -12,7 +12,6 @@ import Card from '../common/Card';
 import SidePanel, { SidePanelItem } from '../common/SidePanel';
 import IntroMediaPicker from '../common/IntroMediaPicker';
 import {
-  MEDIA_QUESTION_TYPES,
   MEDIA_TYPES,
   DEFAULT_MEDIA_QUESTION,
   DEFAULT_APPLICATION_SECTION_TITLE,
@@ -199,7 +198,10 @@ export default function JobForm({ initialData, onSubmit, loading }) {
         }
         const next = { ...q, ...updates };
         if (updates.type) {
-          next.category = MEDIA_TYPES.has(updates.type) ? 'media' : 'standard';
+          if (MEDIA_TYPES.has(updates.type)) {
+            return q;
+          }
+          next.category = 'standard';
         }
         return next;
       }),
@@ -376,7 +378,6 @@ export default function JobForm({ initialData, onSubmit, loading }) {
     if (q.builtIn) return renderBuiltInMediaQuestion(q);
 
     const globalIndex = form.questions.findIndex((item) => item.id === q.id);
-    const isMedia = MEDIA_TYPES.has(q.type);
 
     return (
       <div key={q.id} className="rounded-xl border border-border bg-card p-5 shadow-sm transition-shadow hover:shadow-md">
@@ -395,7 +396,7 @@ export default function JobForm({ initialData, onSubmit, loading }) {
               label="Type"
               value={q.type}
               onChange={(v) => updateQuestion(globalIndex, { type: v })}
-              options={isMedia ? MEDIA_QUESTION_TYPES : STANDARD_QUESTION_TYPES}
+              options={STANDARD_QUESTION_TYPES}
               placeholder="Select question type"
             />
             <Toggle
@@ -414,12 +415,6 @@ export default function JobForm({ initialData, onSubmit, loading }) {
                 }
                 containerClassName="sm:col-span-2"
               />
-            )}
-            {isMedia && (
-              <div className="sm:col-span-2 rounded-lg bg-gray-50 px-3 py-2 text-xs text-muted">
-                Candidates will respond with{' '}
-                {MEDIA_QUESTION_TYPES.find((t) => t.value === q.type)?.label.toLowerCase()}
-              </div>
             )}
           </div>
           <button

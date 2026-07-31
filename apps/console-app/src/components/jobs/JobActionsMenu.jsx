@@ -12,6 +12,7 @@ import {
   Play,
 } from 'lucide-react';
 import Dropdown from '../common/Dropdown';
+import { getPublicApplyUrl } from '../../utils/applyLink';
 
 export default function JobActionsMenu({
   job,
@@ -36,7 +37,7 @@ export default function JobActionsMenu({
       { label: 'Duplicate Job', icon: <Copy size={16} />, onClick: () => onDuplicate?.(job.id) },
       { label: 'Job Settings', icon: <Settings size={16} />, onClick: () => navigate(`/jobs/${job.id}/settings`) },
       { divider: true },
-      { label: 'Copy Job Link', icon: <Link2 size={16} />, onClick: () => onCopyLink?.(job.shareLink) },
+      { label: 'Copy Job Link', icon: <Link2 size={16} />, onClick: () => onCopyLink?.(getPublicApplyUrl(job)) },
     );
   }
 

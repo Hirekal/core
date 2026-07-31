@@ -32,6 +32,7 @@ export class R2Service {
 
     /**
      * Ensure the S3/R2 client is configured before performing IO.
+     * @returns The S3/R2 client, bucket name, and public base URL.
      */
     private ensureClient(): {
         client: S3Client;
@@ -74,6 +75,9 @@ export class R2Service {
             region: 'auto',
             endpoint,
             credentials: { accessKeyId, secretAccessKey },
+            // Avoid checksum query params on presigned URLs — browsers cannot send them on PUT.
+            requestChecksumCalculation: 'WHEN_REQUIRED',
+            responseChecksumValidation: 'WHEN_REQUIRED',
         });
         this.bucketName = bucketName;
         this.publicBaseUrl = publicBaseUrl;
@@ -86,7 +90,11 @@ export class R2Service {
     }
 
     /**
-     * Upload an object to R2.
+     * Uploads an object to R2.
+     * @param key - The key of the object.
+     * @param body - The body of the object.
+     * @param contentType - The content type of the object.
+     * @returns The void.
      */
     async upload(
         key: string,
@@ -117,6 +125,8 @@ export class R2Service {
     /**
      * Delete an object from R2. Best-effort — logs and never throws
      * (callers must not fail a successful DB write solely because R2 cleanup failed).
+     * @param key - The key of the object.
+     * @returns The void.
      */
     async delete(key: string): Promise<void> {
         if (!key) return;
@@ -138,6 +148,9 @@ export class R2Service {
 
     /**
      * Copy an object within the bucket (used by job duplicate).
+     * @param fromKey - The key of the object to copy from.
+     * @param toKey - The key of the object to copy to.
+     * @returns The void.
      */
     async copy(fromKey: string, toKey: string): Promise<void> {
         if (!fromKey || !toKey) return;
@@ -164,6 +177,8 @@ export class R2Service {
 
     /**
      * Build the public URL for an object key (no network I/O).
+     * @param key - The key of the object.
+     * @returns The public URL for the object.
      */
     getPublicUrl(key: string): string {
         if (!key) return '';
@@ -181,6 +196,10 @@ export class R2Service {
 
     /**
      * Generate a presigned PUT URL so the browser can upload directly to R2.
+     * @param key - The key of the object.
+     * @param contentType - The content type of the object.
+     * @param expiresInSeconds - The number of seconds the URL should be valid for.
+     * @returns The presigned upload URL.
      */
     async getPresignedUploadUrl(
         key: string,
@@ -210,6 +229,9 @@ export class R2Service {
 
     /**
      * Generate a signed URL for private bucket access (GET).
+     * @param key - The key of the object.
+     * @param expiresInSeconds - The number of seconds the URL should be valid for.
+     * @returns The signed URL.
      */
     async getSignedUrl(
         key: string,
