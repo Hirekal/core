@@ -37,6 +37,7 @@ import { ApplicationStageHistoryRepository } from './application-stage-history/r
 import { JobAnalyticsEventRepository } from './job-analytics-events/repositories/job-analytics-event.repository';
 import { ApplicationRepository } from './repositories/application.repository';
 import { generateApplicationToken } from './utils/application-token.util';
+import { TranscriptionJobsService } from './transcription-jobs/transcription-jobs.service';
 
 @Injectable()
 export class ApplicationService {
@@ -50,6 +51,7 @@ export class ApplicationService {
         private readonly jobRepository: JobRepository,
         private readonly stageRepository: JobPipelineStageRepository,
         private readonly publicAccessService: ApplicationPublicAccessService,
+        private readonly transcriptionJobsService: TranscriptionJobsService,
     ) { }
 
     /**
@@ -240,6 +242,8 @@ export class ApplicationService {
                 JobAnalyticsEventType.APPLICATION_SUBMITTED,
             );
 
+            this.scheduleTranscription(application, job);
+
             return { id, status: ApplicationStatus.SUBMITTED, submittedAt };
         } catch (error) {
             if (error instanceof HttpException) throw error;
@@ -311,9 +315,16 @@ export class ApplicationService {
                 organizationId,
             );
 
+            const transcriptionJobs =
+                await this.transcriptionJobsService.findByApplicationId(id);
+            const transcriptionByAnswerId = new Map(
+                transcriptionJobs.map((item) => [item.applicationAnswerId, item]),
+            );
+
             return toApplicationDetail(
                 application,
                 job?.questions ?? [],
+                transcriptionByAnswerId,
             );
         } catch (error) {
             if (error instanceof HttpException) throw error;
@@ -558,6 +569,29 @@ export class ApplicationService {
                 );
             }
         }
+    }
+
+    /**
+     * Starts AI transcription in the background after a successful submit.
+     */
+    private scheduleTranscription(
+        application: Application,
+        job: NonNullable<Application['job']>,
+    ): void {
+        void this.transcriptionJobsService
+            .enqueueAfterSubmit({
+                applicationId: application.id,
+                jobId: job.id,
+                organizationId: application.organizationId,
+                aiTranscripts: job.aiTranscripts,
+                transcriptionLanguage: job.transcriptionLanguage,
+                questions: job.questions ?? [],
+            })
+            .catch((error) => {
+                this.logger.error(
+                    `Transcription enqueue failed applicationId=${application.id}: ${(error as Error).message}`,
+                );
+            });
     }
 
     /**

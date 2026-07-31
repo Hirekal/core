@@ -4,6 +4,8 @@ import { ApplicationNote } from './application-notes/entities/application-note.e
 import { ApplicationFieldValue } from './application-field-values/entities/application-field-value.entity';
 import { JobQuestion } from '../job/job-questions/entities/job-question.entity';
 import { QuestionType } from '../job/enums/job.enums';
+import { TranscriptionJob } from './transcription-jobs/entities/transcription-job.entity';
+import { TranscriptionJobStatus } from './enums/application.enums';
 
 /**
  * Checks if a question is a video question.
@@ -32,6 +34,25 @@ function findVideoAnswer(answers: ApplicationAnswer[] = []): ApplicationAnswer |
             a.mediaStorageKey ||
             isVideoQuestion(a.question as JobQuestion | undefined),
     );
+}
+
+function mapTranscript(
+    transcription: TranscriptionJob | undefined,
+): Record<string, unknown> | null {
+    if (!transcription) return null;
+
+    return {
+        status: transcription.status,
+        text: transcription.transcriptText,
+        language: transcription.transcriptLanguage,
+        duration: transcription.transcriptDuration,
+        segments: transcription.transcriptSegments,
+        isPending:
+            transcription.status === TranscriptionJobStatus.PENDING ||
+            transcription.status === TranscriptionJobStatus.SENT,
+        isFailed: transcription.status === TranscriptionJobStatus.FAILED,
+        errorMessage: transcription.errorMessage,
+    };
 }
 
 /**
@@ -65,11 +86,13 @@ export function toApplicationListItem(
  * Map application to admin detail (candidate drawer).
  * @param application - The application to map.
  * @param questions - The questions to map.
+ * @param transcriptionByAnswerId - Transcription jobs keyed by answer id.
  * @returns The mapped application.
  */
 export function toApplicationDetail(
     application: Application,
     questions: JobQuestion[] = [],
+    transcriptionByAnswerId: Map<string, TranscriptionJob> = new Map(),
 ): Record<string, unknown> {
     const answersByQuestion = new Map<string, ApplicationAnswer>(
         (application.answers ?? []).map((a: ApplicationAnswer) => [a.questionId, a]),
@@ -78,6 +101,9 @@ export function toApplicationDetail(
     const answers = questions.map((question) => {
         const answer = answersByQuestion.get(question.id);
         const isVideo = isVideoQuestion(question);
+        const transcription = answer
+            ? transcriptionByAnswerId.get(answer.id)
+            : undefined;
 
         return {
             questionId: question.id,
@@ -88,6 +114,7 @@ export function toApplicationDetail(
                 : answer?.answerText ?? '',
             timestamp: answer?.updatedAt ?? answer?.createdAt ?? null,
             mediaUrl: answer?.mediaUrl ?? null,
+            transcript: mapTranscript(transcription),
         };
     });
 

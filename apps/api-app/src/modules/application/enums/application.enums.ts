@@ -28,6 +28,13 @@ export enum JobAnalyticsEventType {
     APPLICATION_SUBMITTED = 'APPLICATION_SUBMITTED',
 }
 
+export enum TranscriptionJobStatus {
+    PENDING = 'PENDING',
+    SENT = 'SENT',
+    COMPLETED = 'COMPLETED',
+    FAILED = 'FAILED',
+}
+
 export const BUILT_IN_FIELD_KEYS = [
     'firstName',
     'lastName',

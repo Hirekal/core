@@ -21,6 +21,8 @@ import { JobAnalyticsEvent } from './job-analytics-events/entities/job-analytics
 import { JobAnalyticsEventRepository } from './job-analytics-events/repositories/job-analytics-event.repository';
 import { ApplicationRepository } from './repositories/application.repository';
 import { WebhookDeliveryLog } from './webhook-delivery-logs/entities/webhook-delivery-log.entity';
+import { TranscriptionJobsModule } from './transcription-jobs/transcription-jobs.module';
+import { TranscriptionJob } from './transcription-jobs/entities/transcription-job.entity';
 
 @Module({
     imports: [
@@ -32,11 +34,13 @@ import { WebhookDeliveryLog } from './webhook-delivery-logs/entities/webhook-del
             ApplicationStageHistory,
             JobAnalyticsEvent,
             WebhookDeliveryLog,
+            TranscriptionJob,
         ]),
         CloudStorageModule,
         JobModule,
         forwardRef(() => ApplicationAnswersModule),
         forwardRef(() => ApplicationNotesModule),
+        TranscriptionJobsModule,
     ],
     controllers: [
         PublicApplicationJobController,
