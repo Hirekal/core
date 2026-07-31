@@ -38,7 +38,6 @@ export default function ProfileSettingsPage() {
   const { user, logout, updateUser } = useAuth();
   const navigate = useNavigate();
   const [name, setName] = useState(user?.name || '');
-  const [email, setEmail] = useState(user?.email || '');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [saving, setSaving] = useState(false);
@@ -50,7 +49,7 @@ export default function ProfileSettingsPage() {
     setSaving(true);
     setError('');
     try {
-      await updateUser({ name: name.trim(), email: email.trim() });
+      await updateUser({ name: name.trim() });
       setMessage('Profile updated successfully');
       setTimeout(() => setMessage(''), 3000);
     } catch (err) {
@@ -63,12 +62,20 @@ export default function ProfileSettingsPage() {
   const handleChangePassword = async (e) => {
     e.preventDefault();
     setError('');
+    if (!currentPassword || newPassword.length < 8) {
+      setError('Please provide your current password and a new password (min 8 characters)');
+      return;
+    }
     try {
       await authService.changePassword(currentPassword, newPassword);
-      setMessage('Password changed successfully');
+      setMessage('Password changed. Please sign in again.');
       setCurrentPassword('');
       setNewPassword('');
-      setTimeout(() => setMessage(''), 3000);
+      await logout();
+      navigate('/login', {
+        replace: true,
+        state: { message: 'Password changed successfully. Please sign in.' },
+      });
     } catch (err) {
       setError(err.message);
     }
@@ -114,8 +121,8 @@ export default function ProfileSettingsPage() {
                   type="text"
                   inputMode="email"
                   autoComplete="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  value={user?.email || ''}
+                  disabled
                 />
               </div>
               <FormFooter>

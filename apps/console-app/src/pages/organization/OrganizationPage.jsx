@@ -4,36 +4,81 @@ import PageHeader from '../../components/layout/PageHeader';
 import Card from '../../components/common/Card';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import Button from '../../components/common/Button';
+import Input from '../../components/common/Input';
 import Modal from '../../components/common/Modal';
 import Table from '../../components/common/Table';
 import AddTeamMemberModal from '../../components/organization/AddTeamMemberModal';
-import * as settingsService from '../../services/settingsService';
+import { useAuth } from '../../context/AuthContext';
+import * as organizationService from '../../services/organizationService';
 import { formatDate } from '../../utils/formatDate';
 
 export default function OrganizationPage() {
+  const { user } = useAuth();
+  const organizationId = user?.organizationId;
+
   const [org, setOrg] = useState(null);
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [memberToDelete, setMemberToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+  const [orgName, setOrgName] = useState('');
+  const [savingName, setSavingName] = useState(false);
+  const [nameMessage, setNameMessage] = useState('');
 
   const loadData = useCallback(async () => {
+    if (!organizationId) {
+      throw new Error('No organization linked to your account');
+    }
+
     const [orgData, membersData] = await Promise.all([
-      settingsService.getOrganization(),
-      settingsService.getTeamMembers(),
+      organizationService.getOrganization(organizationId),
+      organizationService.getTeamMembers(organizationId, user?.id),
     ]);
     setOrg(orgData);
+    setOrgName(orgData.name || '');
     setMembers(membersData);
-  }, []);
+  }, [organizationId, user?.id]);
 
   useEffect(() => {
-    loadData().finally(() => setLoading(false));
+    setLoading(true);
+    setError('');
+    loadData()
+      .catch((err) => {
+        if (err.status !== 401) {
+          setError(err.message || 'Failed to load organization');
+        }
+        setOrg(null);
+        setMembers([]);
+      })
+      .finally(() => setLoading(false));
   }, [loadData]);
 
+  const handleSaveName = async (e) => {
+    e.preventDefault();
+    if (!organizationId || !orgName.trim()) return;
+
+    setSavingName(true);
+    setNameMessage('');
+    setError('');
+    try {
+      const updated = await organizationService.updateOrganization(organizationId, {
+        name: orgName.trim(),
+      });
+      setOrg((prev) => ({ ...prev, name: updated.name }));
+      setNameMessage('Organization name updated');
+      setTimeout(() => setNameMessage(''), 3000);
+    } catch (err) {
+      setError(err.message || 'Failed to update organization');
+    } finally {
+      setSavingName(false);
+    }
+  };
+
   const handleAddMember = async (data) => {
-    const result = await settingsService.addTeamMember(data);
+    const result = await organizationService.addTeamMember(data);
     await loadData();
     return result;
   };
@@ -45,7 +90,10 @@ export default function OrganizationPage() {
     setDeleteError('');
 
     try {
-      await settingsService.deleteTeamMember(memberToDelete.id);
+      await organizationService.deleteTeamMember(memberToDelete.id, {
+        currentUserId: user?.id,
+        role: memberToDelete.role,
+      });
       setMemberToDelete(null);
       await loadData();
     } catch (err) {
@@ -57,15 +105,35 @@ export default function OrganizationPage() {
 
   if (loading) return <LoadingSpinner />;
 
+  if (!org) {
+    return (
+      <div className="mx-auto w-full max-w-6xl py-16 text-center text-muted">
+        {error || 'Organization not found'}
+      </div>
+    );
+  }
+
   const columns = [
     {
       key: 'name',
       label: 'Name',
       render: (row) => (
         <div>
-          <p className="font-medium">{row.name}</p>
+          <p className="font-medium">
+            {row.name}
+            {row.id === user?.id ? (
+              <span className="ml-2 text-xs font-normal text-muted">(you)</span>
+            ) : null}
+          </p>
           <p className="text-xs text-muted">{row.email}</p>
         </div>
+      ),
+    },
+    {
+      key: 'role',
+      label: 'Role',
+      render: (row) => (
+        <span className="capitalize text-sm text-heading">{row.role}</span>
       ),
     },
     {
@@ -77,8 +145,8 @@ export default function OrganizationPage() {
       key: 'actions',
       label: '',
       width: '80px',
-      render: (row) => (
-        row.role === 'admin' ? null : (
+      render: (row) =>
+        row.role === 'admin' || row.id === user?.id ? null : (
           <button
             type="button"
             onClick={(e) => {
@@ -91,8 +159,7 @@ export default function OrganizationPage() {
           >
             <Trash2 size={16} />
           </button>
-        )
-      ),
+        ),
     },
   ];
 
@@ -102,6 +169,17 @@ export default function OrganizationPage() {
         title="Organization"
         description="Manage your organization settings"
       />
+
+      {error && (
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+          {error}
+        </div>
+      )}
+      {nameMessage && (
+        <div className="mb-6 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+          {nameMessage}
+        </div>
+      )}
 
       <div className="space-y-6">
         <Card>
@@ -114,6 +192,20 @@ export default function OrganizationPage() {
               <p className="text-sm text-muted">{org.plan} Plan</p>
             </div>
           </div>
+
+          <form onSubmit={handleSaveName} className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div className="flex-1">
+              <Input
+                label="Organization name"
+                value={orgName}
+                onChange={(e) => setOrgName(e.target.value)}
+                required
+              />
+            </div>
+            <Button type="submit" disabled={savingName || orgName.trim() === org.name}>
+              {savingName ? 'Saving...' : 'Save name'}
+            </Button>
+          </form>
 
           <div className="grid gap-4 sm:grid-cols-3">
             <InfoItem icon={Users} label="Team Members" value={org.members} />

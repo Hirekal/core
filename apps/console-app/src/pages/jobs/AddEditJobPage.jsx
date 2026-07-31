@@ -16,27 +16,40 @@ export default function AddEditJobPage() {
 
   useEffect(() => {
     if (isEditing) {
-      jobService.getJobById(id).then((data) => {
-        setJob(data);
-        setLoading(false);
-      });
+      jobService
+        .getJobById(id)
+        .then((data) => {
+          setJob(data);
+        })
+        .catch((err) => {
+          window.alert(err.message || 'Failed to load job');
+        })
+        .finally(() => setLoading(false));
     }
   }, [id, isEditing]);
 
   const handleSubmit = async (formData, { openPreview = false } = {}) => {
     setSaving(true);
-    let result;
-    if (isEditing) {
-      result = await jobService.updateJob(id, formData);
-    } else {
-      result = await jobService.createJob(formData);
+    try {
+      let result;
+      if (isEditing) {
+        result = await jobService.updateJob(id, formData);
+      } else {
+        result = await jobService.createJob(formData);
+      }
+      if (!result) return;
+      if (result.mediaWarning) {
+        window.alert(result.mediaWarning);
+      }
+      if (openPreview) {
+        await openJobPreview(result.id, result);
+      }
+      navigate(`/jobs/${result.id}`);
+    } catch (error) {
+      window.alert(error.message || 'Failed to save job');
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-    if (!result) return;
-    if (openPreview) {
-      await openJobPreview(result.id, result);
-    }
-    navigate(`/jobs/${result.id}`);
   };
 
   if (loading) return <LoadingSpinner />;

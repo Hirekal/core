@@ -4,15 +4,18 @@ import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
 import { AuthLayout } from './SignUpPage';
 import * as authService from '../../services/authService';
-import { validatePasswordResetFields } from '../../utils/validators';
+import {
+  validateEmail,
+  validatePasswordResetFields,
+  validateRequired,
+} from '../../utils/validators';
 
 export default function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  const email = searchParams.get('email') || '';
-  const token = searchParams.get('token') || '';
-
+  const [email, setEmail] = useState(searchParams.get('email') || '');
+  const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
@@ -30,14 +33,16 @@ export default function ResetPasswordPage() {
     e.preventDefault();
     setError('');
 
-    const errors = validatePasswordResetFields({ password, confirmPassword });
-    if (errors) {
-      setFieldErrors(errors);
-      return;
-    }
+    const errors = {
+      ...(validatePasswordResetFields({ password, confirmPassword }) || {}),
+    };
+    const emailError = validateEmail(email);
+    if (emailError) errors.email = emailError;
+    const codeError = validateRequired(code, 'Reset code');
+    if (codeError) errors.code = codeError;
 
-    if (!token || !email) {
-      setError('Invalid or expired reset link. Please request a new one.');
+    if (Object.keys(errors).length) {
+      setFieldErrors(errors);
       return;
     }
 
@@ -45,8 +50,7 @@ export default function ResetPasswordPage() {
     setLoading(true);
 
     try {
-      await authService.verifyResetToken(token, email);
-      await authService.resetPassword(token, password, email);
+      await authService.resetPassword(email.trim(), code.trim(), password);
       setDone(true);
     } catch (err) {
       setError(err.message);
@@ -54,24 +58,6 @@ export default function ResetPasswordPage() {
       setLoading(false);
     }
   };
-
-  if (!email || !token) {
-    return (
-      <AuthLayout title="Invalid reset link" subtitle="This password reset link is not valid">
-        <div className="space-y-4 text-center">
-          <p className="text-sm text-muted">
-            Open the reset link from your email to set a new password.
-          </p>
-          <Link to="/forgot-password">
-            <Button className="w-full">Request New Reset Link</Button>
-          </Link>
-          <p className="text-sm text-muted">
-            <Link to="/login" className="text-accent hover:underline">Back to login</Link>
-          </p>
-        </div>
-      </AuthLayout>
-    );
-  }
 
   if (done) {
     return (
@@ -87,19 +73,40 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <AuthLayout title="Set new password" subtitle="Choose a strong new password">
+    <AuthLayout title="Set new password" subtitle="Enter the code from your email">
       {error && (
         <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600 dark:bg-red-950/40 dark:text-red-400">
           {error}
         </div>
       )}
 
-      <div className="mb-4 rounded-lg border border-border bg-hover/30 px-4 py-3 text-sm">
-        <p className="text-muted">Resetting password for</p>
-        <p className="font-medium text-heading">{email}</p>
-      </div>
-
       <form onSubmit={handleSubmit} noValidate className="space-y-4">
+        <Input
+          label="Email"
+          type="text"
+          inputMode="email"
+          autoComplete="email"
+          value={email}
+          onChange={(e) => {
+            setEmail(e.target.value);
+            clearFieldError('email');
+          }}
+          error={fieldErrors.email}
+          required
+        />
+
+        <Input
+          label="Reset code"
+          autoComplete="one-time-code"
+          value={code}
+          onChange={(e) => {
+            setCode(e.target.value);
+            clearFieldError('code');
+          }}
+          error={fieldErrors.code}
+          required
+        />
+
         <Input
           label="New Password"
           type="password"
@@ -132,7 +139,13 @@ export default function ResetPasswordPage() {
       </form>
 
       <p className="mt-6 text-center text-sm text-muted">
-        <Link to="/login" className="text-accent hover:underline">Back to login</Link>
+        <Link to="/forgot-password" className="text-accent hover:underline">
+          Resend code
+        </Link>
+        {' · '}
+        <Link to="/login" className="text-accent hover:underline">
+          Back to login
+        </Link>
       </p>
     </AuthLayout>
   );

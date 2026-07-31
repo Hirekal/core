@@ -34,8 +34,9 @@ export default function SignUpPage() {
     setFieldErrors({});
     setLoading(true);
     try {
-      await signUp(name.trim(), email.trim(), password);
-      navigate('/jobs');
+      const trimmedEmail = email.trim();
+      await signUp(name.trim(), trimmedEmail, password);
+      navigate(`/verify-email?email=${encodeURIComponent(trimmedEmail)}`);
     } catch (err) {
       setError(err.message);
     } finally {
