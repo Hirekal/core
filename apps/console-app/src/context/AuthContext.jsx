@@ -1,5 +1,10 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import * as authService from '../services/authService';
+import {
+  AUTH_EXPIRED_EVENT,
+  clearExpiredSession,
+  readSession,
+} from '../services/apiClient';
 
 const AuthContext = createContext(null);
 
@@ -8,10 +13,46 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    authService.getCurrentUser().then((session) => {
-      setUser(session?.user || null);
-      setLoading(false);
-    });
+    let cancelled = false;
+
+    async function bootstrap() {
+      const session = readSession();
+      if (!session?.accessToken) {
+        if (!cancelled) {
+          setUser(null);
+          setLoading(false);
+        }
+        return;
+      }
+
+      try {
+        // Prove tokens still work; localStorage alone is not enough after API restarts / DB resets.
+        const profile = await authService.getProfile();
+        if (!cancelled) {
+          setUser(profile);
+        }
+      } catch {
+        clearExpiredSession();
+        if (!cancelled) {
+          setUser(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    bootstrap();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const onExpired = () => setUser(null);
+    window.addEventListener(AUTH_EXPIRED_EVENT, onExpired);
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, onExpired);
   }, []);
 
   const login = useCallback(async (email, password) => {
@@ -20,10 +61,11 @@ export function AuthProvider({ children }) {
     return session;
   }, []);
 
+  /**
+   * Registers an account. Does not sign the user in until email is verified.
+   */
   const signUp = useCallback(async (name, email, password) => {
-    const session = await authService.signUp(name, email, password);
-    setUser(session.user);
-    return session;
+    return authService.signUp(name, email, password);
   }, []);
 
   const logout = useCallback(async () => {
@@ -38,7 +80,17 @@ export function AuthProvider({ children }) {
   }, [user?.id]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, signUp, logout, updateUser, isAuthenticated: !!user }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        login,
+        signUp,
+        logout,
+        updateUser,
+        isAuthenticated: !!user,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

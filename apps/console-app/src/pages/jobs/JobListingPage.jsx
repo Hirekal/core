@@ -28,7 +28,16 @@ export default function JobListingPage() {
 
   const loadJobs = () => {
     setLoading(true);
-    jobService.getJobs({ status: jobStatus, search: jobSearch, sortBy: jobSortBy }).then(setJobs).finally(() => setLoading(false));
+    jobService
+      .getJobs({ status: jobStatus, search: jobSearch, sortBy: jobSortBy })
+      .then(setJobs)
+      .catch((err) => {
+        setJobs([]);
+        if (err.status !== 401) {
+          window.alert(err.message || 'Failed to load jobs');
+        }
+      })
+      .finally(() => setLoading(false));
   };
 
   useEffect(() => { loadJobs(); }, [jobStatus, jobSearch, jobSortBy]);
@@ -41,8 +50,12 @@ export default function JobListingPage() {
   ];
 
   const handleDuplicate = async (id) => {
-    await jobService.duplicateJob(id);
-    loadJobs();
+    try {
+      await jobService.duplicateJob(id);
+      loadJobs();
+    } catch (err) {
+      window.alert(err.message || 'Failed to duplicate job');
+    }
   };
 
   const handleCopyLink = (link) => {
@@ -54,34 +67,56 @@ export default function JobListingPage() {
   const handleDeleteConfirm = async () => {
     if (!jobToDelete) return;
     setDeleting(true);
-    await jobService.deleteJob(jobToDelete.id);
-    setDeleting(false);
-    setJobToDelete(null);
-    loadJobs();
+    try {
+      await jobService.deleteJob(jobToDelete.id);
+      setJobToDelete(null);
+      loadJobs();
+    } catch (err) {
+      window.alert(err.message || 'Failed to delete job');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const handleArchiveConfirm = async () => {
     if (!jobToArchive) return;
     setArchiving(true);
-    await jobService.archiveJob(jobToArchive.id);
-    setArchiving(false);
-    setJobToArchive(null);
-    loadJobs();
+    try {
+      await jobService.archiveJob(jobToArchive.id);
+      setJobToArchive(null);
+      loadJobs();
+    } catch (err) {
+      window.alert(err.message || 'Failed to archive job');
+    } finally {
+      setArchiving(false);
+    }
   };
 
   const handleRestore = async (job) => {
-    await jobService.restoreJob(job.id);
-    loadJobs();
+    try {
+      await jobService.restoreJob(job.id);
+      loadJobs();
+    } catch (err) {
+      window.alert(err.message || 'Failed to restore job');
+    }
   };
 
   const handlePause = async (job) => {
-    await jobService.pauseJob(job.id);
-    loadJobs();
+    try {
+      await jobService.pauseJob(job.id);
+      loadJobs();
+    } catch (err) {
+      window.alert(err.message || 'Failed to pause job');
+    }
   };
 
   const handleResume = async (job) => {
-    await jobService.resumeJob(job.id);
-    loadJobs();
+    try {
+      await jobService.resumeJob(job.id);
+      loadJobs();
+    } catch (err) {
+      window.alert(err.message || 'Failed to resume job');
+    }
   };
 
   const tableColumns = [

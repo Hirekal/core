@@ -1,12 +1,24 @@
 import { Controller, Get } from '@nestjs/common';
 import { AppService } from './app.service';
+import { Public } from './modules/auth/common/decorators/public.decorator';
 
 @Controller()
 export class AppController {
-  constructor(private readonly appService: AppService) {}
+    /**
+     * Creates the root app controller.
+     *
+     * @param appService - Application-level helpers
+     */
+    constructor(private readonly appService: AppService) { }
 
-  @Get()
-  getHealth(): string {
-    return this.appService.getHealth();
-  }
+    /**
+     * Liveness/health check endpoint (public, no JWT required).
+     *
+     * @returns Health status string
+     */
+    @Public()
+    @Get()
+    getHealth(): string {
+        return this.appService.getHealth();
+    }
 }

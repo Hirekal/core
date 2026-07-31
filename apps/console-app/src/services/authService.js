@@ -1,123 +1,193 @@
-import { dummyUsers } from '../data/dummyUsers';
+import { apiRequest, readSession, writeSession } from './apiClient';
 
-const delay = (ms = 300) => new Promise((resolve) => setTimeout(resolve, ms));
+export const CODE_TYPES = {
+    EMAIL_VERIFICATION: 'EMAIL_VERIFICATION',
+    PASSWORD_RESET: 'PASSWORD_RESET',
+};
 
-const AUTH_KEY = 'hirekal_auth';
-const LEGACY_AUTH_KEY = 'talently_auth';
-const resetTokensStore = new Map();
-
-function createResetToken() {
-  return `reset-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+/**
+ * Builds a local session object from a sign-in / token response.
+ *
+ * @param {object} data - API auth response with user + tokens
+ * @returns {object} Session stored in localStorage
+ */
+function toSession(data) {
+    return {
+        user: data.user,
+        accessToken: data.accessToken,
+        refreshToken: data.refreshToken,
+        accessTokenExpiresAt: data.accessTokenExpiresAt,
+        refreshTokenExpiresAt: data.refreshTokenExpiresAt,
+    };
 }
 
+/**
+ * Signs in with email and password and persists the JWT session.
+ *
+ * @param {string} email
+ * @param {string} password
+ * @returns {Promise<object>} Session with user and tokens
+ */
 export async function login(email, password) {
-  await delay(500);
-  const user = dummyUsers.find((u) => u.email === email);
-  if (!user || password.length < 4) {
-    throw new Error('Invalid email or password');
-  }
-  const session = { user, token: `mock-token-${Date.now()}` };
-  localStorage.setItem(AUTH_KEY, JSON.stringify(session));
-  return session;
+    const data = await apiRequest('/auth/signin', {
+        method: 'POST',
+        body: { email, password },
+    });
+    const session = toSession(data);
+    writeSession(session);
+    return session;
 }
 
+/**
+ * Registers a new account and triggers a verification email.
+ * Does not create a logged-in session.
+ *
+ * @param {string} name
+ * @param {string} email
+ * @param {string} password
+ * @returns {Promise<object>} Signup response from the API
+ */
 export async function signUp(name, email, password) {
-  await delay(500);
-  if (!name || !email || password.length < 8) {
-    throw new Error('Please fill in all fields correctly');
-  }
-  const user = { id: `user-${Date.now()}`, name, email, role: 'admin', organization: 'My Organization', theme: 'light' };
-  const session = { user, token: `mock-token-${Date.now()}` };
-  localStorage.setItem(AUTH_KEY, JSON.stringify(session));
-  return session;
+    return apiRequest('/auth/signup', {
+        method: 'POST',
+        body: { name, email, password },
+    });
 }
 
+/**
+ * Verifies a one-time email or password-reset code.
+ *
+ * @param {string} email
+ * @param {string} code
+ * @param {string} [type]
+ * @returns {Promise<object>}
+ */
+export async function verifyCode(email, code, type) {
+    return apiRequest('/auth/verify-code', {
+        method: 'POST',
+        body: { email, code, ...(type ? { type } : {}) },
+    });
+}
+
+/**
+ * Resends an email verification code.
+ *
+ * @param {string} email
+ * @returns {Promise<object>}
+ */
+export async function resendVerification(email) {
+    return apiRequest('/auth/resend-verification', {
+        method: 'POST',
+        body: { email },
+    });
+}
+
+/**
+ * Requests a password reset code for the given email.
+ *
+ * @param {string} email
+ * @returns {Promise<object>}
+ */
 export async function requestPasswordReset(email) {
-  await delay(500);
-  if (!email) throw new Error('Email is required');
-
-  const normalizedEmail = email.trim().toLowerCase();
-  const token = createResetToken();
-
-  resetTokensStore.set(normalizedEmail, {
-    token,
-    createdAt: Date.now(),
-  });
-
-  const resetUrl = `/reset-password?email=${encodeURIComponent(normalizedEmail)}&token=${encodeURIComponent(token)}`;
-  void resetUrl;
-
-  return {
-    success: true,
-    message: 'Reset link sent to your email',
-  };
+    return apiRequest('/auth/forgot-password', {
+        method: 'POST',
+        body: { email },
+    });
 }
 
-export async function verifyResetToken(token, email) {
-  await delay(300);
-  if (!token || !email) throw new Error('Invalid or expired reset link');
-
-  const stored = resetTokensStore.get(email.trim().toLowerCase());
-  if (!stored || stored.token !== token) {
-    throw new Error('Invalid or expired reset link');
-  }
-
-  return { valid: true };
+/**
+ * Resets password using the emailed one-time code.
+ *
+ * @param {string} email
+ * @param {string} code
+ * @param {string} newPassword
+ * @returns {Promise<object>}
+ */
+export async function resetPassword(email, code, newPassword) {
+    return apiRequest('/auth/reset-password', {
+        method: 'POST',
+        body: { email, code, newPassword },
+    });
 }
 
-export async function resetPassword(token, password, email) {
-  await delay(500);
-  if (!token || !email || password.length < 8) throw new Error('Invalid request');
-
-  const normalizedEmail = email.trim().toLowerCase();
-  const stored = resetTokensStore.get(normalizedEmail);
-  if (!stored || stored.token !== token) {
-    throw new Error('Invalid or expired reset link');
-  }
-
-  resetTokensStore.delete(normalizedEmail);
-  return { success: true };
-}
-
+/**
+ * Returns the current local session, if any.
+ *
+ * @returns {Promise<object|null>}
+ */
 export async function getCurrentUser() {
-  await delay(100);
-  let stored = localStorage.getItem(AUTH_KEY);
-  if (!stored) {
-    const legacy = localStorage.getItem(LEGACY_AUTH_KEY);
-    if (legacy) {
-      localStorage.setItem(AUTH_KEY, legacy);
-      localStorage.removeItem(LEGACY_AUTH_KEY);
-      stored = legacy;
-    }
-  }
-  if (!stored) return null;
-  try {
-    return JSON.parse(stored);
-  } catch {
-    return null;
-  }
+    return readSession();
 }
 
+/**
+ * Logs out on the server (best-effort) and clears the local session.
+ *
+ * @returns {Promise<void>}
+ */
 export async function logout() {
-  await delay(100);
-  localStorage.removeItem(AUTH_KEY);
+    const session = readSession();
+    try {
+        if (session?.accessToken) {
+            await apiRequest('/auth/logout', {
+                method: 'POST',
+                body: { refreshToken: session.refreshToken },
+                auth: true,
+                retry: false,
+            });
+        }
+    } catch {
+        // Clear local session even if the API call fails.
+    } finally {
+        writeSession(null);
+    }
 }
 
-export async function updateProfile(userId, data) {
-  await delay(400);
-  void userId;
-  const stored = localStorage.getItem(AUTH_KEY);
-  if (!stored) throw new Error('Not authenticated');
-  const session = JSON.parse(stored);
-  session.user = { ...session.user, ...data };
-  localStorage.setItem(AUTH_KEY, JSON.stringify(session));
-  return session.user;
+/**
+ * Loads the authenticated user profile from the API.
+ *
+ * @returns {Promise<object>} Sanitized user profile
+ */
+export async function getProfile() {
+    return apiRequest('/auth/profile', { auth: true });
 }
 
+/**
+ * Updates the authenticated user's profile (name/metadata).
+ *
+ * @param {string} _userId - Unused; kept for call-site compatibility
+ * @param {object} data - Profile fields to patch
+ * @returns {Promise<object>} Updated user
+ */
+export async function updateProfile(_userId, data) {
+    const payload = {};
+    if (data.name !== undefined) payload.name = data.name;
+    if (data.metadata !== undefined) payload.metadata = data.metadata;
+
+    const user = await apiRequest('/auth/profile', {
+        method: 'PATCH',
+        body: payload,
+        auth: true,
+    });
+
+    const session = readSession();
+    if (session) {
+        writeSession({ ...session, user });
+    }
+    return user;
+}
+
+/**
+ * Changes the authenticated user's password.
+ * Server revokes all sessions after a successful change.
+ *
+ * @param {string} currentPassword
+ * @param {string} newPassword
+ * @returns {Promise<object>}
+ */
 export async function changePassword(currentPassword, newPassword) {
-  await delay(400);
-  if (!currentPassword || newPassword.length < 8) {
-    throw new Error('Please provide valid passwords');
-  }
-  return { success: true };
+    return apiRequest('/auth/change-password', {
+        method: 'POST',
+        body: { currentPassword, newPassword },
+        auth: true,
+    });
 }

@@ -20,5 +20,12 @@ export function getActivePipelineStages(stages) {
 }
 
 export function resolveJobStages(customStages) {
-  return customStages?.length ? customStages : DEFAULT_PIPELINE_STAGES;
+  if (customStages?.length) {
+    return customStages.map((stage) => ({
+      ...stage,
+      order: stage.order ?? stage.sortOrder ?? 0,
+      active: stage.active !== false,
+    }));
+  }
+  return DEFAULT_PIPELINE_STAGES;
 }
