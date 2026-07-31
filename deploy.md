@@ -17,11 +17,7 @@ cp media-worker/.env.example media-worker/.env
 
 Edit both files with real secrets and connection strings.
 
-**API in Docker + Postgres on your host:** use `host.docker.internal` in `DATABASE_URL`:
-
-```env
-DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:5432/hirekal
-```
+**API in Docker + Postgres on your host:** set `DB_HOST=host.docker.internal` in `apps/api-app/.env`.
 
 **Media worker callback to API on your host:**
 
@@ -38,7 +34,7 @@ npm install
 npm run migration:run
 ```
 
-Requires `DATABASE_URL` in `apps/api-app/.env` pointing at a reachable Postgres instance.
+Requires DB settings in `apps/api-app/.env` pointing at a reachable Postgres instance.
 
 ## 3. API (`apps/api-app`)
 
@@ -152,7 +148,12 @@ docker run --rm -p 8080:80 hirekal/console:local
 
 | Variable | Required | Notes |
 |----------|----------|-------|
-| `DATABASE_URL` | Yes | Postgres connection string |
+| `NODE_ENV` | No | `development` locally; `production` enables DB SSL |
+| `DB_HOST` | Yes | Postgres host |
+| `DB_PORT` | Yes | Postgres port |
+| `DB_USERNAME` | Yes | Postgres user |
+| `DB_PASSWORD` | Yes | Postgres password |
+| `DB_DATABASE` | Yes | Postgres database name |
 | `JWT_SECRET` | Yes | Auth signing secret |
 | `PORT` | No | Default `3000` |
 | `CORS_ORIGIN` | No | Console origin for browser requests |
