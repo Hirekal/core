@@ -100,6 +100,8 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 ## Docker
 
+See [deploy.md](./deploy.md) for deployment commands (Docker Compose, env vars, callback wiring, and verification).
+
 ### Docker Compose (recommended)
 
 Compose uses `hirekal/media-worker:prod` from Docker Hub.

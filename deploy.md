@@ -26,7 +26,7 @@ DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:5432/hirekal
 **Media worker callback to API on your host:**
 
 ```env
-TRANSCRIPT_CALLBACK_URL=http://host.docker.internal:3000/media-worker-response
+TRANSCRIPT_CALLBACK_URL=http://host.docker.internal:3000/api/v1/media-worker-response
 ```
 
 ## 2. Database migrations
@@ -75,6 +75,8 @@ docker compose down
 ```
 
 ## 4. Media worker (`media-worker`)
+
+See [media-worker/deploy.md](./media-worker/deploy.md) for full deployment details.
 
 Compose uses `hirekal/media-worker:prod` from Docker Hub.
 

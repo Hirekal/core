@@ -1,6 +1,6 @@
 services:
   media-worker:
-    image: hirekal/media-worker:prod
+    image: hirekal/media-worker:local
     build:
       context: .
       dockerfile: Dockerfile
