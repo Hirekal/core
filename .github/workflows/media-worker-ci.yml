@@ -1,11 +1,10 @@
 name: Media Worker CI
 
 on:
-  pull_request:
-    paths:
-      - media-worker/**
-      - .github/workflows/media-worker-ci.yml
   push:
+    branches:
+      - main
+      - development
     paths:
       - media-worker/**
       - .github/workflows/media-worker-ci.yml
@@ -18,8 +17,8 @@ permissions:
   contents: read
 
 jobs:
-  docker:
-    name: Build Docker image
+  media-worker-docker:
+    name: Build and push media-worker image
     runs-on: ubuntu-latest
     env:
       DOCKERHUB_ORG: hirekal
@@ -34,19 +33,7 @@ jobs:
         run: |
           set -euo pipefail
           SHORT_SHA="${GITHUB_SHA::7}"
-
-          if [[ "${{ github.event_name }}" != "push" ]]; then
-            FULL_TAGS="${DOCKERHUB_ORG}/${IMAGE_NAME}:pr-${SHORT_SHA}"
-            {
-              echo "tags<<EOF"
-              echo "${FULL_TAGS}"
-              echo "EOF"
-            } >> "${GITHUB_OUTPUT}"
-            exit 0
-          fi
-
           BRANCH_NAME="${GITHUB_REF#refs/heads/}"
-          BRANCH_SAFE="${BRANCH_NAME//\//-}"
 
           case "${BRANCH_NAME}" in
             main)
@@ -57,22 +44,14 @@ jobs:
               TAG_1="dev"
               TAG_2="dev-${SHORT_SHA}"
               ;;
-            feature/*)
-              FEATURE_NAME="${BRANCH_NAME#feature/}"
-              FEATURE_SAFE="${FEATURE_NAME//\//-}"
-              TAG_1="feature-${FEATURE_SAFE}-${SHORT_SHA}"
-              TAG_2=""
-              ;;
             *)
-              TAG_1="${BRANCH_SAFE}-${SHORT_SHA}"
-              TAG_2=""
+              echo "Unexpected branch: ${BRANCH_NAME}" >&2
+              exit 1
               ;;
           esac
 
           FULL_TAGS="${DOCKERHUB_ORG}/${IMAGE_NAME}:${TAG_1}"
-          if [[ -n "${TAG_2}" ]]; then
-            FULL_TAGS+=$'\n'"${DOCKERHUB_ORG}/${IMAGE_NAME}:${TAG_2}"
-          fi
+          FULL_TAGS+=$'\n'"${DOCKERHUB_ORG}/${IMAGE_NAME}:${TAG_2}"
 
           {
             echo "tags<<EOF"
@@ -87,7 +66,6 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Docker Hub
-        if: github.event_name == 'push'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -98,7 +76,7 @@ jobs:
         with:
           context: media-worker
           file: media-worker/Dockerfile
-          push: ${{ github.event_name == 'push' }}
+          push: true
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.tags.outputs.tags }}
           build-args: |
