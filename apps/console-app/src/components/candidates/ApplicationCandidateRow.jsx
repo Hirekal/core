@@ -1,5 +1,6 @@
-import { User, ChevronRight } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { formatDateTime } from '../../utils/formatDate';
+import CandidateVideoAvatar from './CandidateVideoAvatar';
 
 function isCandidateNew(candidate) {
   if (!candidate.submittedAt) return false;
@@ -15,7 +16,6 @@ export default function ApplicationCandidateRow({
   onClick,
 }) {
   const isNew = isCandidateNew(candidate);
-  const initials = `${candidate.firstName?.[0] || ''}${candidate.lastName?.[0] || ''}`.toUpperCase() || '?';
 
   return (
     <article
@@ -34,19 +34,7 @@ export default function ApplicationCandidateRow({
         aria-label={`Select ${candidate.firstName} ${candidate.lastName}`}
       />
 
-      <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-full bg-hover">
-        {candidate.videoThumbnail ? (
-          <img
-            src={candidate.videoThumbnail}
-            alt=""
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <span className="flex h-full w-full items-center justify-center text-sm font-semibold text-muted">
-            {initials || <User size={18} />}
-          </span>
-        )}
-      </div>
+      <CandidateVideoAvatar candidate={candidate} className="h-11 w-11 rounded-full" />
 
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">

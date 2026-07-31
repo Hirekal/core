@@ -14,6 +14,7 @@ import {
 import Button from '../common/Button';
 import VideoRecorderModal from '../common/VideoRecorderModal';
 import { isVideoMedia } from '../../utils/mediaHelpers';
+import * as applicationService from '../../services/applicationService';
 import {
   normalizeApplicationFields,
   normalizeQuestions,
@@ -247,11 +248,18 @@ function getFieldGridClass(field) {
   return '';
 }
 
-export default function ApplicationPreviewFlow({ job }) {
+export default function ApplicationPreviewFlow({ job, slug, live = false }) {
   const fields = useMemo(() => normalizeApplicationFields(job.applicationFields), [job.applicationFields]);
-  const questions = useMemo(() => normalizeQuestions(job.questions || []), [job.questions]);
+  const questions = useMemo(() => {
+    if (live) {
+      return [...(job.questions || [])];
+    }
+    return normalizeQuestions(job.questions || []);
+  }, [job.questions, live]);
   const standardQuestions = questions.filter((q) => !MEDIA_TYPES.has(q.type));
-  const mediaQuestion = questions.find((q) => q.builtIn || MEDIA_TYPES.has(q.type));
+  const mediaQuestion =
+    questions.find((q) => q.builtIn) ??
+    questions.find((q) => MEDIA_TYPES.has(q.type));
 
   const introTitle = job.candidateIntroTitle?.trim() || '';
   const instructions = job.candidateInstructions?.trim() || '';
@@ -269,6 +277,8 @@ export default function ApplicationPreviewFlow({ job }) {
   const [videoRecording, setVideoRecording] = useState(null);
   const [recorderOpen, setRecorderOpen] = useState(false);
   const [videoError, setVideoError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [flowError, setFlowError] = useState('');
 
   const currentQuestion = standardQuestions[questionIndex];
 
@@ -277,7 +287,7 @@ export default function ApplicationPreviewFlow({ job }) {
     setApplicationErrors((prev) => ({ ...prev, [fieldId]: '' }));
   };
 
-  const handleStartNow = () => {
+  const handleStartNow = async () => {
     const errors = {};
     fields.forEach((field) => {
       const error = validateApplicationField(field, applicationValues[field.id]);
@@ -289,6 +299,19 @@ export default function ApplicationPreviewFlow({ job }) {
       return;
     }
 
+    if (live && slug) {
+      setSubmitting(true);
+      setFlowError('');
+      try {
+        await applicationService.startApplication(slug, applicationValues, fields);
+      } catch (err) {
+        setFlowError(err.message || 'Failed to start application');
+        setSubmitting(false);
+        return;
+      }
+      setSubmitting(false);
+    }
+
     if (standardQuestions.length > 0) {
       setPhase('questions');
       setQuestionIndex(0);
@@ -297,11 +320,28 @@ export default function ApplicationPreviewFlow({ job }) {
     }
   };
 
-  const handleQuestionNext = () => {
+  const handleQuestionNext = async () => {
     const error = validateStandardQuestion(currentQuestion, questionAnswers[currentQuestion.id]);
     if (error) {
       setQuestionError(error);
       return;
+    }
+
+    if (live && slug) {
+      setSubmitting(true);
+      setFlowError('');
+      try {
+        await applicationService.saveTextAnswer(
+          slug,
+          currentQuestion.id,
+          questionAnswers[currentQuestion.id],
+        );
+      } catch (err) {
+        setQuestionError(err.message || 'Failed to save answer');
+        setSubmitting(false);
+        return;
+      }
+      setSubmitting(false);
     }
 
     setQuestionError('');
@@ -312,17 +352,59 @@ export default function ApplicationPreviewFlow({ job }) {
     }
   };
 
-  const handleVideoRecorded = (media) => {
+  const handleVideoRecorded = async (media) => {
+    if (videoRecording?.url?.startsWith('blob:')) {
+      URL.revokeObjectURL(videoRecording.url);
+    }
+
+    if (live && slug && mediaQuestion) {
+      setSubmitting(true);
+      setVideoError('');
+      try {
+        setVideoRecording(media);
+        const uploaded = await applicationService.uploadVideoAnswer(
+          slug,
+          mediaQuestion.id,
+          media,
+        );
+        if (media.url?.startsWith('blob:')) {
+          URL.revokeObjectURL(media.url);
+        }
+        setVideoRecording(uploaded);
+        setRecorderOpen(false);
+      } catch (err) {
+        setVideoError(err.message || 'Failed to upload video');
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
     setVideoRecording(media);
     setVideoError('');
     setRecorderOpen(false);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!videoRecording?.url) {
       setVideoError('Please record your video response to continue');
       return;
     }
+
+    if (live && slug) {
+      setSubmitting(true);
+      setFlowError('');
+      try {
+        await applicationService.submitApplication(slug);
+        setPhase('done');
+      } catch (err) {
+        setFlowError(err.message || 'Failed to submit application');
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
     setPhase('done');
   };
 
@@ -392,9 +474,14 @@ export default function ApplicationPreviewFlow({ job }) {
             className="mt-6 w-full rounded-full py-3 text-sm font-semibold shadow-md shadow-accent/20 sm:text-base"
             size="lg"
             onClick={handleQuestionNext}
+            disabled={submitting}
           >
-            {questionIndex < standardQuestions.length - 1 ? 'Next' : 'Continue to video'}{' '}
-            <ChevronRight size={18} />
+            {submitting
+              ? 'Saving...'
+              : questionIndex < standardQuestions.length - 1
+                ? 'Next'
+                : 'Continue to video'}{' '}
+            {!submitting && <ChevronRight size={18} />}
           </Button>
         </StepCard>
       </StepLayout>
@@ -417,9 +504,11 @@ export default function ApplicationPreviewFlow({ job }) {
             <div className="overflow-hidden rounded-xl border border-border bg-black">
               <div className="relative aspect-video w-full">
                 <video
+                  key={videoRecording.url}
                   src={videoRecording.url}
                   controls
                   playsInline
+                  preload="metadata"
                   className="absolute inset-0 h-full w-full object-contain"
                 />
               </div>
@@ -448,13 +537,15 @@ export default function ApplicationPreviewFlow({ job }) {
           )}
 
           {videoError && <p className="mt-3 text-center text-sm font-medium text-red-500">{videoError}</p>}
+          {flowError && <p className="mt-3 text-center text-sm font-medium text-red-500">{flowError}</p>}
 
           <Button
             className="mt-6 w-full rounded-full py-3 text-sm font-semibold shadow-md shadow-accent/20 sm:text-base"
             size="lg"
             onClick={handleSubmit}
+            disabled={submitting}
           >
-            Submit application
+            {submitting ? 'Submitting...' : 'Submit application'}
           </Button>
         </StepCard>
 
@@ -545,9 +636,14 @@ export default function ApplicationPreviewFlow({ job }) {
             className="mt-6 w-full rounded-full py-3 text-sm font-semibold shadow-md shadow-accent/20 sm:text-base"
             size="lg"
             onClick={handleStartNow}
+            disabled={submitting}
           >
-            Start now
+            {submitting ? 'Starting...' : 'Start now'}
           </Button>
+
+          {flowError && (
+            <p className="mt-3 text-center text-sm font-medium text-red-500">{flowError}</p>
+          )}
 
           <p className="mt-3 text-center text-xs text-muted">
             By continuing, you agree to our{' '}

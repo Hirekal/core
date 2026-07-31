@@ -1,3 +1,4 @@
+import { QuestionType } from '../enums/job.enums';
 import {
     GeneralSettings,
     ThankYouPageSettings,
@@ -113,6 +114,16 @@ export const DEFAULT_APPLICATION_FIELDS = [
     },
 ] as const;
 
+export const BUILT_IN_APPLICATION_FIELD_KEYS = new Set<string>(
+    DEFAULT_APPLICATION_FIELDS.map((field) => field.fieldKey),
+);
+
+export function isBuiltInApplicationFieldKey(
+    fieldKey: string | null | undefined,
+): boolean {
+    return Boolean(fieldKey && BUILT_IN_APPLICATION_FIELD_KEYS.has(fieldKey));
+}
+
 export const BUILT_IN_VIDEO_QUESTION = {
     label: 'Tell me about yourself',
     type: 'VIDEO' as const,
@@ -120,6 +131,19 @@ export const BUILT_IN_VIDEO_QUESTION = {
     required: true,
     builtIn: true,
 };
+
+/** Question types answered with media uploads — only the built-in video row is allowed. */
+export const MEDIA_QUESTION_TYPES = new Set<QuestionType>([
+    QuestionType.AUDIO,
+    QuestionType.VIDEO,
+    QuestionType.SCREEN_RECORDING,
+    QuestionType.FILE,
+    QuestionType.RICH_TEXT,
+]);
+
+export function isMediaQuestionType(type: QuestionType): boolean {
+    return MEDIA_QUESTION_TYPES.has(type);
+}
 
 export const IMAGE_MIME_TYPES = [
     'image/jpeg',

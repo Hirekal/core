@@ -54,6 +54,75 @@ export function blobToDataUrl(blob) {
   return readFileAsDataUrl(blob);
 }
 
+/**
+ * Parses a data URL into a File without using fetch().
+ * fetch(data:...) breaks when the MIME type contains commas
+ * (e.g. video/webm;codecs=vp8,opus), which corrupts R2 uploads.
+ *
+ * @param {string} dataUrl
+ * @param {string} [fileName]
+ * @param {'video'|'image'} [mediaType]
+ * @returns {File}
+ */
+export function dataUrlToFile(dataUrl, fileName, mediaType = 'video') {
+  const marker = 'base64,';
+  const markerIndex = dataUrl.indexOf(marker);
+  if (!dataUrl.startsWith('data:') || markerIndex === -1) {
+    throw new Error('Invalid media data URL');
+  }
+
+  const meta = dataUrl.slice(5, markerIndex - 1);
+  const mime =
+    meta.split(';')[0] ||
+    (mediaType === 'video' ? 'video/webm' : 'application/octet-stream');
+  const base64 = dataUrl.slice(markerIndex + marker.length);
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+
+  const defaultName = mediaType === 'video' ? 'recording.webm' : 'upload.png';
+  return new File([bytes], fileName || defaultName, { type: mime });
+}
+
+/**
+ * @param {{ blob?: Blob, url?: string, type?: string, fileName?: string }} media
+ * @returns {Promise<File|null>}
+ */
+export async function mediaToUploadFile(media) {
+  if (!media) return null;
+
+  if (media.blob instanceof Blob) {
+    const mime =
+      media.blob.type?.split(';')[0] ||
+      (media.type === 'video' ? 'video/webm' : 'application/octet-stream');
+    const defaultName = media.type === 'video' ? 'recording.webm' : 'upload.bin';
+    return new File([media.blob], media.fileName || defaultName, { type: mime });
+  }
+
+  if (media.url?.startsWith('data:')) {
+    return dataUrlToFile(media.url, media.fileName, media.type);
+  }
+
+  if (media.url) {
+    const response = await fetch(media.url);
+    const blob = await response.blob();
+    const extension = media.type === 'video' ? 'webm' : 'png';
+    const contentType =
+      blob.type && blob.type !== 'application/octet-stream'
+        ? blob.type.split(';')[0]
+        : media.type === 'video'
+          ? 'video/webm'
+          : 'image/png';
+    return new File([blob], media.fileName || `media.${extension}`, {
+      type: contentType,
+    });
+  }
+
+  return null;
+}
+
 export function getSupportedVideoMimeType() {
   const types = [
     'video/webm;codecs=vp9,opus',

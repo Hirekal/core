@@ -14,7 +14,7 @@ import {
 } from './r2UploadService';
 
 const MEDIA_UPLOAD_WARNING =
-    'Job saved, but media upload failed. Configure Cloudflare R2 (including bucket CORS) or remove the media.';
+    'Job saved, but media could not be uploaded to Cloudflare R2. Check R2 API token permissions (Object Read & Write on R2_BUCKET_NAME), bucket CORS for your console URL, and R2_PUBLIC_BASE_URL.';
 
 /**
  * Uploads intro media directly to R2 when the UI holds a local data/blob URL.
@@ -208,22 +208,28 @@ export async function cacheJobForPreview(job) {
 
 /**
  * Loads a job for the application preview page.
+ * Always fetches fresh data from the API so intro media and fields match the DB.
  *
  * @param {string} id
  * @returns {Promise<object|null>}
  */
 export async function getJobForPreview(id) {
     try {
-        const cached = localStorage.getItem(`hirekal_preview_${id}`);
-        if (cached) {
-            return JSON.parse(cached);
+        const data = await apiRequest(`/jobs/${id}/preview`, { auth: true });
+        const job = jobToUi({ ...data, status: data.status || 'ACTIVE' });
+        await cacheJobForPreview(job);
+        return job;
+    } catch (error) {
+        try {
+            const cached = localStorage.getItem(`hirekal_preview_${id}`);
+            if (cached) {
+                return JSON.parse(cached);
+            }
+        } catch {
+            // ignore
         }
-    } catch {
-        // ignore
+        throw error;
     }
-
-    const data = await apiRequest(`/jobs/${id}/preview`, { auth: true });
-    return jobToUi({ ...data, status: data.status || 'ACTIVE' });
 }
 
 /**
