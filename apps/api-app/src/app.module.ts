@@ -1,7 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { resolve } from 'path';
+import { join, resolve } from 'path';
+import { buildPostgresConnectionOptions } from './config/database.config';
 import { CloudStorageModule } from './modules/cloud-storage/cloud-storage.module';
 import { ApplicationModule } from './modules/application/application.module';
 import { JobModule } from './modules/job/job.module';
@@ -23,19 +24,13 @@ import { AuthModule } from './modules/auth/auth.module';
         TypeOrmModule.forRootAsync({
             imports: [ConfigModule],
             inject: [ConfigService],
-            useFactory: (configService: ConfigService) => {
-                const url = configService.get<string>('DATABASE_URL');
-                if (!url) {
-                    throw new Error('DATABASE_URL is required');
-                }
-                return {
-                    type: 'postgres' as const,
-                    url,
-                    autoLoadEntities: true,
-                    synchronize: false,
-                    migrationsRun: false,
-                };
-            },
+            useFactory: (configService: ConfigService) => ({
+                ...buildPostgresConnectionOptions(configService),
+                synchronize: false,
+                migrationsRun: false,
+                entities: [join(__dirname, 'modules/**/entities/*.entity{.ts,.js}')],
+                migrations: [join(__dirname, 'migrations/*{.js,.ts}')],
+            }),
         }),
         CloudStorageModule,
         JobModule,
