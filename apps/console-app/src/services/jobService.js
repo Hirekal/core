@@ -1,4 +1,4 @@
-import { apiRequest, apiUpload } from './apiClient';
+import { apiRequest } from './apiClient';
 import {
     isApiId,
     jobFormToApi,
@@ -8,28 +8,16 @@ import {
     toApiStatus,
 } from './jobMappers';
 import { isLocalMediaUrl } from '../utils/jobMediaStorage';
+import {
+    mediaToFile,
+    uploadFileViaPresignedUrl,
+} from './r2UploadService';
+
+const MEDIA_UPLOAD_WARNING =
+    'Job saved, but media upload failed. Configure Cloudflare R2 (including bucket CORS) or remove the media.';
 
 /**
- * Converts a data/blob URL into a File for multipart upload.
- *
- * @param {{ url?: string, type?: string, fileName?: string }} introMedia
- * @returns {Promise<File|null>}
- */
-async function introMediaToFile(introMedia) {
-    if (!introMedia?.url || !isLocalMediaUrl(introMedia.url)) {
-        return null;
-    }
-
-    const response = await fetch(introMedia.url);
-    const blob = await response.blob();
-    const extension = introMedia.type === 'video' ? 'webm' : 'png';
-    const fileName = introMedia.fileName || `intro.${extension}`;
-    return new File([blob], fileName, { type: blob.type || `application/octet-stream` });
-}
-
-/**
- * Uploads intro media when the UI holds a local data/blob URL.
- * Media failures are returned as warnings so job create/update can still succeed.
+ * Uploads intro media directly to R2 when the UI holds a local data/blob URL.
  *
  * @param {string} jobId
  * @param {object|null|undefined} introMedia
@@ -45,20 +33,100 @@ async function syncIntroMedia(jobId, introMedia) {
             return {};
         }
 
-        const file = await introMediaToFile(introMedia);
+        if (!introMedia?.url || !isLocalMediaUrl(introMedia.url)) {
+            return {};
+        }
+
+        const file = await mediaToFile(introMedia);
         if (!file) {
             return {};
         }
 
-        await apiUpload(`/jobs/${jobId}/media/intro`, file);
+        await uploadFileViaPresignedUrl(
+            `/jobs/${jobId}/media/intro/upload-url`,
+            `/jobs/${jobId}/media/intro/confirm`,
+            file,
+        );
         return {};
     } catch (error) {
         return {
-            warning:
-                error.message ||
-                'Job saved, but intro media upload failed. Configure Cloudflare R2 or remove the intro media.',
+            warning: error.message || MEDIA_UPLOAD_WARNING,
         };
     }
+}
+
+/**
+ * Uploads thank-you page media directly to R2 when local.
+ *
+ * @param {string} jobId
+ * @param {object} thankYouPage
+ * @returns {Promise<object>} thankYouPage with R2 URLs when uploaded
+ */
+async function syncThankYouMedia(jobId, thankYouPage) {
+    if (!thankYouPage?.mediaUrl || !isLocalMediaUrl(thankYouPage.mediaUrl)) {
+        return thankYouPage;
+    }
+
+    const file = await mediaToFile({
+        url: thankYouPage.mediaUrl,
+        type: thankYouPage.mediaType || 'image',
+        fileName: thankYouPage.fileName,
+    });
+    if (!file) return thankYouPage;
+
+    const confirmed = await uploadFileViaPresignedUrl(
+        `/jobs/${jobId}/settings/thank-you/media/upload-url`,
+        `/jobs/${jobId}/settings/thank-you/media/confirm`,
+        file,
+    );
+
+    return {
+        ...thankYouPage,
+        mediaType: confirmed.mediaType,
+        mediaUrl: confirmed.mediaUrl,
+        storageKey: confirmed.storageKey,
+        fileName: confirmed.fileName,
+    };
+}
+
+/**
+ * Uploads social preview image directly to R2 when local.
+ *
+ * @param {string} jobId
+ * @param {object} general
+ * @returns {Promise<object>} general settings with R2 preview image when uploaded
+ */
+async function syncSocialPreviewMedia(jobId, general) {
+    const preview = general?.socialPreview?.previewImage;
+    if (!preview?.url || !isLocalMediaUrl(preview.url)) {
+        return general;
+    }
+
+    const file = await mediaToFile({
+        url: preview.url,
+        type: preview.type || 'image',
+        fileName: preview.fileName,
+    });
+    if (!file) return general;
+
+    const confirmed = await uploadFileViaPresignedUrl(
+        `/jobs/${jobId}/settings/general/social-preview-image/upload-url`,
+        `/jobs/${jobId}/settings/general/social-preview-image/confirm`,
+        file,
+    );
+
+    return {
+        ...general,
+        socialPreview: {
+            ...general.socialPreview,
+            previewImage: {
+                type: confirmed.type || 'image',
+                url: confirmed.url,
+                storageKey: confirmed.storageKey,
+                fileName: confirmed.fileName,
+            },
+        },
+    };
 }
 
 /**
@@ -193,7 +261,7 @@ export async function getJobById(id) {
 }
 
 /**
- * Creates a job, then uploads intro media when needed.
+ * Creates a job, then uploads intro media directly to R2 when needed.
  *
  * @param {object} jobData
  * @returns {Promise<object>}
@@ -217,7 +285,7 @@ export async function createJob(jobData) {
 }
 
 /**
- * Updates a job and optional nested questions/fields; syncs intro media.
+ * Updates a job and optional nested questions/fields; syncs intro media via R2.
  *
  * @param {string} id
  * @param {object} jobData
@@ -257,6 +325,7 @@ export async function duplicateJob(id) {
 
 /**
  * Persists job settings sections and pipeline stages.
+ * Local media is uploaded directly to R2 before JSON patches.
  *
  * @param {string} id
  * @param {object} settings
@@ -274,6 +343,8 @@ export async function updateJobSettings(id, settings) {
         aiTranscripts,
     } = settings || {};
 
+    let mediaWarning;
+
     await apiRequest(`/jobs/${id}`, {
         method: 'PATCH',
         auth: true,
@@ -289,17 +360,39 @@ export async function updateJobSettings(id, settings) {
         ),
     });
 
-    if (general) {
+    let resolvedGeneral = general;
+    let resolvedThankYou = thankYouPage;
+
+    try {
+        if (general?.socialPreview?.previewImage?.url &&
+            isLocalMediaUrl(general.socialPreview.previewImage.url)) {
+            resolvedGeneral = await syncSocialPreviewMedia(id, general);
+        }
+
+        if (thankYouPage?.mediaUrl && isLocalMediaUrl(thankYouPage.mediaUrl)) {
+            resolvedThankYou = await syncThankYouMedia(id, thankYouPage);
+        }
+    } catch (error) {
+        mediaWarning = error.message || MEDIA_UPLOAD_WARNING;
+    }
+
+    if (resolvedGeneral) {
         await apiRequest(`/jobs/${id}/settings/general`, {
             method: 'PATCH',
             auth: true,
-            body: general,
+            body: resolvedGeneral,
         });
     }
 
-    if (thankYouPage) {
-        const { mediaType, mediaUrl, storageKey, fileName, description, autoRedirectUrl } =
-            thankYouPage;
+    if (resolvedThankYou) {
+        const {
+            mediaType,
+            mediaUrl,
+            storageKey,
+            fileName,
+            description,
+            autoRedirectUrl,
+        } = resolvedThankYou;
         await apiRequest(`/jobs/${id}/settings/thank-you`, {
             method: 'PATCH',
             auth: true,
@@ -335,7 +428,9 @@ export async function updateJobSettings(id, settings) {
         await syncPipelineStages(id, customStages);
     }
 
-    return getJobById(id);
+    const job = await getJobById(id);
+    if (mediaWarning) job.mediaWarning = mediaWarning;
+    return job;
 }
 
 /**

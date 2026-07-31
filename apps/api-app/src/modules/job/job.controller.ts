@@ -9,14 +9,13 @@ import {
     Patch,
     Post,
     Query,
-    UploadedFile,
-    UseInterceptors,
 } from '@nestjs/common';
 import { CurrentUser } from '../auth/common/decorators/current-user.decorator';
-import { FileInterceptor } from '@nestjs/platform-express';
 import { CreateJobDto } from './dto/create-job.dto';
 import { ListJobsQueryDto } from './dto/list-jobs-query.dto';
 import { UpdateJobDto } from './dto/update-job.dto';
+import { PresignUploadDto } from '../cloud-storage/dto/presign-upload.dto';
+import { ConfirmUploadDto } from '../cloud-storage/dto/confirm-upload.dto';
 import { JobService } from './job.service';
 import { toErrorMessage } from '../../common/utils/error.util';
 
@@ -86,32 +85,33 @@ export class JobController {
     }
 
     /**
-     * Upload intro media (image/video) to R2 for a job.
-     * @param id 
-     * @param organizationId 
-     * @param userId 
-     * @param file 
-     * @returns 
+     * Presigned URL for direct browser upload of intro media to R2.
      */
-    @Post(':id/media/intro')
-    @UseInterceptors(FileInterceptor('file'))
-    async uploadIntroMedia(
+    @Post(':id/media/intro/upload-url')
+    presignIntroMediaUpload(
+        @Param('id', ParseUUIDPipe) id: string,
+        @CurrentUser('organizationId') organizationId: string,
+        @Body() dto: PresignUploadDto,
+    ) {
+        return this.jobService.presignIntroMediaUpload(id, organizationId, dto);
+    }
+
+    /**
+     * Confirms intro media after the browser PUTs directly to R2.
+     */
+    @Post(':id/media/intro/confirm')
+    confirmIntroMediaUpload(
         @Param('id', ParseUUIDPipe) id: string,
         @CurrentUser('organizationId') organizationId: string,
         @CurrentUser('id') userId: string,
-        @UploadedFile() file: Express.Multer.File,
+        @Body() dto: ConfirmUploadDto,
     ) {
-        try {
-            return await this.jobService.uploadIntroMedia(
-                id,
-                organizationId,
-                userId,
-                file,
-            );
-        } catch (error) {
-            this.logger.error(`Upload intro media for job ${id} failed: ${toErrorMessage(error)}`);
-            throw error;
-        }
+        return this.jobService.confirmIntroMediaUpload(
+            id,
+            organizationId,
+            userId,
+            dto,
+        );
     }
 
     /**

@@ -8,4 +8,6 @@ export const CloudStorageErrors = {
     FAILED_TO_UPLOAD: 'Failed to upload file to storage',
     FAILED_TO_COPY: 'Failed to copy file in storage',
     FAILED_TO_GET_SIGNED_URL: 'Failed to generate signed URL',
+    FAILED_TO_PRESIGN_UPLOAD: 'Failed to generate upload URL',
+    INVALID_STORAGE_KEY: 'Invalid storage key for this resource',
 } as const;

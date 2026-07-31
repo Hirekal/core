@@ -8,11 +8,10 @@ import {
     ParseUUIDPipe,
     Patch,
     Post,
-    UploadedFile,
-    UseInterceptors,
 } from '@nestjs/common';
 import { CurrentUser } from '../../auth/common/decorators/current-user.decorator';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { PresignUploadDto } from '../../cloud-storage/dto/presign-upload.dto';
+import { ConfirmUploadDto } from '../../cloud-storage/dto/confirm-upload.dto';
 import { toErrorMessage } from '../../../common/utils/error.util';
 import {
     PatchEmailAutomationDto,
@@ -145,32 +144,32 @@ export class JobSettingsController {
         }
     }
 
-    /**
-     * Upload the thank-you page media for a job.
-     * @param jobId 
-     * @param organizationId 
-     * @param file 
-     * @returns 
-     */
-    @Post('thank-you/media')
-    @UseInterceptors(FileInterceptor('file'))
-    async uploadThankYouMedia(
+    /** Presigned URL for direct browser upload of thank-you page media. */
+    @Post('thank-you/media/upload-url')
+    presignThankYouMediaUpload(
         @Param('jobId', ParseUUIDPipe) jobId: string,
         @CurrentUser('organizationId') organizationId: string,
-        @UploadedFile() file: Express.Multer.File,
+        @Body() dto: PresignUploadDto,
     ) {
-        try {
-            return await this.settingsService.uploadThankYouMedia(
-                jobId,
-                organizationId,
-                file,
-            );
-        } catch (error) {
-            this.logger.error(
-                `Upload thank-you media for job ${jobId} failed: ${toErrorMessage(error)}`,
-            );
-            throw error;
-        }
+        return this.settingsService.presignThankYouMediaUpload(
+            jobId,
+            organizationId,
+            dto,
+        );
+    }
+
+    /** Confirms thank-you media after direct R2 upload. */
+    @Post('thank-you/media/confirm')
+    confirmThankYouMediaUpload(
+        @Param('jobId', ParseUUIDPipe) jobId: string,
+        @CurrentUser('organizationId') organizationId: string,
+        @Body() dto: ConfirmUploadDto,
+    ) {
+        return this.settingsService.confirmThankYouMediaUpload(
+            jobId,
+            organizationId,
+            dto,
+        );
     }
 
     /**
@@ -197,31 +196,31 @@ export class JobSettingsController {
         }
     }
 
-    /**
-     * Upload the social preview image for a job.
-     * @param jobId 
-     * @param organizationId 
-     * @param file 
-     * @returns 
-     */
-    @Post('general/social-preview-image')
-    @UseInterceptors(FileInterceptor('file'))
-    async uploadSocialPreviewImage(
+    /** Presigned URL for direct browser upload of social preview image. */
+    @Post('general/social-preview-image/upload-url')
+    presignSocialPreviewUpload(
         @Param('jobId', ParseUUIDPipe) jobId: string,
         @CurrentUser('organizationId') organizationId: string,
-        @UploadedFile() file: Express.Multer.File,
+        @Body() dto: PresignUploadDto,
     ) {
-        try {
-            return await this.settingsService.uploadSocialPreviewImage(
-                jobId,
-                organizationId,
-                file,
-            );
-        } catch (error) {
-            this.logger.error(
-                `Upload social preview for job ${jobId} failed: ${toErrorMessage(error)}`,
-            );
-            throw error;
-        }
+        return this.settingsService.presignSocialPreviewUpload(
+            jobId,
+            organizationId,
+            dto,
+        );
+    }
+
+    /** Confirms social preview image after direct R2 upload. */
+    @Post('general/social-preview-image/confirm')
+    confirmSocialPreviewUpload(
+        @Param('jobId', ParseUUIDPipe) jobId: string,
+        @CurrentUser('organizationId') organizationId: string,
+        @Body() dto: ConfirmUploadDto,
+    ) {
+        return this.settingsService.confirmSocialPreviewUpload(
+            jobId,
+            organizationId,
+            dto,
+        );
     }
 }

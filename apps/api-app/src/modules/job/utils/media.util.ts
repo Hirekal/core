@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { CloudStorageErrors } from '../../cloud-storage/constants/cloud-storage-errors';
 import {
     IMAGE_MIME_TYPES,
     MAX_IMAGE_SIZE_BYTES,
@@ -9,10 +10,6 @@ import { IntroMediaType } from '../enums/job.enums';
 
 /**
  * Validate uploaded media file type and size.
- * @param mimetype 
- * @param size 
- * @param allowVideo 
- * @returns 
  */
 export function validateMediaFile(
     mimetype: string,
@@ -38,11 +35,6 @@ export function validateMediaFile(
 
 /**
  * Build R2 storage key for job media assets.
- * @param organizationId 
- * @param jobId 
- * @param folder 
- * @param fileName 
- * @returns 
  */
 export function buildMediaKey(
     organizationId: string,
@@ -55,4 +47,19 @@ export function buildMediaKey(
         : 'bin';
     const uuid = crypto.randomUUID();
     return `orgs/${organizationId}/jobs/${jobId}/${folder}/${uuid}.${ext}`;
+}
+
+/**
+ * Ensures a storage key belongs to the expected org/job/folder prefix.
+ */
+export function assertMediaKeyScope(
+    storageKey: string,
+    organizationId: string,
+    jobId: string,
+    folder: 'intro' | 'thank-you' | 'social-preview',
+): void {
+    const expectedPrefix = `orgs/${organizationId}/jobs/${jobId}/${folder}/`;
+    if (!storageKey.startsWith(expectedPrefix)) {
+        throw new BadRequestException(CloudStorageErrors.INVALID_STORAGE_KEY);
+    }
 }

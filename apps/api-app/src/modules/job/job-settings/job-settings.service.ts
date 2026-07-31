@@ -8,7 +8,9 @@ import {
 import { SettingsErrors } from '../constants/settings-errors';
 import { IntroMediaType } from '../enums/job.enums';
 import { R2Service } from '../../cloud-storage/r2.service';
-import { buildMediaKey, validateMediaFile } from '../utils/media.util';
+import { PresignUploadDto } from '../../cloud-storage/dto/presign-upload.dto';
+import { ConfirmUploadDto } from '../../cloud-storage/dto/confirm-upload.dto';
+import { buildMediaKey, assertMediaKeyScope, validateMediaFile } from '../utils/media.util';
 import { JobService } from '../job.service';
 import {
     PatchEmailAutomationDto,
@@ -136,17 +138,53 @@ export class JobSettingsService {
     }
 
     /**
-     * Upload thank-you page media to R2 and update thankYouPage JSON.
-     * DB is updated before deleting the old R2 object.
-     * @param jobId 
-     * @param organizationId 
-     * @param file 
-     * @returns 
+     * Presigned URL for direct browser upload of thank-you page media.
      */
-    async uploadThankYouMedia(
+    async presignThankYouMediaUpload(
         jobId: string,
         organizationId: string,
-        file: Express.Multer.File,
+        dto: PresignUploadDto,
+    ): Promise<{ uploadUrl: string; storageKey: string; publicUrl: string }> {
+        try {
+            await this.jobService.assertJobAccess(jobId, organizationId);
+            const settings = await this.settingsRepository.findByJobId(jobId);
+            if (!settings) {
+                throw new NotFoundException(SettingsErrors.NOT_FOUND(jobId));
+            }
+            validateMediaFile(dto.contentType, dto.size, true);
+            const storageKey = buildMediaKey(
+                organizationId,
+                jobId,
+                'thank-you',
+                dto.fileName,
+            );
+            const uploadUrl = await this.r2Service.getPresignedUploadUrl(
+                storageKey,
+                dto.contentType,
+            );
+            return {
+                uploadUrl,
+                storageKey,
+                publicUrl: this.r2Service.getPublicUrl(storageKey),
+            };
+        } catch (error) {
+            if (error instanceof HttpException) throw error;
+            this.logger.error(
+                `presignThankYouMediaUpload failed jobId=${jobId}: ${(error as Error).message}`,
+            );
+            throw new InternalServerErrorException(
+                SettingsErrors.FAILED_TO_UPLOAD_THANK_YOU_MEDIA,
+            );
+        }
+    }
+
+    /**
+     * Confirms thank-you media after direct R2 upload.
+     */
+    async confirmThankYouMediaUpload(
+        jobId: string,
+        organizationId: string,
+        dto: ConfirmUploadDto,
     ): Promise<Record<string, unknown>> {
         try {
             await this.jobService.assertJobAccess(jobId, organizationId);
@@ -155,24 +193,16 @@ export class JobSettingsService {
                 throw new NotFoundException(SettingsErrors.NOT_FOUND(jobId));
             }
 
-            const mediaType = validateMediaFile(file.mimetype, file.size, true);
-            const storageKey = buildMediaKey(
-                organizationId,
-                jobId,
-                'thank-you',
-                file.originalname,
-            );
-
-            await this.r2Service.upload(storageKey, file.buffer, file.mimetype);
-
+            assertMediaKeyScope(dto.storageKey, organizationId, jobId, 'thank-you');
+            const mediaType = validateMediaFile(dto.contentType, 1, true);
             const previousKey = settings.thankYouPage?.storageKey;
-            const url = this.r2Service.getPublicUrl(storageKey);
+            const url = this.r2Service.getPublicUrl(dto.storageKey);
             const thankYouPage = {
                 ...settings.thankYouPage,
                 mediaType: mediaType === IntroMediaType.VIDEO ? 'video' : 'image',
                 mediaUrl: url,
-                storageKey,
-                fileName: file.originalname,
+                storageKey: dto.storageKey,
+                fileName: dto.fileName,
             };
 
             await this.settingsRepository.update(settings.id, {
@@ -180,26 +210,20 @@ export class JobSettingsService {
                 updatedAt: new Date(),
             });
 
-            if (previousKey && previousKey !== storageKey) {
-                try {
-                    await this.r2Service.delete(previousKey);
-                } catch (r2Error) {
-                    this.logger.warn(
-                        `Failed to delete previous thank-you media key=${previousKey} jobId=${jobId}: ${(r2Error as Error).message}`,
-                    );
-                }
+            if (previousKey && previousKey !== dto.storageKey) {
+                await this.r2Service.delete(previousKey);
             }
 
             return {
                 mediaType: thankYouPage.mediaType,
                 mediaUrl: url,
-                storageKey,
-                fileName: file.originalname,
+                storageKey: dto.storageKey,
+                fileName: dto.fileName,
             };
         } catch (error) {
             if (error instanceof HttpException) throw error;
             this.logger.error(
-                `uploadThankYouMedia failed jobId=${jobId}: ${(error as Error).message}`,
+                `confirmThankYouMediaUpload failed jobId=${jobId}: ${(error as Error).message}`,
             );
             throw new InternalServerErrorException(
                 SettingsErrors.FAILED_TO_UPLOAD_THANK_YOU_MEDIA,
@@ -260,13 +284,53 @@ export class JobSettingsService {
     }
 
     /**
-     * Upload social preview image and update general.socialPreview.previewImage.
-     * DB is updated before deleting the old R2 object.
+     * Presigned URL for direct browser upload of social preview image.
      */
-    async uploadSocialPreviewImage(
+    async presignSocialPreviewUpload(
         jobId: string,
         organizationId: string,
-        file: Express.Multer.File,
+        dto: PresignUploadDto,
+    ): Promise<{ uploadUrl: string; storageKey: string; publicUrl: string }> {
+        try {
+            await this.jobService.assertJobAccess(jobId, organizationId);
+            const settings = await this.settingsRepository.findByJobId(jobId);
+            if (!settings) {
+                throw new NotFoundException(SettingsErrors.NOT_FOUND(jobId));
+            }
+            validateMediaFile(dto.contentType, dto.size, false);
+            const storageKey = buildMediaKey(
+                organizationId,
+                jobId,
+                'social-preview',
+                dto.fileName,
+            );
+            const uploadUrl = await this.r2Service.getPresignedUploadUrl(
+                storageKey,
+                dto.contentType,
+            );
+            return {
+                uploadUrl,
+                storageKey,
+                publicUrl: this.r2Service.getPublicUrl(storageKey),
+            };
+        } catch (error) {
+            if (error instanceof HttpException) throw error;
+            this.logger.error(
+                `presignSocialPreviewUpload failed jobId=${jobId}: ${(error as Error).message}`,
+            );
+            throw new InternalServerErrorException(
+                SettingsErrors.FAILED_TO_UPLOAD_SOCIAL_PREVIEW,
+            );
+        }
+    }
+
+    /**
+     * Confirms social preview image after direct R2 upload.
+     */
+    async confirmSocialPreviewUpload(
+        jobId: string,
+        organizationId: string,
+        dto: ConfirmUploadDto,
     ): Promise<Record<string, unknown>> {
         try {
             await this.jobService.assertJobAccess(jobId, organizationId);
@@ -275,19 +339,16 @@ export class JobSettingsService {
                 throw new NotFoundException(SettingsErrors.NOT_FOUND(jobId));
             }
 
-            validateMediaFile(file.mimetype, file.size, false);
-            const storageKey = buildMediaKey(
+            assertMediaKeyScope(
+                dto.storageKey,
                 organizationId,
                 jobId,
                 'social-preview',
-                file.originalname,
             );
-
-            await this.r2Service.upload(storageKey, file.buffer, file.mimetype);
-
+            validateMediaFile(dto.contentType, 1, false);
             const previousKey =
                 settings.general?.socialPreview?.previewImage?.storageKey;
-            const url = this.r2Service.getPublicUrl(storageKey);
+            const url = this.r2Service.getPublicUrl(dto.storageKey);
             const general = {
                 ...settings.general,
                 socialPreview: {
@@ -295,8 +356,8 @@ export class JobSettingsService {
                     previewImage: {
                         type: 'image',
                         url,
-                        storageKey,
-                        fileName: file.originalname,
+                        storageKey: dto.storageKey,
+                        fileName: dto.fileName,
                     },
                 },
             };
@@ -306,26 +367,20 @@ export class JobSettingsService {
                 updatedAt: new Date(),
             });
 
-            if (previousKey && previousKey !== storageKey) {
-                try {
-                    await this.r2Service.delete(previousKey);
-                } catch (r2Error) {
-                    this.logger.warn(
-                        `Failed to delete previous social preview key=${previousKey} jobId=${jobId}: ${(r2Error as Error).message}`,
-                    );
-                }
+            if (previousKey && previousKey !== dto.storageKey) {
+                await this.r2Service.delete(previousKey);
             }
 
             return {
                 type: 'image',
                 url,
-                storageKey,
-                fileName: file.originalname,
+                storageKey: dto.storageKey,
+                fileName: dto.fileName,
             };
         } catch (error) {
             if (error instanceof HttpException) throw error;
             this.logger.error(
-                `uploadSocialPreviewImage failed jobId=${jobId}: ${(error as Error).message}`,
+                `confirmSocialPreviewUpload failed jobId=${jobId}: ${(error as Error).message}`,
             );
             throw new InternalServerErrorException(
                 SettingsErrors.FAILED_TO_UPLOAD_SOCIAL_PREVIEW,

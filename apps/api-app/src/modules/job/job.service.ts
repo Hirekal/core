@@ -30,7 +30,9 @@ import {
 } from './enums/job.enums';
 import { R2Service } from '../cloud-storage/r2.service';
 import { isPostgresUniqueViolation } from '../../common/utils/error.util';
-import { buildMediaKey, validateMediaFile } from './utils/media.util';
+import { buildMediaKey, assertMediaKeyScope, validateMediaFile } from './utils/media.util';
+import { PresignUploadDto } from '../cloud-storage/dto/presign-upload.dto';
+import { ConfirmUploadDto } from '../cloud-storage/dto/confirm-upload.dto';
 import { resolveUniqueSlug, slugifyTitle } from '../../common/utils/slug.util';
 import { JobApplicationFieldRepository } from './job-application-fields/repositories/job-application-field.repository';
 import { JobPipelineStageRepository } from './job-pipeline-stages/repositories/job-pipeline-stage.repository';
@@ -794,62 +796,81 @@ export class JobService {
     }
 
     /**
-     * Upload intro media to R2 and update job columns.
-     * DB is updated before deleting the old R2 object so a failed write
-     * never leaves the job pointing at a deleted file.
+     * Returns a presigned PUT URL for direct browser upload of intro media.
      */
-    async uploadIntroMedia(
+    async presignIntroMediaUpload(
+        id: string,
+        organizationId: string,
+        dto: PresignUploadDto,
+    ): Promise<{ uploadUrl: string; storageKey: string; publicUrl: string }> {
+        try {
+            await this.assertJobAccess(id, organizationId);
+            validateMediaFile(dto.contentType, dto.size, true);
+            const storageKey = buildMediaKey(
+                organizationId,
+                id,
+                'intro',
+                dto.fileName,
+            );
+            const uploadUrl = await this.r2Service.getPresignedUploadUrl(
+                storageKey,
+                dto.contentType,
+            );
+            return {
+                uploadUrl,
+                storageKey,
+                publicUrl: this.r2Service.getPublicUrl(storageKey),
+            };
+        } catch (error) {
+            if (error instanceof HttpException) throw error;
+            this.logger.error(
+                `presignIntroMediaUpload failed id=${id}: ${(error as Error).message}`,
+            );
+            throw new InternalServerErrorException(JobErrors.FAILED_TO_UPLOAD_INTRO_MEDIA);
+        }
+    }
+
+    /**
+     * Persists intro media metadata after the browser uploaded directly to R2.
+     */
+    async confirmIntroMediaUpload(
         id: string,
         organizationId: string,
         userId: string,
-        file: Express.Multer.File,
+        dto: ConfirmUploadDto,
     ): Promise<Record<string, unknown>> {
         try {
             const job = await this.jobRepository.findByIdForOrg(id, organizationId);
             if (!job) throw new NotFoundException(JobErrors.NOT_FOUND(id));
 
-            const mediaType = validateMediaFile(file.mimetype, file.size, true);
-            const storageKey = buildMediaKey(
-                organizationId,
-                id,
-                'intro',
-                file.originalname,
-            );
+            assertMediaKeyScope(dto.storageKey, organizationId, id, 'intro');
+            const mediaType = validateMediaFile(dto.contentType, 1, true);
             const previousKey = job.introMediaStorageKey;
+            const url = this.r2Service.getPublicUrl(dto.storageKey);
 
-            await this.r2Service.upload(storageKey, file.buffer, file.mimetype);
-
-            const url = this.r2Service.getPublicUrl(storageKey);
             await this.jobRepository.update(id, {
                 introMediaType: mediaType,
                 introMediaUrl: url,
-                introMediaStorageKey: storageKey,
-                introMediaFileName: file.originalname,
+                introMediaStorageKey: dto.storageKey,
+                introMediaFileName: dto.fileName,
                 updatedById: userId,
                 updatedAt: new Date(),
             });
 
-            // Only delete the old object after DB points at the new one
-            if (previousKey && previousKey !== storageKey) {
-                try {
-                    await this.r2Service.delete(previousKey);
-                } catch (r2Error) {
-                    this.logger.warn(
-                        `Failed to delete previous intro media key=${previousKey} jobId=${id}: ${(r2Error as Error).message}`,
-                    );
-                }
+            if (previousKey && previousKey !== dto.storageKey) {
+                await this.r2Service.delete(previousKey);
             }
 
             return {
                 type: mediaType,
                 url,
-                storageKey,
-                fileName: file.originalname,
+                storageKey: dto.storageKey,
+                fileName: dto.fileName,
             };
         } catch (error) {
             if (error instanceof HttpException) throw error;
             this.logger.error(
-                `uploadIntroMedia failed id=${id}: ${(error as Error).message}`,
+                `confirmIntroMediaUpload failed id=${id}: ${(error as Error).message}`,
             );
             throw new InternalServerErrorException(JobErrors.FAILED_TO_UPLOAD_INTRO_MEDIA);
         }

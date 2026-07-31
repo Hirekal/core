@@ -205,12 +205,33 @@ export async function apiRequest(path, options = {}) {
 }
 
 /**
- * Uploads a multipart file to an authenticated endpoint.
+ * PUTs a file directly to a presigned R2 URL (no auth headers).
  *
- * @param {string} path - API path
+ * @param {string} signedUrl - Presigned PUT URL from the API
  * @param {Blob|File} file - File payload
- * @param {string} [fieldName='file'] - Form field name
- * @returns {Promise<any>} Unwrapped response data
+ * @param {string} contentType - MIME type sent as Content-Type
+ */
+export async function putToSignedUrl(signedUrl, file, contentType) {
+  const response = await fetch(signedUrl, {
+    method: 'PUT',
+    body: file,
+    headers: {
+      'Content-Type': contentType,
+    },
+  });
+
+  if (!response.ok) {
+    const error = new Error(
+      `Direct upload to storage failed (${response.status})`,
+    );
+    error.status = response.status;
+    throw error;
+  }
+}
+
+/**
+ * Uploads a multipart file to an authenticated endpoint.
+ * @deprecated Prefer r2UploadService.uploadFileViaPresignedUrl for media.
  */
 export async function apiUpload(path, file, fieldName = 'file') {
   const formData = new FormData();

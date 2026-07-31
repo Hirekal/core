@@ -180,7 +180,36 @@ export class R2Service {
     }
 
     /**
-     * Generate a signed URL for private bucket access.
+     * Generate a presigned PUT URL so the browser can upload directly to R2.
+     */
+    async getPresignedUploadUrl(
+        key: string,
+        contentType: string,
+        expiresInSeconds = 3600,
+    ): Promise<string> {
+        try {
+            const { client, bucketName } = this.ensureClient();
+            const command = new PutObjectCommand({
+                Bucket: bucketName,
+                Key: key,
+                ContentType: contentType,
+            });
+            return await getSignedUrl(client, command, {
+                expiresIn: expiresInSeconds,
+            });
+        } catch (error) {
+            if (error instanceof HttpException) throw error;
+            this.logger.error(
+                `getPresignedUploadUrl failed key=${key}: ${(error as Error).message}`,
+            );
+            throw new InternalServerErrorException(
+                CloudStorageErrors.FAILED_TO_PRESIGN_UPLOAD,
+            );
+        }
+    }
+
+    /**
+     * Generate a signed URL for private bucket access (GET).
      */
     async getSignedUrl(
         key: string,
