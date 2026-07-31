@@ -13,6 +13,8 @@ import { DataSource, DeepPartial } from 'typeorm';
 import {
     BUILT_IN_VIDEO_QUESTION,
     DEFAULT_APPLICATION_FIELDS,
+    isBuiltInApplicationFieldKey,
+    isMediaQuestionType,
     DEFAULT_EMAIL_AUTOMATION,
     DEFAULT_GENERAL_SETTINGS,
     DEFAULT_PIPELINE_STAGES,
@@ -196,9 +198,17 @@ export class JobService {
 
                         let sortOrder = 1;
                         const questionsToSave: DeepPartial<JobQuestion>[] = [];
+                        let builtInVideoLabel = BUILT_IN_VIDEO_QUESTION.label;
 
                         if (dto.questions?.length) {
                             for (const q of dto.questions) {
+                                if (isMediaQuestionType(q.type)) {
+                                    if (q.label?.trim()) {
+                                        builtInVideoLabel = q.label.trim();
+                                    }
+                                    continue;
+                                }
+
                                 questionsToSave.push({
                                     jobId: savedJob.id,
                                     sortOrder: q.sortOrder ?? sortOrder++,
@@ -217,7 +227,7 @@ export class JobService {
                         questionsToSave.push({
                             jobId: savedJob.id,
                             sortOrder,
-                            label: BUILT_IN_VIDEO_QUESTION.label,
+                            label: builtInVideoLabel,
                             type: QuestionType.VIDEO,
                             category: QuestionCategory.MEDIA,
                             required: BUILT_IN_VIDEO_QUESTION.required,
@@ -245,6 +255,21 @@ export class JobService {
                         if (dto.applicationFields?.length) {
                             let customOrder = DEFAULT_APPLICATION_FIELDS.length + 1;
                             for (const f of dto.applicationFields) {
+                                if (isBuiltInApplicationFieldKey(f.fieldKey)) {
+                                    const seeded = fieldsToSave.find(
+                                        (row) => row.fieldKey === f.fieldKey,
+                                    );
+                                    if (seeded) {
+                                        seeded.label = f.label ?? seeded.label;
+                                        seeded.required =
+                                            f.required ?? seeded.required;
+                                        if (f.sortOrder != null) {
+                                            seeded.sortOrder = f.sortOrder;
+                                        }
+                                    }
+                                    continue;
+                                }
+
                                 fieldsToSave.push({
                                     jobId: savedJob.id,
                                     sortOrder: f.sortOrder ?? customOrder++,
@@ -607,7 +632,9 @@ export class JobService {
                             }),
                         );
 
-                        const questions = original.questions ?? [];
+                        const questions = (original.questions ?? []).filter(
+                            (q) => q.builtIn || !isMediaQuestionType(q.type),
+                        );
                         if (questions.length) {
                             await questionRepo.save(
                                 questions.map((q) => ({
@@ -1014,6 +1041,10 @@ export class JobService {
         const toInsert: DeepPartial<JobQuestion>[] = [];
 
         for (const q of questions) {
+            if (q.type && isMediaQuestionType(q.type) && q.id !== builtIn?.id) {
+                continue;
+            }
+
             if (q.id) {
                 const row = existing.find((e) => e.id === q.id);
                 if (!row) continue;
@@ -1024,6 +1055,8 @@ export class JobService {
                         sortOrder: q.sortOrder ?? row.sortOrder,
                         updatedAt: timestamp,
                     });
+                } else if (q.type && isMediaQuestionType(q.type)) {
+                    continue;
                 } else {
                     await repo.update(row.id, {
                         label: q.label ?? row.label,
@@ -1035,7 +1068,11 @@ export class JobService {
                         updatedAt: timestamp,
                     });
                 }
-            } else if (q.label && q.type && q.type !== QuestionType.VIDEO) {
+            } else if (
+                q.label &&
+                q.type &&
+                !isMediaQuestionType(q.type)
+            ) {
                 toInsert.push({
                     jobId,
                     sortOrder: q.sortOrder ?? existing.length + toInsert.length + 1,
@@ -1055,14 +1092,9 @@ export class JobService {
             await repo.save(toInsert);
         }
 
-        if (builtIn) {
-            const stillPresent = questions.some((q) => q.id === builtIn.id);
-            if (!stillPresent) {
-                await repo.update(builtIn.id, {
-                    label: builtIn.label,
-                    sortOrder: builtIn.sortOrder,
-                    updatedAt: timestamp,
-                });
+        for (const row of existing) {
+            if (!row.builtIn && isMediaQuestionType(row.type)) {
+                await repo.softDelete(row.id);
             }
         }
     }
@@ -1101,7 +1133,25 @@ export class JobService {
                         updatedAt: timestamp,
                     });
                 }
-            } else if (f.label && f.type) {
+                continue;
+            }
+
+            if (isBuiltInApplicationFieldKey(f.fieldKey)) {
+                const row = existing.find(
+                    (e) => e.builtIn && e.fieldKey === f.fieldKey,
+                );
+                if (row) {
+                    await repo.update(row.id, {
+                        label: f.label ?? row.label,
+                        required: f.required ?? row.required,
+                        sortOrder: f.sortOrder ?? row.sortOrder,
+                        updatedAt: timestamp,
+                    });
+                }
+                continue;
+            }
+
+            if (f.label && f.type) {
                 toInsert.push({
                     jobId,
                     sortOrder: f.sortOrder ?? existing.length + toInsert.length + 1,
@@ -1118,6 +1168,15 @@ export class JobService {
 
         if (toInsert.length) {
             await repo.save(toInsert);
+        }
+
+        const duplicateRows = existing.filter(
+            (row) =>
+                !row.builtIn &&
+                isBuiltInApplicationFieldKey(row.fieldKey),
+        );
+        for (const row of duplicateRows) {
+            await repo.delete(row.id);
         }
     }
 }

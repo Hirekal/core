@@ -135,10 +135,12 @@ export async function apiRequest(path, options = {}) {
     body,
     auth = false,
     retry = true,
+    headers: extraHeaders = {},
   } = options;
 
   const headers = {
     Accept: 'application/json',
+    ...extraHeaders,
   };
 
   const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
@@ -221,8 +223,16 @@ export async function putToSignedUrl(signedUrl, file, contentType) {
   });
 
   if (!response.ok) {
+    const hint =
+      response.status === 403
+        ? 'R2 rejected the upload (403). Check that your R2 API token has Object Read & Write on the bucket in R2_BUCKET_NAME, and that the bucket name matches your Cloudflare account.'
+        : response.status === 0
+          ? 'Browser blocked the upload (network/CORS). Add your console origin to the R2 bucket CORS policy with PUT allowed.'
+          : null;
+
     const error = new Error(
-      `Direct upload to storage failed (${response.status})`,
+      hint ||
+        `Direct upload to storage failed (${response.status})`,
     );
     error.status = response.status;
     throw error;

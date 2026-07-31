@@ -45,6 +45,6 @@ import { JobSettingsModule } from './job-settings/job-settings.module';
         JobPipelineStageRepository,
         JobSettingsRepository,
     ],
-    exports: [JobService, JobRepository],
+    exports: [JobService, JobRepository, JobPipelineStageRepository],
 })
 export class JobModule { }

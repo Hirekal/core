@@ -56,6 +56,14 @@ const RETAKES_TO_UI = {
     UNLIMITED: 'unlimited',
 };
 
+const MEDIA_UI_TYPES = new Set([
+    'audio',
+    'video',
+    'screen-recording',
+    'file',
+    'rich-text',
+]);
+
 const TYPE_TO_API = {
     text: 'TEXT',
     email: 'EMAIL',
@@ -429,7 +437,12 @@ export function jobFormToApi(formData, options = {}) {
     };
 
     if (includeNested && Array.isArray(formData.questions)) {
-        body.questions = formData.questions
+        const builtInVideo = formData.questions.find((q) => q.builtIn);
+        const standardQuestions = formData.questions.filter(
+            (q) => !q.builtIn && !MEDIA_UI_TYPES.has(q.type),
+        );
+
+        body.questions = standardQuestions
             .filter((q) => q.label?.trim())
             .map((q, index) => {
                 const payload = {
@@ -448,6 +461,20 @@ export function jobFormToApi(formData, options = {}) {
                 }
                 return payload;
             });
+
+        if (builtInVideo?.label?.trim()) {
+            const builtInPayload = {
+                label: builtInVideo.label.trim(),
+                type: toApiType('video'),
+                category: toApiCategory('media'),
+                required: true,
+                sortOrder: builtInVideo.sortOrder ?? body.questions.length,
+            };
+            if (isApiId(builtInVideo.id)) {
+                builtInPayload.id = builtInVideo.id;
+            }
+            body.questions.push(builtInPayload);
+        }
     }
 
     if (includeNested && Array.isArray(formData.applicationFields)) {

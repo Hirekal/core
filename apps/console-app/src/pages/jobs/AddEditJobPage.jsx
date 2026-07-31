@@ -41,10 +41,13 @@ export default function AddEditJobPage() {
       if (result.mediaWarning) {
         window.alert(result.mediaWarning);
       }
+      await jobService.cacheJobForPreview(result);
       if (openPreview) {
         await openJobPreview(result.id, result);
+        navigate(`/jobs/${result.id}/edit`);
+      } else {
+        navigate(isEditing ? `/jobs/${result.id}/edit` : `/jobs/${result.id}`);
       }
-      navigate(`/jobs/${result.id}`);
     } catch (error) {
       window.alert(error.message || 'Failed to save job');
     } finally {

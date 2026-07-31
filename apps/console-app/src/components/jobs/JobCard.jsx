@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Users, Pencil, CopyPlus, Settings, Link2, Clock } from 'lucide-react';
 import { formatRelative } from '../../utils/formatDate';
+import { getPublicApplyUrl } from '../../utils/applyLink';
 
 function CardIconAction({ icon: Icon, label, onClick, to }) {
   const className =
@@ -95,7 +96,7 @@ export default function JobCard({ job, onDuplicate, onCopyLink }) {
           <CardIconAction
             icon={Link2}
             label="Copy job link"
-            onClick={() => onCopyLink?.(job.shareLink)}
+            onClick={() => onCopyLink?.(getPublicApplyUrl(job))}
           />
         </div>
       </div>

@@ -13,6 +13,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import type { Request } from 'express';
 import { UsersService } from '../../users/users.service';
 import { UserSessionsService } from '../../users/user-sessions/user-sessions.service';
+import { logServiceError } from '../../../../common/utils/error.util';
 import { hashToken } from '../utils/hash.util';
 import { AUTH_MODULE_OPTIONS } from '../interfaces/auth-module-options.interface';
 import type { AuthModuleOptions } from '../interfaces/auth-module-options.interface';
@@ -80,7 +81,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
       return await this.usersService.findOne(payload.sub);
     } catch (error) {
-      this.logger.error(LOG_MESSAGES.STRATEGY.VALIDATE_FAILED, error);
+      logServiceError(
+        this.logger,
+        LOG_MESSAGES.STRATEGY.VALIDATE_FAILED,
+        error,
+      );
       throw error;
     }
   }

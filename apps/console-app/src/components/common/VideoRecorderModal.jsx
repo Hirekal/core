@@ -4,7 +4,6 @@ import { Circle, Square, AlertCircle } from 'lucide-react';
 import Modal from './Modal';
 import Button from './Button';
 import {
-  blobToDataUrl,
   getMediaErrorMessage,
   getSupportedVideoMimeType,
 } from '../../utils/mediaHelpers';
@@ -15,14 +14,66 @@ const VIDEO_CONSTRAINTS = {
   facingMode: 'user',
 };
 
+/**
+ * Front cameras often deliver a mirrored stream. Flip once so preview and
+ * saved video match real-world left/right (text readable, not selfie-mirror).
+ */
+function createCorrectedRecordingStream(sourceStream, videoElement) {
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d');
+  if (!context) {
+    throw new Error('Video recording is not supported in this browser.');
+  }
+
+  const width = videoElement.videoWidth || VIDEO_CONSTRAINTS.width.ideal;
+  const height = videoElement.videoHeight || VIDEO_CONSTRAINTS.height.ideal;
+  canvas.width = width;
+  canvas.height = height;
+
+  let frameId = null;
+  const drawFrame = () => {
+    if (videoElement.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+      context.save();
+      context.translate(width, 0);
+      context.scale(-1, 1);
+      context.drawImage(videoElement, 0, 0, width, height);
+      context.restore();
+    }
+    frameId = requestAnimationFrame(drawFrame);
+  };
+  drawFrame();
+
+  const recordingStream = canvas.captureStream(30);
+  const audioTrack = sourceStream.getAudioTracks()[0];
+  if (audioTrack) {
+    recordingStream.addTrack(audioTrack);
+  }
+
+  return {
+    stream: recordingStream,
+    stop() {
+      if (frameId !== null) {
+        cancelAnimationFrame(frameId);
+        frameId = null;
+      }
+    },
+  };
+}
+
 export default function VideoRecorderModal({ isOpen, onClose, onRecorded, title = 'Record Video' }) {
   const webcamRef = useRef(null);
   const mediaRecorderRef = useRef(null);
+  const recordingPipelineRef = useRef(null);
   const chunksRef = useRef([]);
   const [recording, setRecording] = useState(false);
   const [error, setError] = useState(null);
   const [cameraReady, setCameraReady] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+
+  const stopRecordingPipeline = useCallback(() => {
+    recordingPipelineRef.current?.stop?.();
+    recordingPipelineRef.current = null;
+  }, []);
 
   const resetState = useCallback(() => {
     setRecording(false);
@@ -31,7 +82,8 @@ export default function VideoRecorderModal({ isOpen, onClose, onRecorded, title 
     setElapsed(0);
     chunksRef.current = [];
     mediaRecorderRef.current = null;
-  }, []);
+    stopRecordingPipeline();
+  }, [stopRecordingPipeline]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -63,6 +115,8 @@ export default function VideoRecorderModal({ isOpen, onClose, onRecorded, title 
   const handleClose = () => {
     if (recording) {
       mediaRecorderRef.current?.stop();
+    } else {
+      stopRecordingPipeline();
     }
     stopTracks();
     onClose();
@@ -70,7 +124,8 @@ export default function VideoRecorderModal({ isOpen, onClose, onRecorded, title 
 
   const startRecording = () => {
     const stream = webcamRef.current?.stream;
-    if (!stream) {
+    const video = webcamRef.current?.video;
+    if (!stream || !video) {
       setError('Camera is not ready yet. Please wait or check permissions.');
       return;
     }
@@ -83,7 +138,12 @@ export default function VideoRecorderModal({ isOpen, onClose, onRecorded, title 
 
     try {
       chunksRef.current = [];
-      const recorder = new MediaRecorder(stream, { mimeType });
+      stopRecordingPipeline();
+
+      const pipeline = createCorrectedRecordingStream(stream, video);
+      recordingPipelineRef.current = pipeline;
+
+      const recorder = new MediaRecorder(pipeline.stream, { mimeType });
       mediaRecorderRef.current = recorder;
 
       recorder.ondataavailable = (event) => {
@@ -93,12 +153,13 @@ export default function VideoRecorderModal({ isOpen, onClose, onRecorded, title 
       };
 
       recorder.onstop = async () => {
+        stopRecordingPipeline();
         try {
           const blob = new Blob(chunksRef.current, { type: mimeType });
-          const dataUrl = await blobToDataUrl(blob);
           onRecorded({
             type: 'video',
-            url: dataUrl,
+            blob,
+            url: URL.createObjectURL(blob),
             fileName: `recording-${Date.now()}.webm`,
           });
           stopTracks();
@@ -111,6 +172,7 @@ export default function VideoRecorderModal({ isOpen, onClose, onRecorded, title 
       };
 
       recorder.onerror = () => {
+        stopRecordingPipeline();
         setError('Recording failed. Please try again.');
         setRecording(false);
       };
@@ -119,6 +181,7 @@ export default function VideoRecorderModal({ isOpen, onClose, onRecorded, title 
       setRecording(true);
       setError(null);
     } catch (err) {
+      stopRecordingPipeline();
       setError(getMediaErrorMessage(err));
     }
   };
@@ -178,12 +241,12 @@ export default function VideoRecorderModal({ isOpen, onClose, onRecorded, title 
             ref={webcamRef}
             audio
             muted
-            mirrored
+            mirrored={false}
             screenshotFormat="image/jpeg"
             videoConstraints={VIDEO_CONSTRAINTS}
             onUserMedia={handleUserMedia}
             onUserMediaError={handleUserMediaError}
-            className="h-full w-full object-cover"
+            className="h-full w-full scale-x-[-1] object-cover"
           />
 
           {recording && (
