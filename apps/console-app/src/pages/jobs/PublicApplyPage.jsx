@@ -99,8 +99,12 @@ export default function PublicApplyPage() {
         <ApplicationPreviewFlow job={job} slug={slug} live />
       </main>
 
-      <footer className="shrink-0 border-t border-border py-4 text-center text-xs text-muted">
-        Powered by <span className="font-medium text-heading">Hirekal</span>
+      <footer className="shrink-0 border-t border-border py-4">
+        <div className="flex items-center justify-center gap-1.5 text-xs text-muted">
+          <span>Powered by</span>
+          <img src="/favicon.png" alt="" className="h-3.5 w-3.5 shrink-0" />
+          <span className="font-medium text-heading">Hirekal</span>
+        </div>
       </footer>
     </div>
   );
