@@ -21,6 +21,13 @@ import JobSettingsEmailAutomationPage from '../pages/jobs/JobSettingsEmailAutoma
 import NotificationsPage from '../pages/notifications/NotificationsPage';
 import OrganizationPage from '../pages/organization/OrganizationPage';
 import ProfileSettingsPage from '../pages/profile/ProfileSettingsPage';
+import PricingPlansPage from '../pages/billing/PricingPlansPage';
+import PlanUpgradePage from '../pages/billing/PlanUpgradePage';
+import CheckoutPage from '../pages/billing/CheckoutPage';
+import CheckoutSuccessPage from '../pages/billing/CheckoutSuccessPage';
+import CheckoutFailedPage from '../pages/billing/CheckoutFailedPage';
+import ManageSubscriptionPage from '../pages/billing/ManageSubscriptionPage';
+import InvoicesPage from '../pages/billing/InvoicesPage';
 
 function AppLayout({ children }) {
   return (
@@ -117,6 +124,63 @@ export default function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/billing/plans"
+        element={
+          <ProtectedRoute>
+            <AppLayout><PricingPlansPage /></AppLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/billing/upgrade/:priceId"
+        element={
+          <ProtectedRoute>
+            <AppLayout><PlanUpgradePage /></AppLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/billing/checkout/:priceId"
+        element={
+          <ProtectedRoute>
+            <AppLayout><CheckoutPage /></AppLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/billing/success"
+        element={
+          <ProtectedRoute>
+            <AppLayout><CheckoutSuccessPage /></AppLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/billing/failed"
+        element={
+          <ProtectedRoute>
+            <AppLayout><CheckoutFailedPage /></AppLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/billing/subscription"
+        element={
+          <ProtectedRoute>
+            <AppLayout><ManageSubscriptionPage /></AppLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/billing/invoices"
+        element={
+          <ProtectedRoute>
+            <AppLayout><InvoicesPage /></AppLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route path="/billing" element={<Navigate to="/billing/plans" replace />} />
 
       <Route path="/" element={<HomeRedirect />} />
       <Route path="*" element={<HomeRedirect />} />

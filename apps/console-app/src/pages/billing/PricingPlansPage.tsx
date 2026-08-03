@@ -1,0 +1,292 @@
+/**
+ * @fileoverview Pricing plans page with subscribe, upgrade, and downgrade actions.
+ */
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import PageHeader from '../../components/layout/PageHeader';
+import LoadingSpinner from '../../components/common/LoadingSpinner';
+import Button from '../../components/common/Button';
+import PlanCard from '../../components/billing/PlanCard';
+import BillingSkeleton from '../../components/billing/BillingSkeleton';
+import BillingErrorState from '../../components/billing/BillingErrorState';
+import BillingSummaryCard from '../../components/billing/BillingSummaryCard';
+import SubscriptionStatusBadge from '../../components/billing/SubscriptionStatusBadge';
+import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
+import * as billingService from '../../services/billingService';
+import { persistSubscriptionSession } from '../../utils/billingStorage';
+import {
+  comparePriceTier,
+  getScheduledPlanChangeAt,
+  getScheduledPlanPriceId,
+  isBillableSubscription,
+} from '../../utils/billingFormat';
+import { formatDate } from '../../utils/formatDate';
+import { toUserErrorMessage } from '../../utils/errorMessage';
+import type { BillingPlan, PaymentMethod, Subscription } from '../../types/billing';
+
+/**
+ * Displays catalog plans and handles plan change actions.
+ */
+export default function PricingPlansPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { user } = useAuth();
+  const { showSuccess, showError } = useToast();
+
+  const [plans, setPlans] = useState<BillingPlan[]>([]);
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
+  const [providerId, setProviderId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [actionPriceId, setActionPriceId] = useState<string | null>(null);
+
+  /*
+   * Loads catalog plans, subscription state, and default payment method.
+   */
+  const loadData = useCallback(async () => {
+    try {
+      const provider = await billingService.getDefaultPaymentProvider();
+      setProviderId(provider.id);
+
+      const [catalog, latestSubscription] = await Promise.all([
+        billingService.getBillingPlans(),
+        billingService.getMySubscription(),
+      ]);
+      setPlans(catalog);
+
+      const subscription = isBillableSubscription(latestSubscription)
+        ? latestSubscription
+        : null;
+
+      if (subscription) {
+        setSubscription(subscription);
+        persistSubscriptionSession(
+          subscription.id,
+          subscription.paymentProviderId,
+          subscription.customerId,
+        );
+      } else {
+        setSubscription(null);
+      }
+
+      const methods = await billingService.getPaymentMethods(provider.id);
+      setPaymentMethod(methods.find((method) => method.isDefault) ?? methods[0] ?? null);
+    } catch (error) {
+      throw error;
+    }
+  }, []);
+
+  useEffect(() => {
+    setLoading(true);
+    setError('');
+    loadData()
+      .catch((err) => setError(toUserErrorMessage(err, 'Failed to load pricing plans')))
+      .finally(() => setLoading(false));
+  }, [loadData, location.key]);
+
+  const currentPlan = useMemo(() => {
+    if (!subscription?.priceId) return null;
+    return plans.find((plan) => plan.price.id === subscription.priceId) ?? null;
+  }, [plans, subscription?.priceId]);
+
+  const subscriptionForDisplay = useMemo(() => {
+    if (!subscription || !currentPlan) return subscription;
+    return {
+      ...subscription,
+      price: {
+        ...currentPlan.price,
+        product: currentPlan.product,
+      },
+    };
+  }, [subscription, currentPlan]);
+
+  const currentPriceId = subscription?.priceId ?? null;
+
+  /*
+   * Resolves the CTA label for a plan card based on current subscription tier.
+   */
+  const getActionLabel = useCallback(
+    (plan: BillingPlan): string => {
+      if (!currentPlan?.price) return 'Subscribe';
+      const direction = comparePriceTier(currentPlan.price, plan.price);
+      if (direction === 'upgrade') return 'Upgrade';
+      if (direction === 'downgrade') return 'Downgrade';
+      return 'Subscribe';
+    },
+    [currentPlan],
+  );
+
+  /*
+   * Applies an immediate upgrade or schedules a downgrade through the billing API.
+   */
+  const applyPlanChange = async (plan: BillingPlan) => {
+    if (!subscription || !currentPlan?.price) return;
+
+    setActionPriceId(plan.price.id);
+    try {
+      const direction = comparePriceTier(currentPlan.price, plan.price);
+      let updated: Subscription;
+      if (direction === 'upgrade') {
+        updated = await billingService.upgradeSubscription(subscription.id, plan.price.id);
+        showSuccess('Subscription upgraded successfully');
+      } else if (direction === 'downgrade') {
+        updated = await billingService.downgradeSubscription(subscription.id, plan.price.id);
+        showSuccess('Downgrade scheduled for the next billing cycle');
+      } else {
+        return;
+      }
+      setSubscription(updated);
+      persistSubscriptionSession(updated.id, updated.paymentProviderId, updated.customerId);
+    } catch (err) {
+      showError(err, 'Failed to change plan');
+    } finally {
+      setActionPriceId(null);
+    }
+  };
+
+  /*
+   * Routes subscribe, upgrade preview, or downgrade actions for a plan card.
+   */
+  const handlePlanAction = async (plan: BillingPlan) => {
+    try {
+      if (!providerId) return;
+      if (plan.price.id === currentPriceId) return;
+
+      if (!subscription) {
+        navigate(`/billing/checkout/${plan.price.id}`);
+        return;
+      }
+
+      const activePrice = currentPlan?.price ?? subscription.price;
+      if (!activePrice) return;
+
+      const direction = comparePriceTier(activePrice, plan.price);
+      if (direction === 'upgrade') {
+        navigate(`/billing/upgrade/${plan.price.id}`);
+        return;
+      }
+
+      await applyPlanChange(plan);
+    } catch (err) {
+      showError(err, 'Failed to change plan');
+    }
+  };
+
+  const scheduledPlanPriceId = getScheduledPlanPriceId(subscription);
+  const scheduledPlanChangeAt = getScheduledPlanChangeAt(subscription);
+  const scheduledPlan = useMemo(() => {
+    if (!scheduledPlanPriceId) return null;
+    return plans.find((plan) => plan.price.id === scheduledPlanPriceId) ?? null;
+  }, [plans, scheduledPlanPriceId]);
+
+  const headerDescription = useMemo(() => {
+    if (!subscription) return 'Choose a plan that fits your hiring needs';
+    return 'Compare plans and change your subscription';
+  }, [subscription]);
+
+  if (loading) {
+    return (
+      <div className="mx-auto w-full max-w-6xl">
+        <PageHeader title="Pricing Plans" description="Loading plans…" />
+        <div className="mt-8">
+          <BillingSkeleton rows={3} />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-6xl space-y-8">
+      <PageHeader
+        title="Pricing Plans"
+        description={headerDescription}
+        breadcrumbs={[
+          { to: '/jobs', label: 'Jobs' },
+          { label: 'Billing' },
+          { label: 'Plans' },
+        ]}
+        actions={
+          subscription ? (
+            <SubscriptionStatusBadge
+              status={subscription.subscriptionStatus}
+              cancelAtPeriodEnd={subscription.cancelAtPeriodEnd}
+            />
+          ) : null
+        }
+      />
+
+      {error && <BillingErrorState message={error} onRetry={() => loadData()} />}
+
+      {subscription && (
+        <section className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-heading">Your subscription</h2>
+              <p className="mt-1 text-sm text-muted">
+                Review billing details and manage your current plan
+              </p>
+            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => navigate('/billing/subscription')}
+            >
+              Manage subscription
+            </Button>
+          </div>
+          <BillingSummaryCard
+            subscription={subscriptionForDisplay}
+            paymentMethod={paymentMethod}
+            scheduledPlan={scheduledPlan}
+            scheduledPlanChangeAt={scheduledPlan ? scheduledPlanChangeAt : null}
+          />
+        </section>
+      )}
+
+      {plans.length === 0 && !error ? (
+        <BillingErrorState message="No pricing plans are available yet." />
+      ) : (
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {plans.map((plan) => {
+            const isCurrent = plan.price.id === currentPriceId;
+            const isScheduled = Boolean(
+              scheduledPlanPriceId && plan.price.id === scheduledPlanPriceId,
+            );
+            let scheduleNote: string | null = null;
+            if (isCurrent && scheduledPlan && scheduledPlanChangeAt) {
+              scheduleNote = `Active until ${formatDate(scheduledPlanChangeAt)}, then switching to ${scheduledPlan.product.name}.`;
+            } else if (isScheduled && scheduledPlanChangeAt) {
+              scheduleNote = `Starts on ${formatDate(scheduledPlanChangeAt)}. You keep your current plan until then.`;
+            }
+
+            return (
+              <PlanCard
+                key={plan.price.id}
+                plan={plan}
+                isCurrent={isCurrent}
+                isScheduled={isScheduled}
+                scheduleNote={scheduleNote}
+                actionLabel={getActionLabel(plan)}
+                actionDisabled={
+                  isCurrent ||
+                  isScheduled ||
+                  (Boolean(actionPriceId) && actionPriceId !== plan.price.id)
+                }
+                actionLoading={actionPriceId === plan.price.id}
+                onAction={() => handlePlanAction(plan)}
+              />
+            );
+          })}
+        </div>
+      )}
+
+      {!subscription && !loading && plans.length > 0 && (
+        <p className="text-center text-sm text-muted">
+          Signed in as {user?.email}. Select a plan to continue to checkout.
+        </p>
+      )}
+    </div>
+  );
+}

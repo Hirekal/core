@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression, SchedulerRegistry } from '@nestjs/schedule';
+import { CronJob } from 'cron';
 import { WebhookDeliveryService } from '../application/webhook-delivery/webhook-delivery.service';
 import { CronJobName } from './enums/cron-job-name.enum';
 
@@ -42,7 +43,7 @@ export class CronService implements OnModuleInit {
       const jobs = this.schedulerRegistry.getCronJobs();
       const isCronServer = this.isCronServerEnabled();
 
-      jobs.forEach((job, key) => {
+      jobs.forEach((job: CronJob, key: string) => {
         if (isCronServer) {
           void job.start();
           this.logger.log(`Cron job enabled: ${key}`);
