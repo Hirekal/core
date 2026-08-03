@@ -101,7 +101,16 @@ function AuthLayout({ title, subtitle, children }) {
     <div className="flex min-h-screen items-center justify-center bg-surface px-4">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-accent text-white text-xl font-bold">H</div>
+          <img
+            src="/logo-light.png"
+            alt="Hirekal"
+            className="mx-auto mb-4 h-10 w-auto dark:hidden"
+          />
+          <img
+            src="/logo-dark.png"
+            alt="Hirekal"
+            className="mx-auto mb-4 hidden h-10 w-auto dark:block"
+          />
           <h1 className="text-2xl font-semibold tracking-tight text-heading">{title}</h1>
           <p className="mt-1 text-sm text-muted">{subtitle}</p>
         </div>

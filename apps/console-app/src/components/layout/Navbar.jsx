@@ -12,11 +12,17 @@ export default function Navbar() {
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
         {/* Left: logo + brand name + Jobs */}
         <div className="flex items-center gap-8">
-          <NavLink to="/jobs" className="flex items-center gap-2.5 shrink-0">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-white font-bold text-sm">
-              H
-            </div>
-            <span className="text-lg font-semibold text-heading">Hirekal</span>
+          <NavLink to="/jobs" className="flex items-center shrink-0">
+            <img
+              src="/logo-light.png"
+              alt="Hirekal"
+              className="h-8 w-auto dark:hidden"
+            />
+            <img
+              src="/logo-dark.png"
+              alt="Hirekal"
+              className="hidden h-8 w-auto dark:block"
+            />
           </NavLink>
 
           <nav className="hidden md:flex items-center">
