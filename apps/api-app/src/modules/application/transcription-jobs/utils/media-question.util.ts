@@ -6,14 +6,14 @@ import { JobQuestion } from '../../../job/job-questions/entities/job-question.en
  * @returns True if the question is a media question, false otherwise.
  */
 const MEDIA_QUESTION_TYPES = new Set([
-    'VIDEO',
-    'video',
-    'AUDIO',
-    'audio',
-    'SCREEN_RECORDING',
-    'screen-recording',
-    'FILE',
-    'file',
+  'VIDEO',
+  'video',
+  'AUDIO',
+  'audio',
+  'SCREEN_RECORDING',
+  'screen-recording',
+  'FILE',
+  'file',
 ]);
 
 /**
@@ -22,10 +22,10 @@ const MEDIA_QUESTION_TYPES = new Set([
  * @returns True if the question is a media question, false otherwise.
  */
 export function isMediaQuestion(question: JobQuestion): boolean {
-    if (question.builtIn) return true;
-    const type = String(question.type);
-    return (
-        MEDIA_QUESTION_TYPES.has(type) ||
-        MEDIA_QUESTION_TYPES.has(type.toLowerCase())
-    );
+  if (question.builtIn) return true;
+  const type = String(question.type);
+  return (
+    MEDIA_QUESTION_TYPES.has(type) ||
+    MEDIA_QUESTION_TYPES.has(type.toLowerCase())
+  );
 }

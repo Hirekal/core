@@ -8,13 +8,13 @@ import { TranscriptionJobRepository } from './repositories/transcription-job.rep
 import { TranscriptionJobsService } from './transcription-jobs.service';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([TranscriptionJob]),
-        CloudStorageModule,
-        ApplicationAnswersModule,
-    ],
-    controllers: [MediaWorkerCallbackController],
-    providers: [TranscriptionJobsService, TranscriptionJobRepository],
-    exports: [TranscriptionJobsService, TranscriptionJobRepository],
+  imports: [
+    TypeOrmModule.forFeature([TranscriptionJob]),
+    CloudStorageModule,
+    ApplicationAnswersModule,
+  ],
+  controllers: [MediaWorkerCallbackController],
+  providers: [TranscriptionJobsService, TranscriptionJobRepository],
+  exports: [TranscriptionJobsService, TranscriptionJobRepository],
 })
-export class TranscriptionJobsModule { }
+export class TranscriptionJobsModule {}

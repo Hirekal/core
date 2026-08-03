@@ -23,28 +23,28 @@ import { JobSettingsModule } from './job-settings/job-settings.module';
  * Owns core job APIs and nests questions, fields, stages, and settings.
  */
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([
-            Job,
-            JobQuestion,
-            JobApplicationField,
-            JobPipelineStage,
-            JobSettings,
-        ]),
-        forwardRef(() => JobQuestionsModule),
-        forwardRef(() => JobApplicationFieldsModule),
-        forwardRef(() => JobPipelineStagesModule),
-        forwardRef(() => JobSettingsModule),
-    ],
-    controllers: [JobController, PublicJobController],
-    providers: [
-        JobService,
-        JobRepository,
-        JobQuestionRepository,
-        JobApplicationFieldRepository,
-        JobPipelineStageRepository,
-        JobSettingsRepository,
-    ],
-    exports: [JobService, JobRepository, JobPipelineStageRepository],
+  imports: [
+    TypeOrmModule.forFeature([
+      Job,
+      JobQuestion,
+      JobApplicationField,
+      JobPipelineStage,
+      JobSettings,
+    ]),
+    forwardRef(() => JobQuestionsModule),
+    forwardRef(() => JobApplicationFieldsModule),
+    forwardRef(() => JobPipelineStagesModule),
+    forwardRef(() => JobSettingsModule),
+  ],
+  controllers: [JobController, PublicJobController],
+  providers: [
+    JobService,
+    JobRepository,
+    JobQuestionRepository,
+    JobApplicationFieldRepository,
+    JobPipelineStageRepository,
+    JobSettingsRepository,
+  ],
+  exports: [JobService, JobRepository, JobPipelineStageRepository],
 })
-export class JobModule { }
+export class JobModule {}

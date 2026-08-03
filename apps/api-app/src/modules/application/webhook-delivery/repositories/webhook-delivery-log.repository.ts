@@ -6,27 +6,27 @@ import { WebhookDeliveryLog } from '../../webhook-delivery-logs/entities/webhook
 
 @Injectable()
 export class WebhookDeliveryLogRepository extends BaseRepository<WebhookDeliveryLog> {
-    constructor(
-        @InjectRepository(WebhookDeliveryLog)
-        repository: Repository<WebhookDeliveryLog>,
-    ) {
-        super(repository);
-    }
+  constructor(
+    @InjectRepository(WebhookDeliveryLog)
+    repository: Repository<WebhookDeliveryLog>,
+  ) {
+    super(repository);
+  }
 
-    /**
-     * Finds recent delivery attempts for a job, newest first.
-     * @param jobId - The ID of the job.
-     * @param limit - The maximum number of logs to return.
-     * @returns The recent delivery attempts for the job.
-     */
-    async findRecentByJobId(
-        jobId: string,
-        limit = 50,
-    ): Promise<WebhookDeliveryLog[]> {
-        return this.repository.find({
-            where: { jobId },
-            order: { createdAt: 'DESC' },
-            take: limit,
-        });
-    }
+  /**
+   * Finds recent delivery attempts for a job, newest first.
+   * @param jobId - The ID of the job.
+   * @param limit - The maximum number of logs to return.
+   * @returns The recent delivery attempts for the job.
+   */
+  async findRecentByJobId(
+    jobId: string,
+    limit = 50,
+  ): Promise<WebhookDeliveryLog[]> {
+    return this.repository.find({
+      where: { jobId },
+      order: { createdAt: 'DESC' },
+      take: limit,
+    });
+  }
 }

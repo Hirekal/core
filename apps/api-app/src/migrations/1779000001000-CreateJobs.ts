@@ -24,7 +24,12 @@ export class CreateJobs1779000001000 implements MigrationInterface {
             length: '255',
             isNullable: true,
           },
-          { name: 'company', type: 'varchar', length: '255', isNullable: false },
+          {
+            name: 'company',
+            type: 'varchar',
+            length: '255',
+            isNullable: false,
+          },
           {
             name: 'companyWebsite',
             type: 'varchar',

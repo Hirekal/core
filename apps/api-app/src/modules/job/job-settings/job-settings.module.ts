@@ -8,12 +8,12 @@ import { JobSettingsService } from './job-settings.service';
 import { JobSettingsRepository } from './repositories/job-settings.repository';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([JobSettings, WebhookDeliveryLog]),
-        forwardRef(() => JobModule),
-    ],
-    controllers: [JobSettingsController],
-    providers: [JobSettingsService, JobSettingsRepository],
-    exports: [JobSettingsService, JobSettingsRepository],
+  imports: [
+    TypeOrmModule.forFeature([JobSettings, WebhookDeliveryLog]),
+    forwardRef(() => JobModule),
+  ],
+  controllers: [JobSettingsController],
+  providers: [JobSettingsService, JobSettingsRepository],
+  exports: [JobSettingsService, JobSettingsRepository],
 })
-export class JobSettingsModule { }
+export class JobSettingsModule {}

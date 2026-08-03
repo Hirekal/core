@@ -1,4 +1,4 @@
 export enum NotificationType {
-    APPLICATION = 'application',
-    STAGE = 'stage',
+  APPLICATION = 'application',
+  STAGE = 'stage',
 }
