@@ -1,9 +1,8 @@
 import { NavLink } from 'react-router-dom';
-import { Settings, Heart, Layers, Mail, Webhook } from 'lucide-react';
+import { Heart, Layers, Mail, Webhook } from 'lucide-react';
 import SidePanel, { SidePanelItem } from '../common/SidePanel';
 
 const settingsNavItems = [
-  { to: 'general', label: 'General Settings', description: 'Labels & branding', icon: Settings },
   { to: 'thank-you', label: 'Thank You Page', description: 'Post-submit message', icon: Heart },
   { to: 'stages', label: 'Custom Stages', description: 'Pipeline stages', icon: Layers },
   { to: 'email-automation', label: 'Email Automation', description: 'Automated emails', icon: Mail },

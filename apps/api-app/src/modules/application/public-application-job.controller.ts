@@ -1,7 +1,7 @@
 import { Body, Controller, Logger, Param, Post } from '@nestjs/common';
 import { Public } from '../auth/common/decorators/public.decorator';
 import { toErrorMessage } from '../../common/utils/error.util';
-import { StartApplicationDto } from './dto/application.dto';
+import { StartApplicationDto, TrackJobViewDto } from './dto/application.dto';
 import { ApplicationService } from './application.service';
 
 @Controller('public/jobs')
@@ -27,6 +27,31 @@ export class PublicApplicationJobController {
         } catch (error) {
             this.logger.error(
                 `Start application for ${slug} failed: ${toErrorMessage(error)}`,
+            );
+            throw error;
+        }
+    }
+
+    /**
+     * Records a page view for analytics (visitor count + unique viewers).
+     * @param slug - The slug of the job.
+     * @param dto - The data for the track view.
+     * @returns The tracked view.
+     */
+    @Public()
+    @Post(':slug/view')
+    async trackView(
+        @Param('slug') slug: string,
+        @Body() dto: TrackJobViewDto,
+    ) {
+        try {
+            return await this.applicationService.trackPageView(
+                slug,
+                dto.sessionId,
+            );
+        } catch (error) {
+            this.logger.error(
+                `Track view for ${slug} failed: ${toErrorMessage(error)}`,
             );
             throw error;
         }

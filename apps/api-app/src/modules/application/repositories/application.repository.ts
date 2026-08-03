@@ -48,6 +48,24 @@ export class ApplicationRepository extends BaseRepository<Application> {
     }
 
     /**
+     * Finds an application with relations needed to build a webhook payload.
+     * @param id - The ID of the application.
+     * @returns The application for the given ID with its webhook relations.
+     */
+    async findByIdWithWebhookRelations(
+        id: string,
+    ): Promise<Application | null> {
+        return this.repository.findOne({
+            where: { id, deletedAt: IsNull() },
+            relations: {
+                fieldValues: true,
+                answers: { question: true },
+                stage: true,
+            },
+        });
+    }
+
+    /**
      * Finds an application by ID with its token.
      * @param id - The ID of the application.
      * @returns The application for the given ID with its token.

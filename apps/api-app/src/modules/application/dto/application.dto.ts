@@ -33,6 +33,12 @@ class StartApplicationFieldsDto {
     custom?: Record<string, string>;
 }
 
+export class TrackJobViewDto {
+    @IsString()
+    @IsNotEmpty()
+    sessionId!: string;
+}
+
 export class StartApplicationDto {
     @IsOptional()
     @IsString()

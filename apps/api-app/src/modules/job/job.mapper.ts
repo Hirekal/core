@@ -89,6 +89,7 @@ export function toPublicJobResponse(
         candidateIntroTitle: job.candidateIntroTitle,
         candidateInstructions: job.candidateInstructions,
         applicationSectionTitle: job.applicationSectionTitle,
+        applyButtonLabel: job.applyButtonLabel ?? 'Start now',
         introMedia: job.introMediaStorageKey
             ? {
                 type: job.introMediaType,
@@ -104,7 +105,6 @@ export function toPublicJobResponse(
         applicationFields,
         settings: settings
             ? {
-                general: settings.general,
                 thankYouPage: settings.thankYouPage,
             }
             : null,

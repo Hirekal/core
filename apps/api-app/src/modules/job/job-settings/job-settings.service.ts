@@ -20,6 +20,10 @@ import {
 } from './dto/update-job-settings.dto';
 import { JobSettings } from './entities/job-settings.entity';
 import { JobSettingsRepository } from './repositories/job-settings.repository';
+import { WebhookDeliveryLog } from '../../application/webhook-delivery-logs/entities/webhook-delivery-log.entity';
+import { toWebhookLogResponse } from '../../application/webhook-delivery/webhook.mapper';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 
 @Injectable()
 export class JobSettingsService {
@@ -29,6 +33,8 @@ export class JobSettingsService {
         private readonly settingsRepository: JobSettingsRepository,
         private readonly jobService: JobService,
         private readonly r2Service: R2Service,
+        @InjectRepository(WebhookDeliveryLog)
+        private readonly webhookLogRepository: Repository<WebhookDeliveryLog>,
     ) { }
 
     /**
@@ -40,14 +46,17 @@ export class JobSettingsService {
     async getSettings(
         jobId: string,
         organizationId: string,
-    ): Promise<JobSettings> {
+    ): Promise<JobSettings & { webhookLogs: Record<string, unknown>[] }> {
         try {
             await this.jobService.assertJobAccess(jobId, organizationId);
             const settings = await this.settingsRepository.findByJobId(jobId);
             if (!settings) {
                 throw new NotFoundException(SettingsErrors.NOT_FOUND(jobId));
             }
-            return settings;
+
+            const webhookLogs = await this.fetchWebhookLogs(jobId);
+
+            return Object.assign(settings, { webhookLogs });
         } catch (error) {
             if (error instanceof HttpException) throw error;
             this.logger.error(
@@ -138,7 +147,49 @@ export class JobSettingsService {
     }
 
     /**
-     * Presigned URL for direct browser upload of thank-you page media.
+     * Finds recent webhook delivery attempts for a job.
+     * @param jobId - The ID of the job.
+     * @param organizationId - The ID of the organization.
+     * @returns The webhook delivery logs.
+     */
+    async getWebhookLogs(
+        jobId: string,
+        organizationId: string,
+    ): Promise<Record<string, unknown>[]> {
+        try {
+            await this.jobService.assertJobAccess(jobId, organizationId);
+            return this.fetchWebhookLogs(jobId);
+        } catch (error) {
+            if (error instanceof HttpException) throw error;
+            this.logger.error(
+                `getWebhookLogs failed jobId=${jobId}: ${(error as Error).message}`,
+            );
+            throw new InternalServerErrorException(SettingsErrors.FAILED_TO_GET);
+        }
+    }
+
+    /**
+     * Finds recent webhook delivery attempts for a job.
+     * @param jobId - The ID of the job.
+     * @returns The webhook delivery logs.
+     */
+    private async fetchWebhookLogs(
+        jobId: string,
+    ): Promise<Record<string, unknown>[]> {
+        const logs = await this.webhookLogRepository.find({
+            where: { jobId },
+            order: { createdAt: 'DESC' },
+            take: 50,
+        });
+        return logs.map(toWebhookLogResponse);
+    }
+
+    /**
+     * Presigns a URL for direct browser upload of thank-you page media.
+     * @param jobId - The ID of the job.
+     * @param organizationId - The ID of the organization.
+     * @param dto - The data for the presign upload.
+     * @returns The presigned URL.
      */
     async presignThankYouMediaUpload(
         jobId: string,

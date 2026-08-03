@@ -141,6 +141,11 @@ export class CreateJobDto {
     applicationSectionTitle?: string;
 
     @IsOptional()
+    @IsString()
+    @MaxLength(100)
+    applyButtonLabel?: string;
+
+    @IsOptional()
     @ValidateNested()
     @Type(() => IntroMediaDto)
     introMedia?: IntroMediaDto;
@@ -281,6 +286,11 @@ export class UpdateJobDto {
     @IsString()
     @MaxLength(255)
     applicationSectionTitle?: string;
+
+    @IsOptional()
+    @IsString()
+    @MaxLength(100)
+    applyButtonLabel?: string;
 
     @IsOptional()
     @ValidateNested()

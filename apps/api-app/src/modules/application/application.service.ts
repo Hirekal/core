@@ -38,6 +38,9 @@ import { JobAnalyticsEventRepository } from './job-analytics-events/repositories
 import { ApplicationRepository } from './repositories/application.repository';
 import { generateApplicationToken } from './utils/application-token.util';
 import { TranscriptionJobsService } from './transcription-jobs/transcription-jobs.service';
+import { WebhookDeliveryService } from './webhook-delivery/webhook-delivery.service';
+import { WebhookDeliveryLogRepository } from './webhook-delivery/repositories/webhook-delivery-log.repository';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class ApplicationService {
@@ -52,6 +55,8 @@ export class ApplicationService {
         private readonly stageRepository: JobPipelineStageRepository,
         private readonly publicAccessService: ApplicationPublicAccessService,
         private readonly transcriptionJobsService: TranscriptionJobsService,
+        private readonly webhookDeliveryService: WebhookDeliveryService,
+        private readonly notificationsService: NotificationsService,
     ) { }
 
     /**
@@ -120,6 +125,55 @@ export class ApplicationService {
             );
             throw new InternalServerErrorException(
                 ApplicationErrors.FAILED_TO_START,
+            );
+        }
+    }
+
+    /**
+     * Records a public job page view.
+     * - visitorCount: every page load
+     * - viewers: first visit per browser session (sessionId)
+     */
+    async trackPageView(
+        slug: string,
+        sessionId: string,
+    ): Promise<{ tracked: true }> {
+        try {
+            const job = await this.jobRepository.findPublicBySlug(slug);
+            if (!job) {
+                throw new NotFoundException(ApplicationErrors.JOB_NOT_ACCEPTING);
+            }
+
+            await this.jobRepository.incrementCounter(job.id, 'visitorCount');
+            await this.analyticsRepository.record(
+                job.id,
+                JobAnalyticsEventType.PAGE_VIEW,
+                sessionId,
+            );
+
+            const isReturningViewer = await this.analyticsRepository.hasSessionEvent(
+                job.id,
+                JobAnalyticsEventType.UNIQUE_VIEW,
+                sessionId,
+            );
+
+            if (!isReturningViewer) {
+                await this.analyticsRepository.record(
+                    job.id,
+                    JobAnalyticsEventType.UNIQUE_VIEW,
+                    sessionId,
+                );
+                await this.jobRepository.incrementCounter(job.id, 'viewers');
+            }
+
+            return { tracked: true };
+        } catch (error) {
+            if (error instanceof HttpException) throw error;
+            this.logger.error(
+                `trackPageView failed slug=${slug}: ${(error as Error).message}`,
+            );
+            throw new InternalServerErrorException(
+                ApplicationErrors.FAILED_TO_TRACK_VIEW,
             );
         }
     }
@@ -243,6 +297,14 @@ export class ApplicationService {
             );
 
             this.scheduleTranscription(application, job);
+            this.webhookDeliveryService.dispatchNewApplication(job.id, id);
+            this.notificationsService.notifyNewApplication({
+                organizationId: job.organizationId,
+                jobId: job.id,
+                jobTitle: job.title,
+                applicationId: id,
+                candidateName: this.formatCandidateName(application),
+            });
 
             return { id, status: ApplicationStatus.SUBMITTED, submittedAt };
         } catch (error) {
@@ -371,6 +433,7 @@ export class ApplicationService {
             }
 
             const fromStageId = application.stageId;
+            const fromStage = stages.find((s) => s.id === fromStageId);
             await this.applicationRepository.update(id, {
                 stageId: dto.stageId,
                 lastActivityAt: new Date(),
@@ -381,6 +444,29 @@ export class ApplicationService {
                 toStageId: dto.stageId,
                 changedById: userId,
             });
+
+            this.webhookDeliveryService.dispatchStageChange(
+                application.jobId,
+                id,
+                fromStageId,
+                dto.stageId,
+            );
+
+            const job = await this.jobRepository.findByIdForOrg(
+                application.jobId,
+                organizationId,
+            );
+            if (job) {
+                this.notificationsService.notifyStageChange({
+                    organizationId,
+                    jobId: job.id,
+                    jobTitle: job.title,
+                    applicationId: id,
+                    candidateName: this.formatCandidateName(application),
+                    fromStageName: fromStage?.name ?? 'Previous stage',
+                    toStageName: target.name,
+                });
+            }
 
             return { id, stageId: dto.stageId, fromStageId };
         } catch (error) {
@@ -573,6 +659,9 @@ export class ApplicationService {
 
     /**
      * Starts AI transcription in the background after a successful submit.
+     * @param application - The application to schedule transcription for.
+     * @param job - The job to schedule transcription for.
+     * @returns The void.
      */
     private scheduleTranscription(
         application: Application,
@@ -592,6 +681,19 @@ export class ApplicationService {
                     `Transcription enqueue failed applicationId=${application.id}: ${(error as Error).message}`,
                 );
             });
+    }
+
+    /**
+     * Formats the candidate name.
+     * @param application - The application to format the name from.
+     * @returns The formatted candidate name.
+     */
+    private formatCandidateName(application: Application): string {
+        const name = [application.firstName, application.lastName]
+            .filter(Boolean)
+            .join(' ')
+            .trim();
+        return name || application.email?.trim() || 'A candidate';
     }
 
     /**

@@ -63,6 +63,14 @@ export class Job extends BaseEntity {
     })
     applicationSectionTitle!: string | null;
 
+    @Column({
+        type: 'varchar',
+        length: 100,
+        nullable: true,
+        default: 'Start now',
+    })
+    applyButtonLabel!: string | null;
+
     @Column({ type: 'varchar', length: 50, nullable: true })
     introMediaType!: IntroMediaType | null;
 

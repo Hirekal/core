@@ -171,6 +171,8 @@ export class JobService {
                             applicationSectionTitle:
                                 dto.applicationSectionTitle ??
                                 'Complete your application',
+                            applyButtonLabel:
+                                dto.applyButtonLabel?.trim() || 'Start now',
                             introMediaType: dto.introMedia?.type ?? null,
                             introMediaUrl: dto.introMedia?.url ?? null,
                             introMediaStorageKey: dto.introMedia?.storageKey ?? null,
@@ -381,6 +383,9 @@ export class JobService {
                 updateData.candidateInstructions = dto.candidateInstructions;
             if (dto.applicationSectionTitle !== undefined)
                 updateData.applicationSectionTitle = dto.applicationSectionTitle;
+            if (dto.applyButtonLabel !== undefined)
+                updateData.applyButtonLabel =
+                    dto.applyButtonLabel.trim() || 'Start now';
             if (dto.questionRetakes !== undefined)
                 updateData.questionRetakes = dto.questionRetakes;
             if (dto.transcriptionLanguage !== undefined)
@@ -610,6 +615,7 @@ export class JobService {
                                 candidateInstructions: original.candidateInstructions,
                                 applicationSectionTitle:
                                     original.applicationSectionTitle,
+                                applyButtonLabel: original.applyButtonLabel,
                                 introMediaType: introMediaStorageKey
                                     ? introMediaType
                                     : null,
@@ -1109,13 +1115,18 @@ export class JobService {
         if (!fields) return;
 
         const repo = manager.getRepository(JobApplicationField);
-        const existing = await this.fieldRepository.findByJobId(jobId);
+        const existing = await repo.find({
+            where: { jobId },
+            order: { sortOrder: 'ASC' },
+        });
         const toInsert: DeepPartial<JobApplicationField>[] = [];
+        const keptIds = new Set<string>();
 
         for (const f of fields) {
             if (f.id) {
                 const row = existing.find((e) => e.id === f.id);
                 if (!row) continue;
+                keptIds.add(row.id);
                 if (row.builtIn) {
                     await repo.update(row.id, {
                         label: f.label ?? row.label,
@@ -1141,6 +1152,7 @@ export class JobService {
                     (e) => e.builtIn && e.fieldKey === f.fieldKey,
                 );
                 if (row) {
+                    keptIds.add(row.id);
                     await repo.update(row.id, {
                         label: f.label ?? row.label,
                         required: f.required ?? row.required,
@@ -1167,16 +1179,21 @@ export class JobService {
         }
 
         if (toInsert.length) {
-            await repo.save(toInsert);
+            const inserted = await repo.save(toInsert);
+            for (const row of inserted) {
+                keptIds.add(row.id);
+            }
         }
 
-        const duplicateRows = existing.filter(
-            (row) =>
-                !row.builtIn &&
-                isBuiltInApplicationFieldKey(row.fieldKey),
-        );
-        for (const row of duplicateRows) {
-            await repo.delete(row.id);
+        for (const row of existing) {
+            if (row.builtIn) continue;
+            if (isBuiltInApplicationFieldKey(row.fieldKey)) {
+                await repo.delete(row.id);
+                continue;
+            }
+            if (!keptIds.has(row.id)) {
+                await repo.delete(row.id);
+            }
         }
     }
 }

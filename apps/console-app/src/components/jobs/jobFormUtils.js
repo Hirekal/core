@@ -38,6 +38,7 @@ Important: Please record the video interview using the same email address you us
 Let's get started! 🎥`;
 
 export const DEFAULT_APPLICATION_SECTION_TITLE = 'Complete your application';
+export const DEFAULT_APPLY_BUTTON_LABEL = 'Start now';
 
 export function normalizeQuestions(questions = []) {
   const standard = questions.filter(
@@ -64,9 +65,14 @@ function dedupeApplicationFields(fields) {
   const indexByKey = new Map();
 
   for (const field of fields) {
-    const dedupeKey = field.builtIn
-      ? field.fieldKey || field.id
-      : field.apiId || field.id;
+    let dedupeKey;
+    if (field.builtIn) {
+      dedupeKey = field.fieldKey || field.id;
+    } else {
+      const label = (field.label || '').trim().toLowerCase();
+      const type = field.type || 'text';
+      dedupeKey = label ? `custom:${type}:${label}` : field.apiId || field.id;
+    }
 
     if (!dedupeKey) {
       result.push(field);
@@ -83,6 +89,10 @@ function dedupeApplicationFields(fields) {
     const existing = result[existingIndex];
     if (field.builtIn && !existing.builtIn) {
       result[existingIndex] = field;
+    } else if (!field.builtIn && !existing.builtIn) {
+      if (field.apiId && (!existing.apiId || field.apiId >= existing.apiId)) {
+        result[existingIndex] = field;
+      }
     }
   }
 

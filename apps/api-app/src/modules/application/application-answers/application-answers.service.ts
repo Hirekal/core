@@ -18,6 +18,12 @@ import {
     validateAnswerVideoFile,
 } from '../utils/application-media.util';
 import { ApplicationAnswerRepository } from './repositories/application-answer.repository';
+import {
+    canReplaceVideoAnswer,
+    getMaxRetakes,
+    getRetakesRemaining,
+    hasExistingVideoAnswer,
+} from '../../job/utils/question-retakes.util';
 
 @Injectable()
 export class ApplicationAnswersService {
@@ -110,6 +116,9 @@ export class ApplicationAnswersService {
                 throw new BadRequestException(ApplicationErrors.INVALID_QUESTION);
             }
 
+            const existing = await this.answerRepository.findOne(id, questionId);
+            this.assertVideoRetakeAllowed(application.job.questionRetakes, existing);
+
             validateAnswerVideoFile(dto.contentType, dto.size);
             const storageKey = buildApplicationAnswerMediaKey(
                 application.organizationId,
@@ -176,6 +185,12 @@ export class ApplicationAnswersService {
             validateAnswerVideoFile(dto.contentType, 1);
 
             const existing = await this.answerRepository.findOne(id, questionId);
+            this.assertVideoRetakeAllowed(application.job.questionRetakes, existing);
+
+            const hadVideo = hasExistingVideoAnswer(existing);
+            const nextRetakeCount = hadVideo
+                ? (existing?.retakeCount ?? 0) + 1
+                : 0;
             const url = this.r2Service.getPublicUrl(dto.storageKey);
 
             await this.answerRepository.upsertVideo(id, questionId, {
@@ -183,6 +198,7 @@ export class ApplicationAnswersService {
                 mediaUrl: url,
                 mediaStorageKey: dto.storageKey,
                 mediaFileName: dto.fileName,
+                retakeCount: nextRetakeCount,
             });
 
             if (
@@ -196,11 +212,19 @@ export class ApplicationAnswersService {
                 lastActivityAt: new Date(),
             });
 
+            const maxRetakes = getMaxRetakes(application.job.questionRetakes);
+
             return {
                 questionId,
                 mediaUrl: url,
                 storageKey: dto.storageKey,
                 fileName: dto.fileName,
+                retakeCount: nextRetakeCount,
+                retakesRemaining: getRetakesRemaining(
+                    maxRetakes,
+                    nextRetakeCount,
+                    true,
+                ),
             };
         } catch (error) {
             if (error instanceof HttpException) throw error;
@@ -210,6 +234,29 @@ export class ApplicationAnswersService {
             throw new InternalServerErrorException(
                 ApplicationErrors.FAILED_TO_CONFIRM_VIDEO,
             );
+        }
+    }
+
+    /**
+     * Asserts that a video retake is allowed.
+     * @param questionRetakes - The question retakes.
+     * @param existing - The existing answer.
+     * @returns The assert video retake allowed.
+     */
+    private assertVideoRetakeAllowed(
+        questionRetakes: string | undefined,
+        existing: Awaited<ReturnType<ApplicationAnswerRepository['findOne']>>,
+    ): void {
+        const maxRetakes = getMaxRetakes(questionRetakes);
+        const hadVideo = hasExistingVideoAnswer(existing);
+        if (
+            !canReplaceVideoAnswer(
+                maxRetakes,
+                existing?.retakeCount ?? 0,
+                hadVideo,
+            )
+        ) {
+            throw new BadRequestException(ApplicationErrors.RETAKE_LIMIT_REACHED);
         }
     }
 }

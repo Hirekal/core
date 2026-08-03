@@ -31,6 +31,9 @@ export class ApplicationAnswer {
     @Column({ type: 'int', nullable: true })
     mediaDurationSeconds!: number | null;
 
+    @Column({ type: 'int', default: 0 })
+    retakeCount!: number;
+
     @Column({ type: 'timestamptz', default: () => 'now()' })
     createdAt!: Date;
 

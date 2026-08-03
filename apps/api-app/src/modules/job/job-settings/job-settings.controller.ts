@@ -122,6 +122,27 @@ export class JobSettingsController {
     }
 
     /**
+     * Recent webhook delivery attempts for a job.
+     * @param jobId - The ID of the job.
+     * @param organizationId - The ID of the organization.
+     * @returns The webhook delivery logs.
+     */
+    @Get('webhook-logs')
+    async getWebhookLogs(
+        @Param('jobId', ParseUUIDPipe) jobId: string,
+        @CurrentUser('organizationId') organizationId: string,
+    ) {
+        try {
+            return await this.settingsService.getWebhookLogs(jobId, organizationId);
+        } catch (error) {
+            this.logger.error(
+                `Get webhook logs for job ${jobId} failed: ${toErrorMessage(error)}`,
+            );
+            throw error;
+        }
+    }
+
+    /**
      * Patch the webhook settings for a job.
      * @param jobId 
      * @param organizationId 

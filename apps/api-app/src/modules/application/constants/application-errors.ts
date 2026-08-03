@@ -5,6 +5,7 @@ export const ApplicationErrors = {
     ALREADY_SUBMITTED: 'Application has already been submitted',
     NOT_IN_PROGRESS: 'Application is not in progress',
     FAILED_TO_START: 'Failed to start application',
+    FAILED_TO_TRACK_VIEW: 'Failed to track job page view',
     FAILED_TO_UPDATE: 'Failed to update application',
     FAILED_TO_SUBMIT: 'Failed to submit application',
     FAILED_TO_LIST: 'Failed to list applications',
@@ -23,4 +24,5 @@ export const ApplicationErrors = {
     INVALID_FIELD: 'Invalid application field for this job',
     INVALID_STAGE: 'Invalid pipeline stage for this job',
     INVALID_RATING: 'Rating must be between 1 and 5',
+    RETAKE_LIMIT_REACHED: 'Retake limit reached for this question',
 } as const;

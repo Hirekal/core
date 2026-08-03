@@ -2,6 +2,8 @@ import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CloudStorageModule } from '../cloud-storage/cloud-storage.module';
 import { JobModule } from '../job/job.module';
+import { JobSettingsModule } from '../job/job-settings/job-settings.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { ApplicationController } from './application.controller';
 import { JobApplicationsController } from './job-applications.controller';
 import { PublicApplicationController } from './public-application.controller';
@@ -23,6 +25,8 @@ import { ApplicationRepository } from './repositories/application.repository';
 import { WebhookDeliveryLog } from './webhook-delivery-logs/entities/webhook-delivery-log.entity';
 import { TranscriptionJobsModule } from './transcription-jobs/transcription-jobs.module';
 import { TranscriptionJob } from './transcription-jobs/entities/transcription-job.entity';
+import { WebhookDeliveryService } from './webhook-delivery/webhook-delivery.service';
+import { WebhookDeliveryLogRepository } from './webhook-delivery/repositories/webhook-delivery-log.repository';
 
 @Module({
     imports: [
@@ -38,6 +42,8 @@ import { TranscriptionJob } from './transcription-jobs/entities/transcription-jo
         ]),
         CloudStorageModule,
         JobModule,
+        JobSettingsModule,
+        NotificationsModule,
         forwardRef(() => ApplicationAnswersModule),
         forwardRef(() => ApplicationNotesModule),
         TranscriptionJobsModule,
@@ -55,6 +61,8 @@ import { TranscriptionJob } from './transcription-jobs/entities/transcription-jo
         ApplicationFieldValueRepository,
         ApplicationStageHistoryRepository,
         JobAnalyticsEventRepository,
+        WebhookDeliveryService,
+        WebhookDeliveryLogRepository,
     ],
     exports: [
         ApplicationService,

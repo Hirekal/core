@@ -30,4 +30,22 @@ export class JobAnalyticsEventRepository {
         });
         return this.repository.save(event);
     }
+
+    /**
+     * Whether this browser session already recorded the given event for a job.
+     * @param jobId - The ID of the job.
+     * @param eventType - The type of event.
+     * @param sessionId - The ID of the session.
+     * @returns Whether the session event exists.
+     */
+    async hasSessionEvent(
+        jobId: string,
+        eventType: JobAnalyticsEventType,
+        sessionId: string,
+    ): Promise<boolean> {
+        const count = await this.repository.count({
+            where: { jobId, eventType, sessionId },
+        });
+        return count > 0;
+    }
 }

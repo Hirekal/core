@@ -56,6 +56,7 @@ export class ApplicationAnswerRepository {
             mediaStorageKey: string;
             mediaFileName: string;
             mediaDurationSeconds?: number | null;
+            retakeCount?: number;
         },
     ): Promise<ApplicationAnswer> {
         const existing = await this.repository.findOne({
@@ -71,6 +72,7 @@ export class ApplicationAnswerRepository {
         const created = this.repository.create({
             applicationId,
             questionId,
+            retakeCount: data.retakeCount ?? 0,
             ...data,
         });
         return this.repository.save(created);

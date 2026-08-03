@@ -164,4 +164,22 @@ export class JobRepository extends BaseRepository<Job> {
             },
         });
     }
+
+    /**
+     * Atomically increment a job analytics counter column.
+     */
+    async incrementCounter(
+        jobId: string,
+        field:
+            | 'visitorCount'
+            | 'viewers'
+            | 'applicationsStarted'
+            | 'applicationsSubmitted'
+            | 'applicationCount',
+    ): Promise<void> {
+        await this.repository.query(
+            `UPDATE jobs SET "${field}" = "${field}" + 1, "updatedAt" = now() WHERE id = $1`,
+            [jobId],
+        );
+    }
 }

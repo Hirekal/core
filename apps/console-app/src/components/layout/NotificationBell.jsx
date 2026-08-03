@@ -1,15 +1,31 @@
 import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { Bell } from 'lucide-react';
-import * as settingsService from '../../services/settingsService';
+import * as notificationService from '../../services/notificationService';
+
+const POLL_INTERVAL_MS = 30_000;
 
 export default function NotificationBell() {
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
-    settingsService.getNotifications().then((items) => {
-      setUnreadCount(items.filter((n) => !n.read).length);
-    });
+    let cancelled = false;
+
+    const load = () => {
+      notificationService.getNotifications().then((items) => {
+        if (!cancelled) {
+          setUnreadCount(items.filter((n) => !n.read).length);
+        }
+      });
+    };
+
+    load();
+    const timer = setInterval(load, POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
   }, []);
 
   return (

@@ -5,6 +5,7 @@ import { resolve } from 'path';
 import { CloudStorageModule } from './modules/cloud-storage/cloud-storage.module';
 import { ApplicationModule } from './modules/application/application.module';
 import { JobModule } from './modules/job/job.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './modules/auth/auth.module';
@@ -40,6 +41,7 @@ import { AuthModule } from './modules/auth/auth.module';
         CloudStorageModule,
         JobModule,
         ApplicationModule,
+        NotificationsModule,
         AuthModule.forRootAsync({
             inject: [ConfigService],
             useFactory: (configService: ConfigService) => ({
