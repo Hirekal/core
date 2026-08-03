@@ -157,6 +157,35 @@ export default function WebhookForm({
                 containerClassName="mb-0"
               />
             </div>
+            <div className="mt-4">
+              <label className="mb-1.5 block text-sm font-medium text-heading">
+                Webhook secret
+              </label>
+              <p className="mb-2 text-xs text-muted">
+                Optional. When set, every request includes{' '}
+                <code className="rounded bg-hover px-1 py-0.5 text-[11px]">
+                  X-Hirekal-Signature: sha256=&lt;hmac&gt;
+                </code>{' '}
+                so your server can verify the payload.
+              </p>
+              <Input
+                type="password"
+                autoComplete="new-password"
+                value={webhook.secret || ''}
+                onChange={(e) => update('secret', e.target.value)}
+                placeholder="e.g. whsec_hirekal_demo_3f8a2c9b1e7d4a06"
+                containerClassName="mb-0"
+              />
+              <button
+                type="button"
+                className="mt-2 text-xs font-medium text-accent hover:underline"
+                onClick={() =>
+                  update('secret', 'whsec_hirekal_demo_3f8a2c9b1e7d4a06')
+                }
+              >
+                Use demo secret
+              </button>
+            </div>
           </div>
         </div>
       </Card>

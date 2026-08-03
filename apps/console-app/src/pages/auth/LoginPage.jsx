@@ -4,6 +4,7 @@ import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
 import { useAuth } from '../../context/AuthContext';
 import { validateLoginFields } from '../../utils/validators';
+import { toUserErrorMessage } from '../../utils/errorMessage';
 import { AuthLayout } from './SignUpPage';
 
 export default function LoginPage() {
@@ -39,9 +40,9 @@ export default function LoginPage() {
       await login(email.trim(), password);
       navigate('/jobs');
     } catch (err) {
-      const message = err.message || 'Sign in failed';
+      const message = toUserErrorMessage(err, 'Sign in failed');
       setError(message);
-      if (/not verified/i.test(message)) {
+      if (/not verified/i.test(err?.message || '')) {
         setFieldErrors({});
       }
     } finally {

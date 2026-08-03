@@ -11,6 +11,7 @@ import AddTeamMemberModal from '../../components/organization/AddTeamMemberModal
 import { useAuth } from '../../context/AuthContext';
 import * as organizationService from '../../services/organizationService';
 import { formatDate } from '../../utils/formatDate';
+import { toUserErrorMessage } from '../../utils/errorMessage';
 
 export default function OrganizationPage() {
   const { user } = useAuth();
@@ -48,7 +49,7 @@ export default function OrganizationPage() {
     loadData()
       .catch((err) => {
         if (err.status !== 401) {
-          setError(err.message || 'Failed to load organization');
+          setError(toUserErrorMessage(err, 'Failed to load organization'));
         }
         setOrg(null);
         setMembers([]);
@@ -71,7 +72,7 @@ export default function OrganizationPage() {
       setNameMessage('Organization name updated');
       setTimeout(() => setNameMessage(''), 3000);
     } catch (err) {
-      setError(err.message || 'Failed to update organization');
+      setError(toUserErrorMessage(err, 'Failed to update organization'));
     } finally {
       setSavingName(false);
     }
@@ -97,7 +98,7 @@ export default function OrganizationPage() {
       setMemberToDelete(null);
       await loadData();
     } catch (err) {
-      setDeleteError(err.message);
+      setDeleteError(toUserErrorMessage(err, 'Unable to remove team member'));
     } finally {
       setDeleting(false);
     }

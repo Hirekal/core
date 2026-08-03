@@ -166,11 +166,21 @@ export async function apiRequest(path, options = {}) {
     requestBody = isFormData ? body : JSON.stringify(body);
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method,
-    headers,
-    body: requestBody,
-  });
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      method,
+      headers,
+      body: requestBody,
+    });
+  } catch (networkError) {
+    const error = new Error(
+      'Unable to reach the server. Check your connection and try again.',
+    );
+    error.status = 0;
+    error.cause = networkError;
+    throw error;
+  }
 
   persistTokensFromHeaders(response, auth);
 

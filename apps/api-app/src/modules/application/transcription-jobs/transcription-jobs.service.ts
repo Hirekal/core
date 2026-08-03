@@ -1,9 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JobQuestion } from '../../job/job-questions/entities/job-question.entity';
 import { R2Service } from '../../cloud-storage/r2.service';
 import { ApplicationAnswerRepository } from '../application-answers/repositories/application-answer.repository';
 import { TranscriptionJobStatus } from '../enums/application.enums';
+import { WebhookDeliveryService } from '../webhook-delivery/webhook-delivery.service';
 import {
   MediaWorkerCallbackDto,
   MediaWorkerTranscribeResponse,
@@ -31,6 +32,8 @@ export class TranscriptionJobsService {
     private readonly applicationAnswerRepository: ApplicationAnswerRepository,
     private readonly r2Service: R2Service,
     private readonly configService: ConfigService,
+    @Inject(forwardRef(() => WebhookDeliveryService))
+    private readonly webhookDeliveryService: WebhookDeliveryService,
   ) {}
 
   /**
@@ -39,6 +42,10 @@ export class TranscriptionJobsService {
    */
   async enqueueAfterSubmit(params: EnqueueTranscriptionParams): Promise<void> {
     if (!params.aiTranscripts) {
+      await this.webhookDeliveryService.markNewApplicationReadyIfSettled(
+        params.applicationId,
+        params.jobId,
+      );
       return;
     }
 
@@ -46,6 +53,10 @@ export class TranscriptionJobsService {
     if (!mediaWorkerUrl) {
       this.logger.warn(
         'MEDIA_WORKER_URL is not configured; skipping transcription',
+      );
+      await this.webhookDeliveryService.markNewApplicationReadyIfSettled(
+        params.applicationId,
+        params.jobId,
       );
       return;
     }
@@ -89,6 +100,11 @@ export class TranscriptionJobsService {
         mediaWorkerUrl,
       );
     }
+
+    await this.webhookDeliveryService.markNewApplicationReadyIfSettled(
+      params.applicationId,
+      params.jobId,
+    );
   }
 
   /**
@@ -115,6 +131,15 @@ export class TranscriptionJobsService {
   }
 
   /**
+   * True when any transcription job for the application is still in flight.
+   */
+  async hasActiveJobsForApplication(applicationId: string): Promise<boolean> {
+    return this.transcriptionJobRepository.hasActiveJobsForApplication(
+      applicationId,
+    );
+  }
+
+  /**
    * Dispatches a transcription job.
    * @param transcriptionJob - The transcription job to dispatch.
    * @param storageKey - The storage key of the video.
@@ -136,6 +161,10 @@ export class TranscriptionJobsService {
         status: TranscriptionJobStatus.FAILED,
         errorMessage: 'No accessible video URL for transcription',
       });
+      await this.webhookDeliveryService.markNewApplicationReadyIfSettled(
+        transcriptionJob.applicationId,
+        transcriptionJob.jobId,
+      );
       return;
     }
 
@@ -163,6 +192,10 @@ export class TranscriptionJobsService {
         status: TranscriptionJobStatus.FAILED,
         errorMessage: message,
       });
+      await this.webhookDeliveryService.markNewApplicationReadyIfSettled(
+        transcriptionJob.applicationId,
+        transcriptionJob.jobId,
+      );
     }
   }
 
@@ -201,6 +234,11 @@ export class TranscriptionJobsService {
       callbackPayload,
       errorMessage: null,
     });
+
+    await this.webhookDeliveryService.markNewApplicationReadyIfSettled(
+      existing.applicationId,
+      existing.jobId,
+    );
   }
   /**
    * Calls the media worker.

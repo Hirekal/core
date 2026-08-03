@@ -5,6 +5,7 @@ import SettingsNav from '../../components/settings/SettingsNav';
 import Button from '../../components/common/Button';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import * as jobService from '../../services/jobService';
+import { toUserErrorMessage } from '../../utils/errorMessage';
 
 export default function JobSettingsPage() {
   const { id } = useParams();
@@ -24,7 +25,7 @@ export default function JobSettingsPage() {
         setSettings(data?.settings || {});
       })
       .catch((err) => {
-        setError(err.message || 'Failed to load job settings');
+        setError(toUserErrorMessage(err, 'Failed to load job settings'));
         setJob(null);
       })
       .finally(() => setLoading(false));
@@ -38,7 +39,7 @@ export default function JobSettingsPage() {
       setJob(updated);
       setSettings(updated?.settings || settings);
     } catch (err) {
-      setError(err.message || 'Failed to save settings');
+      setError(toUserErrorMessage(err, 'Failed to save settings'));
     } finally {
       setSaving(false);
     }

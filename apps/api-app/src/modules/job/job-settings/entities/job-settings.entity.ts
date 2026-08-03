@@ -44,6 +44,8 @@ export interface EmailAutomationSettings {
 
 export interface WebhookSettings {
   url: string;
+  /** Shared secret used to HMAC-sign outbound webhook payloads. */
+  secret: string;
   triggers: {
     newApplication: boolean;
     stageChange: boolean;

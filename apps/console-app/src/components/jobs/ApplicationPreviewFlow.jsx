@@ -15,6 +15,7 @@ import Button from '../common/Button';
 import VideoRecorderPanel from '../common/VideoRecorderPanel';
 import { isVideoMedia } from '../../utils/mediaHelpers';
 import * as applicationService from '../../services/applicationService';
+import { toUserErrorMessage } from '../../utils/errorMessage';
 import {
   normalizeApplicationFields,
   normalizeQuestions,
@@ -338,7 +339,7 @@ export default function ApplicationPreviewFlow({ job, slug, live = false }) {
           await applicationService.startApplication(slug, applicationValues, fields);
         }
       } catch (err) {
-        setFlowError(err.message || 'Failed to start application');
+        setFlowError(toUserErrorMessage(err, 'Failed to start application'));
         setSubmitting(false);
         return;
       }
@@ -390,7 +391,7 @@ export default function ApplicationPreviewFlow({ job, slug, live = false }) {
           questionAnswers[currentQuestion.id],
         );
       } catch (err) {
-        setQuestionError(err.message || 'Failed to save answer');
+        setQuestionError(toUserErrorMessage(err, 'Failed to save answer'));
         setSubmitting(false);
         return;
       }
@@ -426,7 +427,7 @@ export default function ApplicationPreviewFlow({ job, slug, live = false }) {
         setVideoRecording(uploaded);
         setVideoRetakeCount(uploaded.retakeCount ?? 0);
       } catch (err) {
-        setVideoError(err.message || 'Failed to upload video');
+        setVideoError(toUserErrorMessage(err, 'Failed to upload video'));
       } finally {
         setSubmitting(false);
       }
@@ -453,7 +454,7 @@ export default function ApplicationPreviewFlow({ job, slug, live = false }) {
         await applicationService.submitApplication(slug);
         setPhase('done');
       } catch (err) {
-        setFlowError(err.message || 'Failed to submit application');
+        setFlowError(toUserErrorMessage(err, 'Failed to submit application'));
       } finally {
         setSubmitting(false);
       }

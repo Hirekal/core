@@ -6,6 +6,7 @@ import Button from '../../components/common/Button';
 import { AuthLayout } from './SignUpPage';
 import * as authService from '../../services/authService';
 import { validateForgotPasswordEmail } from '../../utils/validators';
+import { toUserErrorMessage } from '../../utils/errorMessage';
 
 export default function ForgotPasswordPage() {
   const navigate = useNavigate();
@@ -41,7 +42,7 @@ export default function ForgotPasswordPage() {
       setSentEmail(trimmedEmail);
       setSent(true);
     } catch (err) {
-      setError(err.message);
+      setError(toUserErrorMessage(err, 'Unable to send reset email'));
     } finally {
       setLoading(false);
     }

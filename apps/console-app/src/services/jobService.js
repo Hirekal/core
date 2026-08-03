@@ -432,11 +432,26 @@ export async function updateJobSettings(id, settings) {
     }
 
     if (webhook) {
-        const { logs: _logs, ...webhookBody } = webhook;
+        const {
+            logs: _logs,
+            url,
+            secret,
+            triggers,
+            includeAnswers,
+            includeVideoUrls,
+            includeAiTranscripts,
+        } = webhook;
         await apiRequest(`/jobs/${id}/settings/webhook`, {
             method: 'PATCH',
             auth: true,
-            body: webhookBody,
+            body: {
+                url,
+                secret,
+                triggers,
+                includeAnswers,
+                includeVideoUrls,
+                includeAiTranscripts,
+            },
         });
     }
 
