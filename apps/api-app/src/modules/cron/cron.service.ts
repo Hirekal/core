@@ -1,4 +1,10 @@
-import { forwardRef, Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  forwardRef,
+  Inject,
+  Injectable,
+  Logger,
+  OnModuleInit,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression, SchedulerRegistry } from '@nestjs/schedule';
 import { WebhookDeliveryService } from '../application/webhook-delivery/webhook-delivery.service';
@@ -18,30 +24,30 @@ export class CronService implements OnModuleInit {
     private readonly webhookDeliveryService: WebhookDeliveryService,
   ) {}
 
-  async onModuleInit(): Promise<void> {
+  onModuleInit(): void {
     const isCronServer = this.isCronServerEnabled();
     this.logger.log(`IS_CRON_SERVER=${isCronServer}`);
 
     // Defer skip/start until cron jobs are registered by the scheduler.
     setTimeout(() => {
-      void this.applyCronServerGate();
+      this.applyCronServerGate();
     }, 0);
   }
 
   /**
    * Enables or stops registered cron jobs based on IS_CRON_SERVER.
    */
-  async applyCronServerGate(): Promise<void> {
+  applyCronServerGate(): void {
     try {
       const jobs = this.schedulerRegistry.getCronJobs();
       const isCronServer = this.isCronServerEnabled();
 
       jobs.forEach((job, key) => {
         if (isCronServer) {
-          job.start();
+          void job.start();
           this.logger.log(`Cron job enabled: ${key}`);
         } else {
-          job.stop();
+          void job.stop();
           this.logger.log(`Cron job skipped (not cron server): ${key}`);
         }
       });
@@ -70,9 +76,8 @@ export class CronService implements OnModuleInit {
 
     try {
       this.isProcessingWebhooks = true;
-      const processed = await this.webhookDeliveryService.processReadyQueue(
-        WEBHOOK_BATCH_SIZE,
-      );
+      const processed =
+        await this.webhookDeliveryService.processReadyQueue(WEBHOOK_BATCH_SIZE);
       if (processed > 0) {
         this.logger.log(`Webhook delivery cron processed=${processed}`);
       }
