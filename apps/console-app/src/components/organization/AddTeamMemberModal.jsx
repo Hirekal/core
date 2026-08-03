@@ -3,6 +3,7 @@ import { Copy, Check, AlertTriangle } from 'lucide-react';
 import Modal, { ModalFooter } from '../common/Modal';
 import Input from '../common/Input';
 import Button from '../common/Button';
+import { toUserErrorMessage } from '../../utils/errorMessage';
 
 export default function AddTeamMemberModal({ isOpen, onClose, onAdd }) {
   const [name, setName] = useState('');
@@ -37,7 +38,7 @@ export default function AddTeamMemberModal({ isOpen, onClose, onAdd }) {
       setCreatedMember(result.member);
       setOneTimePassword(result.oneTimePassword);
     } catch (err) {
-      setError(err.message);
+      setError(toUserErrorMessage(err, 'Unable to add team member'));
     } finally {
       setLoading(false);
     }

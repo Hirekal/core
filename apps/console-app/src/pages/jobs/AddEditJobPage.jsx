@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import PageHeader from '../../components/layout/PageHeader';
 import JobForm from '../../components/jobs/JobForm';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+import { useToast } from '../../context/ToastContext';
 import * as jobService from '../../services/jobService';
 import { openJobPreview } from '../../utils/openJobPreview';
 
@@ -10,6 +11,7 @@ export default function AddEditJobPage() {
   const { id } = useParams();
   const isEditing = Boolean(id);
   const navigate = useNavigate();
+  const { showError, showSuccess } = useToast();
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(isEditing);
   const [saving, setSaving] = useState(false);
@@ -22,11 +24,11 @@ export default function AddEditJobPage() {
           setJob(data);
         })
         .catch((err) => {
-          window.alert(err.message || 'Failed to load job');
+          showError(err, 'Failed to load job');
         })
         .finally(() => setLoading(false));
     }
-  }, [id, isEditing]);
+  }, [id, isEditing, showError]);
 
   const handleSubmit = async (formData, { openPreview = false } = {}) => {
     setSaving(true);
@@ -39,7 +41,7 @@ export default function AddEditJobPage() {
       }
       if (!result) return;
       if (result.mediaWarning) {
-        window.alert(result.mediaWarning);
+        showError(result.mediaWarning);
       }
       await jobService.cacheJobForPreview(result);
       setJob(result);
@@ -48,11 +50,13 @@ export default function AddEditJobPage() {
         navigate(`/jobs/${result.id}/edit`);
       } else if (isEditing) {
         navigate(`/jobs/${result.id}/edit`);
+        showSuccess('Job saved');
       } else {
         navigate(`/jobs/${result.id}`);
+        showSuccess('Job created');
       }
     } catch (error) {
-      window.alert(error.message || 'Failed to save job');
+      showError(error, 'Failed to save job');
     } finally {
       setSaving(false);
     }

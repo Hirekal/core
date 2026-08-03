@@ -16,6 +16,14 @@ export enum WebhookDeliveryStatus {
   PENDING = 'PENDING',
 }
 
+/** Live queue statuses for outbound webhook work. */
+export enum WebhookQueueStatus {
+  PENDING = 'PENDING',
+  READY_TO_SEND = 'READY_TO_SEND',
+  SENDING = 'SENDING',
+  SENT = 'SENT',
+}
+
 export enum WebhookEvent {
   NEW_APPLICATION = 'NEW_APPLICATION',
   STAGE_CHANGE = 'STAGE_CHANGE',

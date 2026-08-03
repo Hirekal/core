@@ -23,10 +23,12 @@ import { JobAnalyticsEvent } from './job-analytics-events/entities/job-analytics
 import { JobAnalyticsEventRepository } from './job-analytics-events/repositories/job-analytics-event.repository';
 import { ApplicationRepository } from './repositories/application.repository';
 import { WebhookDeliveryLog } from './webhook-delivery-logs/entities/webhook-delivery-log.entity';
+import { WebhookDeliveryQueue } from './webhook-delivery-queue/entities/webhook-delivery-queue.entity';
 import { TranscriptionJobsModule } from './transcription-jobs/transcription-jobs.module';
 import { TranscriptionJob } from './transcription-jobs/entities/transcription-job.entity';
 import { WebhookDeliveryService } from './webhook-delivery/webhook-delivery.service';
 import { WebhookDeliveryLogRepository } from './webhook-delivery/repositories/webhook-delivery-log.repository';
+import { WebhookDeliveryQueueRepository } from './webhook-delivery/repositories/webhook-delivery-queue.repository';
 
 @Module({
   imports: [
@@ -38,6 +40,7 @@ import { WebhookDeliveryLogRepository } from './webhook-delivery/repositories/we
       ApplicationStageHistory,
       JobAnalyticsEvent,
       WebhookDeliveryLog,
+      WebhookDeliveryQueue,
       TranscriptionJob,
     ]),
     CloudStorageModule,
@@ -46,7 +49,7 @@ import { WebhookDeliveryLogRepository } from './webhook-delivery/repositories/we
     NotificationsModule,
     forwardRef(() => ApplicationAnswersModule),
     forwardRef(() => ApplicationNotesModule),
-    TranscriptionJobsModule,
+    forwardRef(() => TranscriptionJobsModule),
   ],
   controllers: [
     PublicApplicationJobController,
@@ -63,11 +66,13 @@ import { WebhookDeliveryLogRepository } from './webhook-delivery/repositories/we
     JobAnalyticsEventRepository,
     WebhookDeliveryService,
     WebhookDeliveryLogRepository,
+    WebhookDeliveryQueueRepository,
   ],
   exports: [
     ApplicationService,
     ApplicationRepository,
     ApplicationPublicAccessService,
+    WebhookDeliveryService,
   ],
 })
 export class ApplicationModule {}

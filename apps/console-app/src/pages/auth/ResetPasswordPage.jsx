@@ -9,6 +9,7 @@ import {
   validatePasswordResetFields,
   validateRequired,
 } from '../../utils/validators';
+import { toUserErrorMessage } from '../../utils/errorMessage';
 
 export default function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
@@ -53,7 +54,7 @@ export default function ResetPasswordPage() {
       await authService.resetPassword(email.trim(), code.trim(), password);
       setDone(true);
     } catch (err) {
-      setError(err.message);
+      setError(toUserErrorMessage(err, 'Unable to reset password'));
     } finally {
       setLoading(false);
     }
