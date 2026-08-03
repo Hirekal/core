@@ -78,6 +78,22 @@ export class TranscriptionJobRepository {
   }
 
   /**
+   * True when any transcription job for the application is still in flight.
+   */
+  async hasActiveJobsForApplication(applicationId: string): Promise<boolean> {
+    const count = await this.repository.count({
+      where: {
+        applicationId,
+        status: In([
+          TranscriptionJobStatus.PENDING,
+          TranscriptionJobStatus.SENT,
+        ]),
+      },
+    });
+    return count > 0;
+  }
+
+  /**
    * Updates a transcription job.
    * @param id - The ID of the transcription job.
    * @param data - The data for the transcription job.

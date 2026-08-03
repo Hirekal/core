@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import ApplicationPreviewFlow, { PublicCareersHeader } from '../../components/jobs/ApplicationPreviewFlow';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import * as applicationService from '../../services/applicationService';
+import { toUserErrorMessage } from '../../utils/errorMessage';
 
 const SHARE_META_PROPERTIES = ['og:title', 'og:description', 'og:image'];
 
@@ -58,7 +59,7 @@ export default function PublicApplyPage() {
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(err.message || 'Failed to load job');
+        setError(toUserErrorMessage(err, 'Failed to load job'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

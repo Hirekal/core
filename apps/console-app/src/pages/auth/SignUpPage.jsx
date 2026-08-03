@@ -4,6 +4,7 @@ import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
 import { useAuth } from '../../context/AuthContext';
 import { validateSignUpFields } from '../../utils/validators';
+import { toUserErrorMessage } from '../../utils/errorMessage';
 
 export default function SignUpPage() {
   const [name, setName] = useState('');
@@ -38,7 +39,7 @@ export default function SignUpPage() {
       await signUp(name.trim(), trimmedEmail, password);
       navigate(`/verify-email?email=${encodeURIComponent(trimmedEmail)}`);
     } catch (err) {
-      setError(err.message);
+      setError(toUserErrorMessage(err, 'Sign up failed'));
     } finally {
       setLoading(false);
     }

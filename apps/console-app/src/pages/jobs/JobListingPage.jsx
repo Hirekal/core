@@ -13,11 +13,13 @@ import Modal from '../../components/common/Modal';
 import EmptyState from '../../components/common/EmptyState';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { useFilterStore } from '../../store/filterStore';
+import { useToast } from '../../context/ToastContext';
 import * as jobService from '../../services/jobService';
 import { formatRelative } from '../../utils/formatDate';
 
 export default function JobListingPage() {
   const { jobStatus, jobSearch, jobSortBy, jobViewMode, setJobStatus, setJobSearch, setJobSortBy, setJobViewMode } = useFilterStore();
+  const { showError, showSuccess } = useToast();
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [copyToast, setCopyToast] = useState(false);
@@ -34,7 +36,7 @@ export default function JobListingPage() {
       .catch((err) => {
         setJobs([]);
         if (err.status !== 401) {
-          window.alert(err.message || 'Failed to load jobs');
+          showError(err, 'Failed to load jobs');
         }
       })
       .finally(() => setLoading(false));
@@ -53,8 +55,9 @@ export default function JobListingPage() {
     try {
       await jobService.duplicateJob(id);
       loadJobs();
+      showSuccess('Job duplicated');
     } catch (err) {
-      window.alert(err.message || 'Failed to duplicate job');
+      showError(err, 'Failed to duplicate job');
     }
   };
 
@@ -71,8 +74,9 @@ export default function JobListingPage() {
       await jobService.deleteJob(jobToDelete.id);
       setJobToDelete(null);
       loadJobs();
+      showSuccess('Job deleted');
     } catch (err) {
-      window.alert(err.message || 'Failed to delete job');
+      showError(err, 'Failed to delete job');
     } finally {
       setDeleting(false);
     }
@@ -85,8 +89,9 @@ export default function JobListingPage() {
       await jobService.archiveJob(jobToArchive.id);
       setJobToArchive(null);
       loadJobs();
+      showSuccess('Job archived');
     } catch (err) {
-      window.alert(err.message || 'Failed to archive job');
+      showError(err, 'Failed to archive job');
     } finally {
       setArchiving(false);
     }
@@ -96,8 +101,9 @@ export default function JobListingPage() {
     try {
       await jobService.restoreJob(job.id);
       loadJobs();
+      showSuccess('Job restored');
     } catch (err) {
-      window.alert(err.message || 'Failed to restore job');
+      showError(err, 'Failed to restore job');
     }
   };
 
@@ -105,8 +111,9 @@ export default function JobListingPage() {
     try {
       await jobService.pauseJob(job.id);
       loadJobs();
+      showSuccess('Job paused');
     } catch (err) {
-      window.alert(err.message || 'Failed to pause job');
+      showError(err, 'Failed to pause job');
     }
   };
 
@@ -114,8 +121,9 @@ export default function JobListingPage() {
     try {
       await jobService.resumeJob(job.id);
       loadJobs();
+      showSuccess('Job resumed');
     } catch (err) {
-      window.alert(err.message || 'Failed to resume job');
+      showError(err, 'Failed to resume job');
     }
   };
 

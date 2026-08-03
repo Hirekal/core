@@ -5,6 +5,7 @@ import Button from '../../components/common/Button';
 import { AuthLayout } from './SignUpPage';
 import * as authService from '../../services/authService';
 import { validateEmail, validateRequired } from '../../utils/validators';
+import { toUserErrorMessage } from '../../utils/errorMessage';
 
 export default function VerifyEmailPage() {
   const [searchParams] = useSearchParams();
@@ -53,7 +54,7 @@ export default function VerifyEmailPage() {
         state: { message: 'Email verified. You can sign in now.' },
       });
     } catch (err) {
-      setError(err.message);
+      setError(toUserErrorMessage(err, 'Verification failed'));
     } finally {
       setLoading(false);
     }
@@ -74,7 +75,7 @@ export default function VerifyEmailPage() {
       await authService.resendVerification(email.trim());
       setMessage('If this email needs verification, a new code has been sent.');
     } catch (err) {
-      setError(err.message);
+      setError(toUserErrorMessage(err, 'Unable to resend code'));
     } finally {
       setResending(false);
     }

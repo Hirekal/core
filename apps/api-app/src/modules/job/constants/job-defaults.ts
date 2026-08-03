@@ -42,6 +42,7 @@ export const DEFAULT_EMAIL_AUTOMATION: EmailAutomationSettings = {
 
 export const DEFAULT_WEBHOOK_SETTINGS: WebhookSettings = {
   url: '',
+  secret: '',
   triggers: { newApplication: false, stageChange: false },
   includeAnswers: true,
   includeVideoUrls: true,

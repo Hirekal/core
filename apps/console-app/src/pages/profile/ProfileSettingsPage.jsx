@@ -8,6 +8,7 @@ import Card from '../../components/common/Card';
 import ThemeSelector from '../../components/profile/ThemeSelector';
 import { useAuth } from '../../context/AuthContext';
 import * as authService from '../../services/authService';
+import { toUserErrorMessage } from '../../utils/errorMessage';
 
 function SettingsCard({ icon: Icon, title, description, children, className = '' }) {
   return (
@@ -53,7 +54,7 @@ export default function ProfileSettingsPage() {
       setMessage('Profile updated successfully');
       setTimeout(() => setMessage(''), 3000);
     } catch (err) {
-      setError(err.message);
+      setError(toUserErrorMessage(err, 'Unable to update profile'));
     } finally {
       setSaving(false);
     }
@@ -77,7 +78,7 @@ export default function ProfileSettingsPage() {
         state: { message: 'Password changed successfully. Please sign in.' },
       });
     } catch (err) {
-      setError(err.message);
+      setError(toUserErrorMessage(err, 'Unable to change password'));
     }
   };
 

@@ -24,6 +24,7 @@ export const defaultJobSettings = {
   },
   webhook: {
     url: '',
+    secret: '',
     triggers: {
       newApplication: false,
       stageChange: false,

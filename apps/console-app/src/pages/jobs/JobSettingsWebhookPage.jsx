@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useOutletContext, useParams } from 'react-router-dom';
 import WebhookForm from '../../components/settings/WebhookForm';
 import * as jobService from '../../services/jobService';
+import { toUserErrorMessage } from '../../utils/errorMessage';
 
 export default function JobSettingsWebhookPage() {
   const { id } = useParams();
@@ -21,7 +22,7 @@ export default function JobSettingsWebhookPage() {
       })
       .catch((err) => {
         setLogs([]);
-        setLogsError(err.message || 'Unable to load delivery logs.');
+        setLogsError(toUserErrorMessage(err, 'Unable to load delivery logs.'));
       })
       .finally(() => {
         setLogsLoading(false);

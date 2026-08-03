@@ -4,6 +4,7 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  MaxLength,
   ValidateNested,
 } from 'class-validator';
 
@@ -106,6 +107,11 @@ export class PatchWebhookSettingsDto {
   @IsOptional()
   @IsString()
   url?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  secret?: string;
 
   @IsOptional()
   @ValidateNested()
