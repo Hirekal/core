@@ -28,7 +28,7 @@ class CallbackService:
             async with httpx.AsyncClient(timeout=httpx.Timeout(self._timeout)) as client:
                 response = await client.post(
                     self._url,
-                    json=payload.model_dump(),
+                    json=payload.model_dump(exclude_none=True),
                 )
                 response.raise_for_status()
         except httpx.HTTPError as exc:

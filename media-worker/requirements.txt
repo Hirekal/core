@@ -5,3 +5,4 @@ pydantic==2.11.3
 pydantic-settings==2.8.1
 faster-whisper==1.1.1
 requests>=2.31.0
+speechbrain>=1.0.2
