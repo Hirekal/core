@@ -50,7 +50,10 @@ export class CreateJobSettings1779000005000 implements MigrationInterface {
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.dropForeignKey('jobSettings', 'FK_job_settings_jobId');
-    await queryRunner.dropUniqueConstraint('jobSettings', 'UQ_job_settings_jobId');
+    await queryRunner.dropUniqueConstraint(
+      'jobSettings',
+      'UQ_job_settings_jobId',
+    );
     await queryRunner.dropTable('jobSettings');
   }
 }

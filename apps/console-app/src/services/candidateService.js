@@ -79,6 +79,7 @@ function normalizeAnswer(answer) {
         ...answer,
         videoUrl,
         mediaUrl: answer.mediaUrl || videoUrl,
+        transcript: answer.transcript || null,
     };
 }
 

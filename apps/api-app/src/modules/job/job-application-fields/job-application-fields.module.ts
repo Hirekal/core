@@ -7,15 +7,12 @@ import { JobApplicationFieldsService } from './job-application-fields.service';
 import { JobApplicationFieldRepository } from './repositories/job-application-field.repository';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([JobApplicationField]),
-        forwardRef(() => JobModule),
-    ],
-    controllers: [JobApplicationFieldsController],
-    providers: [
-        JobApplicationFieldsService,
-        JobApplicationFieldRepository,
-    ],
-    exports: [JobApplicationFieldsService, JobApplicationFieldRepository],
+  imports: [
+    TypeOrmModule.forFeature([JobApplicationField]),
+    forwardRef(() => JobModule),
+  ],
+  controllers: [JobApplicationFieldsController],
+  providers: [JobApplicationFieldsService, JobApplicationFieldRepository],
+  exports: [JobApplicationFieldsService, JobApplicationFieldRepository],
 })
-export class JobApplicationFieldsModule { }
+export class JobApplicationFieldsModule {}

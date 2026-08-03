@@ -5,28 +5,28 @@ import { Column, Entity, JoinColumn, ManyToOne, Relation } from 'typeorm';
 
 @Entity('jobApplicationFields')
 export class JobApplicationField extends BaseEntity {
-    @Column({ type: 'uuid' })
-    jobId!: string;
+  @Column({ type: 'uuid' })
+  jobId!: string;
 
-    @Column({ type: 'int', default: 0 })
-    sortOrder!: number;
+  @Column({ type: 'int', default: 0 })
+  sortOrder!: number;
 
-    @Column({ type: 'varchar', length: 255 })
-    label!: string;
+  @Column({ type: 'varchar', length: 255 })
+  label!: string;
 
-    @Column({ type: 'varchar', length: 50 })
-    type!: ApplicationFieldType;
+  @Column({ type: 'varchar', length: 50 })
+  type!: ApplicationFieldType;
 
-    @Column({ type: 'boolean', default: false })
-    required!: boolean;
+  @Column({ type: 'boolean', default: false })
+  required!: boolean;
 
-    @Column({ type: 'boolean', default: false })
-    builtIn!: boolean;
+  @Column({ type: 'boolean', default: false })
+  builtIn!: boolean;
 
-    @Column({ type: 'varchar', length: 50, nullable: true })
-    fieldKey!: string | null;
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  fieldKey!: string | null;
 
-    @ManyToOne('Job', 'applicationFields', { onDelete: 'CASCADE' })
-    @JoinColumn({ name: 'jobId' })
-    job!: Relation<Job>;
+  @ManyToOne('Job', 'applicationFields', { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'jobId' })
+  job!: Relation<Job>;
 }

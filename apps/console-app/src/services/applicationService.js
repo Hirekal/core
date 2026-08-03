@@ -1,12 +1,30 @@
 import { apiRequest, putToSignedUrl } from './apiClient';
 import { mediaToUploadFile } from '../utils/mediaHelpers';
-import { fieldToUi, questionToUi } from './jobMappers';
+import { fieldToUi, questionToUi, toUiRetakes } from './jobMappers';
 import { defaultJobSettings } from '../data/dummyStages';
+import { DEFAULT_APPLY_BUTTON_LABEL } from '../components/jobs/jobFormUtils';
 
 const APPLICATION_TOKEN_HEADER = 'x-application-token';
+const VIEWER_SESSION_KEY = 'hirekal_viewer_id';
 
 function sessionKey(slug) {
   return `hirekal_apply_${slug}`;
+}
+
+/**
+ * Stable browser id for unique viewer analytics (persists across tabs/sessions).
+ */
+export function getViewerSessionId() {
+  try {
+    let id = localStorage.getItem(VIEWER_SESSION_KEY);
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem(VIEWER_SESSION_KEY, id);
+    }
+    return id;
+  } catch {
+    return crypto.randomUUID();
+  }
 }
 
 export function readApplySession(slug) {
@@ -44,6 +62,7 @@ export function publicJobToApplyUi(job) {
     candidateIntroTitle: job.candidateIntroTitle || '',
     candidateInstructions: job.candidateInstructions || '',
     applicationSectionTitle: job.applicationSectionTitle || '',
+    applyButtonLabel: job.applyButtonLabel || DEFAULT_APPLY_BUTTON_LABEL,
     introMedia: job.introMedia
       ? {
           type: (job.introMedia.type || '').toLowerCase(),
@@ -63,6 +82,7 @@ export function publicJobToApplyUi(job) {
         ...defaultJobSettings.thankYouPage,
         ...(settingsEntity?.thankYouPage || {}),
       },
+      questionRetakes: toUiRetakes(job.questionRetakes),
     },
   };
 }
@@ -70,6 +90,14 @@ export function publicJobToApplyUi(job) {
 export async function getPublicJob(slug) {
   const job = await apiRequest(`/public/jobs/${encodeURIComponent(slug)}`);
   return publicJobToApplyUi(job);
+}
+
+/** Fire-and-forget page view analytics for visitor / viewer KPIs. */
+export async function trackJobView(slug) {
+  return apiRequest(`/public/jobs/${encodeURIComponent(slug)}/view`, {
+    method: 'POST',
+    body: { sessionId: getViewerSessionId() },
+  });
 }
 
 function splitFieldValues(values, fields) {
@@ -102,6 +130,7 @@ export async function startApplication(slug, values, fields) {
     {
       method: 'POST',
       body: {
+        sessionId: getViewerSessionId(),
         fields: { ...builtIn, custom },
       },
     },
@@ -206,6 +235,8 @@ export async function uploadVideoAnswer(slug, questionId, media) {
     url: confirmed.mediaUrl,
     type: 'video',
     fileName,
+    retakeCount: confirmed.retakeCount ?? 0,
+    retakesRemaining: confirmed.retakesRemaining ?? null,
   };
 }
 

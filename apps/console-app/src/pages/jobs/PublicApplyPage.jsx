@@ -4,6 +4,34 @@ import ApplicationPreviewFlow, { PublicCareersHeader } from '../../components/jo
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import * as applicationService from '../../services/applicationService';
 
+const SHARE_META_PROPERTIES = ['og:title', 'og:description', 'og:image'];
+
+function setShareMeta({ title, description, imageUrl }) {
+  const upsert = (property, content) => {
+    let el = document.querySelector(`meta[property="${property}"]`);
+    if (!content) {
+      el?.remove();
+      return;
+    }
+    if (!el) {
+      el = document.createElement('meta');
+      el.setAttribute('property', property);
+      document.head.appendChild(el);
+    }
+    el.setAttribute('content', content);
+  };
+
+  upsert('og:title', title);
+  upsert('og:description', description);
+  upsert('og:image', imageUrl);
+}
+
+function clearShareMeta() {
+  SHARE_META_PROPERTIES.forEach((property) => {
+    document.querySelector(`meta[property="${property}"]`)?.remove();
+  });
+}
+
 export default function PublicApplyPage() {
   const { slug } = useParams();
   const [job, setJob] = useState(null);
@@ -20,7 +48,13 @@ export default function PublicApplyPage() {
         setJob(data);
         if (data?.title) {
           document.title = `${data.title} | Apply`;
+          setShareMeta({
+            title: data.title,
+            description: data.candidateInstructions?.trim() || data.company || undefined,
+            imageUrl: data.introMedia?.url || undefined,
+          });
         }
+        applicationService.trackJobView(slug).catch(() => {});
       })
       .catch((err) => {
         if (cancelled) return;
@@ -33,6 +67,7 @@ export default function PublicApplyPage() {
     return () => {
       cancelled = true;
       document.title = 'Hirekal';
+      clearShareMeta();
     };
   }, [slug]);
 

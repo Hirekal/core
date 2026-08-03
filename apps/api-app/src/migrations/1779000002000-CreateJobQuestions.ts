@@ -57,10 +57,7 @@ export class CreateJobQuestions1779000002000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.dropForeignKey(
-      'jobQuestions',
-      'FK_job_questions_jobId',
-    );
+    await queryRunner.dropForeignKey('jobQuestions', 'FK_job_questions_jobId');
     await queryRunner.dropIndex(
       'jobQuestions',
       'IDX_job_questions_jobId_sortOrder',

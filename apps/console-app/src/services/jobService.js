@@ -90,46 +90,6 @@ async function syncThankYouMedia(jobId, thankYouPage) {
 }
 
 /**
- * Uploads social preview image directly to R2 when local.
- *
- * @param {string} jobId
- * @param {object} general
- * @returns {Promise<object>} general settings with R2 preview image when uploaded
- */
-async function syncSocialPreviewMedia(jobId, general) {
-    const preview = general?.socialPreview?.previewImage;
-    if (!preview?.url || !isLocalMediaUrl(preview.url)) {
-        return general;
-    }
-
-    const file = await mediaToFile({
-        url: preview.url,
-        type: preview.type || 'image',
-        fileName: preview.fileName,
-    });
-    if (!file) return general;
-
-    const confirmed = await uploadFileViaPresignedUrl(
-        `/jobs/${jobId}/settings/general/social-preview-image/upload-url`,
-        `/jobs/${jobId}/settings/general/social-preview-image/confirm`,
-        file,
-    );
-
-    return {
-        ...general,
-        socialPreview: {
-            ...general.socialPreview,
-            previewImage: {
-                type: confirmed.type || 'image',
-                url: confirmed.url,
-                storageKey: confirmed.storageKey,
-                fileName: confirmed.fileName,
-            },
-        },
-    };
-}
-
-/**
  * Syncs UI custom stages to the job stages API.
  *
  * @param {string} jobId
@@ -266,6 +226,71 @@ export async function getJobById(id) {
     return jobToUi(data);
 }
 
+const WEBHOOK_EVENT_LABELS = {
+    NEW_APPLICATION: 'New Application',
+    STAGE_CHANGE: 'Stage Change',
+};
+
+/**
+ * Maps webhook delivery log API rows to the settings UI table shape.
+ *
+ * @param {object} log
+ * @returns {object}
+ */
+export function webhookLogToUi(log) {
+    const normalized = (log.status || '').toLowerCase();
+    const status =
+        normalized === 'success'
+            ? 'success'
+            : normalized === 'pending'
+              ? 'pending'
+              : 'failed';
+
+    return {
+        id: log.id,
+        event: WEBHOOK_EVENT_LABELS[log.event] || log.event || 'Webhook',
+        status,
+        responseCode: log.responseStatus ?? '—',
+        timestamp: log.createdAt,
+        applicationId: log.applicationId,
+        errorMessage: log.errorMessage,
+    };
+}
+
+/**
+ * Maps webhook delivery errors to user-friendly copy (never raw HTTP paths).
+ *
+ * @param {Error & { status?: number }} error
+ * @returns {string}
+ */
+function toFriendlyWebhookLogError(error) {
+    if (error?.status === 401 || error?.status === 403) {
+        return 'You do not have permission to view delivery logs for this job.';
+    }
+    if (/failed to fetch|network/i.test(error?.message || '')) {
+        return 'Could not reach the server. Check your connection and try again.';
+    }
+    return 'Unable to load delivery logs for this job. Please try again.';
+}
+
+/**
+ * Fetches recent webhook delivery logs for a job.
+ *
+ * @param {string} jobId
+ * @returns {Promise<object[]>}
+ */
+export async function getWebhookLogs(jobId) {
+    try {
+        const data = await apiRequest(`/jobs/${jobId}/settings`, { auth: true });
+        const logs = data?.webhookLogs;
+        return Array.isArray(logs) ? logs.map(webhookLogToUi) : [];
+    } catch (error) {
+        const friendly = new Error(toFriendlyWebhookLogError(error));
+        friendly.status = error?.status;
+        throw friendly;
+    }
+}
+
 /**
  * Creates a job, then uploads intro media directly to R2 when needed.
  *
@@ -339,7 +364,6 @@ export async function duplicateJob(id) {
  */
 export async function updateJobSettings(id, settings) {
     const {
-        general,
         thankYouPage,
         emailAutomation,
         webhook,
@@ -366,28 +390,14 @@ export async function updateJobSettings(id, settings) {
         ),
     });
 
-    let resolvedGeneral = general;
     let resolvedThankYou = thankYouPage;
 
     try {
-        if (general?.socialPreview?.previewImage?.url &&
-            isLocalMediaUrl(general.socialPreview.previewImage.url)) {
-            resolvedGeneral = await syncSocialPreviewMedia(id, general);
-        }
-
         if (thankYouPage?.mediaUrl && isLocalMediaUrl(thankYouPage.mediaUrl)) {
             resolvedThankYou = await syncThankYouMedia(id, thankYouPage);
         }
     } catch (error) {
         mediaWarning = error.message || MEDIA_UPLOAD_WARNING;
-    }
-
-    if (resolvedGeneral) {
-        await apiRequest(`/jobs/${id}/settings/general`, {
-            method: 'PATCH',
-            auth: true,
-            body: resolvedGeneral,
-        });
     }
 
     if (resolvedThankYou) {

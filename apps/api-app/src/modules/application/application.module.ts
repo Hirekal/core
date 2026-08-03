@@ -2,6 +2,8 @@ import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CloudStorageModule } from '../cloud-storage/cloud-storage.module';
 import { JobModule } from '../job/job.module';
+import { JobSettingsModule } from '../job/job-settings/job-settings.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { ApplicationController } from './application.controller';
 import { JobApplicationsController } from './job-applications.controller';
 import { PublicApplicationController } from './public-application.controller';
@@ -21,41 +23,51 @@ import { JobAnalyticsEvent } from './job-analytics-events/entities/job-analytics
 import { JobAnalyticsEventRepository } from './job-analytics-events/repositories/job-analytics-event.repository';
 import { ApplicationRepository } from './repositories/application.repository';
 import { WebhookDeliveryLog } from './webhook-delivery-logs/entities/webhook-delivery-log.entity';
+import { TranscriptionJobsModule } from './transcription-jobs/transcription-jobs.module';
+import { TranscriptionJob } from './transcription-jobs/entities/transcription-job.entity';
+import { WebhookDeliveryService } from './webhook-delivery/webhook-delivery.service';
+import { WebhookDeliveryLogRepository } from './webhook-delivery/repositories/webhook-delivery-log.repository';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([
-            Application,
-            ApplicationFieldValue,
-            ApplicationAnswer,
-            ApplicationNote,
-            ApplicationStageHistory,
-            JobAnalyticsEvent,
-            WebhookDeliveryLog,
-        ]),
-        CloudStorageModule,
-        JobModule,
-        forwardRef(() => ApplicationAnswersModule),
-        forwardRef(() => ApplicationNotesModule),
-    ],
-    controllers: [
-        PublicApplicationJobController,
-        PublicApplicationController,
-        JobApplicationsController,
-        ApplicationController,
-    ],
-    providers: [
-        ApplicationService,
-        ApplicationPublicAccessService,
-        ApplicationRepository,
-        ApplicationFieldValueRepository,
-        ApplicationStageHistoryRepository,
-        JobAnalyticsEventRepository,
-    ],
-    exports: [
-        ApplicationService,
-        ApplicationRepository,
-        ApplicationPublicAccessService,
-    ],
+  imports: [
+    TypeOrmModule.forFeature([
+      Application,
+      ApplicationFieldValue,
+      ApplicationAnswer,
+      ApplicationNote,
+      ApplicationStageHistory,
+      JobAnalyticsEvent,
+      WebhookDeliveryLog,
+      TranscriptionJob,
+    ]),
+    CloudStorageModule,
+    JobModule,
+    JobSettingsModule,
+    NotificationsModule,
+    forwardRef(() => ApplicationAnswersModule),
+    forwardRef(() => ApplicationNotesModule),
+    TranscriptionJobsModule,
+  ],
+  controllers: [
+    PublicApplicationJobController,
+    PublicApplicationController,
+    JobApplicationsController,
+    ApplicationController,
+  ],
+  providers: [
+    ApplicationService,
+    ApplicationPublicAccessService,
+    ApplicationRepository,
+    ApplicationFieldValueRepository,
+    ApplicationStageHistoryRepository,
+    JobAnalyticsEventRepository,
+    WebhookDeliveryService,
+    WebhookDeliveryLogRepository,
+  ],
+  exports: [
+    ApplicationService,
+    ApplicationRepository,
+    ApplicationPublicAccessService,
+  ],
 })
 export class ApplicationModule {}

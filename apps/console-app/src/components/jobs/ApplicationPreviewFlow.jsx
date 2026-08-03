@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   CheckCircle2,
-  Video,
+  ChevronLeft,
   ChevronRight,
   User,
   Mail,
@@ -12,15 +12,21 @@ import {
   Type,
 } from 'lucide-react';
 import Button from '../common/Button';
-import VideoRecorderModal from '../common/VideoRecorderModal';
+import VideoRecorderPanel from '../common/VideoRecorderPanel';
 import { isVideoMedia } from '../../utils/mediaHelpers';
 import * as applicationService from '../../services/applicationService';
 import {
   normalizeApplicationFields,
   normalizeQuestions,
   DEFAULT_APPLICATION_SECTION_TITLE,
+  DEFAULT_APPLY_BUTTON_LABEL,
   MEDIA_TYPES,
 } from './jobFormUtils';
+import {
+  canRetakeVideo,
+  getRetakeButtonLabel,
+  getRetakesRemaining,
+} from '../../utils/retakeHelpers';
 
 const CARD_CLASS = 'rounded-2xl border border-border bg-card shadow-sm';
 const CONTENT_WIDTH = 'mx-auto w-full max-w-4xl';
@@ -265,6 +271,8 @@ export default function ApplicationPreviewFlow({ job, slug, live = false }) {
   const instructions = job.candidateInstructions?.trim() || '';
   const hasInstructions = Boolean(instructions);
   const applicationTitle = job.applicationSectionTitle || DEFAULT_APPLICATION_SECTION_TITLE;
+  const applyButtonLabel = job.applyButtonLabel?.trim() || DEFAULT_APPLY_BUTTON_LABEL;
+  const questionRetakes = job.settings?.questionRetakes ?? 'unlimited';
 
   const [phase, setPhase] = useState('intro');
   const [applicationValues, setApplicationValues] = useState(() =>
@@ -275,12 +283,32 @@ export default function ApplicationPreviewFlow({ job, slug, live = false }) {
   const [questionAnswers, setQuestionAnswers] = useState({});
   const [questionError, setQuestionError] = useState('');
   const [videoRecording, setVideoRecording] = useState(null);
-  const [recorderOpen, setRecorderOpen] = useState(false);
+  const [videoRetakeCount, setVideoRetakeCount] = useState(0);
   const [videoError, setVideoError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [flowError, setFlowError] = useState('');
 
   const currentQuestion = standardQuestions[questionIndex];
+  const hasVideoRecording = Boolean(videoRecording?.url);
+  const retakesRemaining = getRetakesRemaining(
+    questionRetakes,
+    videoRetakeCount,
+    hasVideoRecording,
+  );
+  const canRetake = canRetakeVideo(questionRetakes, videoRetakeCount, hasVideoRecording);
+  const retakeButtonLabel = getRetakeButtonLabel(questionRetakes, retakesRemaining);
+
+  const handleRetakeVideo = () => {
+    if (!canRetake) {
+      setVideoError('Retakes are disabled for this question');
+      return;
+    }
+    if (videoRecording?.url?.startsWith('blob:')) {
+      URL.revokeObjectURL(videoRecording.url);
+    }
+    setVideoRecording(null);
+    setVideoError('');
+  };
 
   const handleApplicationChange = (fieldId, value) => {
     setApplicationValues((prev) => ({ ...prev, [fieldId]: value }));
@@ -303,7 +331,12 @@ export default function ApplicationPreviewFlow({ job, slug, live = false }) {
       setSubmitting(true);
       setFlowError('');
       try {
-        await applicationService.startApplication(slug, applicationValues, fields);
+        const existingSession = applicationService.readApplySession(slug);
+        if (existingSession?.id) {
+          await applicationService.updateApplication(slug, applicationValues, fields);
+        } else {
+          await applicationService.startApplication(slug, applicationValues, fields);
+        }
       } catch (err) {
         setFlowError(err.message || 'Failed to start application');
         setSubmitting(false);
@@ -318,6 +351,26 @@ export default function ApplicationPreviewFlow({ job, slug, live = false }) {
     } else {
       setPhase('video');
     }
+  };
+
+  const handleQuestionBack = () => {
+    setQuestionError('');
+    if (questionIndex > 0) {
+      setQuestionIndex((index) => index - 1);
+      return;
+    }
+    setPhase('intro');
+  };
+
+  const handleVideoBack = () => {
+    setVideoError('');
+    setFlowError('');
+    if (standardQuestions.length > 0) {
+      setPhase('questions');
+      setQuestionIndex(standardQuestions.length - 1);
+      return;
+    }
+    setPhase('intro');
   };
 
   const handleQuestionNext = async () => {
@@ -371,7 +424,7 @@ export default function ApplicationPreviewFlow({ job, slug, live = false }) {
           URL.revokeObjectURL(media.url);
         }
         setVideoRecording(uploaded);
-        setRecorderOpen(false);
+        setVideoRetakeCount(uploaded.retakeCount ?? 0);
       } catch (err) {
         setVideoError(err.message || 'Failed to upload video');
       } finally {
@@ -381,8 +434,10 @@ export default function ApplicationPreviewFlow({ job, slug, live = false }) {
     }
 
     setVideoRecording(media);
+    if (videoRecording?.url) {
+      setVideoRetakeCount((count) => count + 1);
+    }
     setVideoError('');
-    setRecorderOpen(false);
   };
 
   const handleSubmit = async () => {
@@ -470,19 +525,32 @@ export default function ApplicationPreviewFlow({ job, slug, live = false }) {
             />
           )}
 
-          <Button
-            className="mt-6 w-full rounded-full py-3 text-sm font-semibold shadow-md shadow-accent/20 sm:text-base"
-            size="lg"
-            onClick={handleQuestionNext}
-            disabled={submitting}
-          >
-            {submitting
-              ? 'Saving...'
-              : questionIndex < standardQuestions.length - 1
-                ? 'Next'
-                : 'Continue to video'}{' '}
-            {!submitting && <ChevronRight size={18} />}
-          </Button>
+          <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row">
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-full rounded-full py-3 text-sm font-semibold sm:flex-1 sm:text-base"
+              size="lg"
+              onClick={handleQuestionBack}
+              disabled={submitting}
+            >
+              <ChevronLeft size={18} />
+              Back
+            </Button>
+            <Button
+              className="w-full rounded-full py-3 text-sm font-semibold shadow-md shadow-accent/20 sm:flex-[2] sm:text-base"
+              size="lg"
+              onClick={handleQuestionNext}
+              disabled={submitting}
+            >
+              {submitting
+                ? 'Saving...'
+                : questionIndex < standardQuestions.length - 1
+                  ? 'Next'
+                  : 'Continue to video'}{' '}
+              {!submitting && <ChevronRight size={18} />}
+            </Button>
+          </div>
         </StepCard>
       </StepLayout>
     );
@@ -513,48 +581,55 @@ export default function ApplicationPreviewFlow({ job, slug, live = false }) {
                 />
               </div>
               <div className="border-t border-border bg-card px-4 py-3 text-center">
-                <button
-                  type="button"
-                  onClick={() => setRecorderOpen(true)}
-                  className="text-sm font-medium text-accent hover:underline"
-                >
-                  Re-record video
-                </button>
+                {canRetake && retakeButtonLabel ? (
+                  <button
+                    type="button"
+                    onClick={handleRetakeVideo}
+                    className="text-sm font-medium text-accent hover:underline"
+                  >
+                    {retakeButtonLabel}
+                  </button>
+                ) : (
+                  <p className="text-sm text-muted">
+                    Retakes are disabled for this question
+                  </p>
+                )}
               </div>
             </div>
           ) : (
-            <button
-              type="button"
-              onClick={() => setRecorderOpen(true)}
-              className="group flex w-full flex-col items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-border bg-hover py-12 transition-all hover:border-accent/40 hover:bg-accent/[0.03]"
-            >
-              <span className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-accent/10 text-accent transition-transform group-hover:scale-105">
-                <Video size={26} />
-              </span>
-              <p className="text-sm font-semibold text-heading">No recording yet</p>
-              <p className="mt-1 text-xs text-muted">Click to open camera and record</p>
-            </button>
+            <VideoRecorderPanel
+              onRecorded={handleVideoRecorded}
+              onError={setVideoError}
+              disabled={submitting}
+              uploading={submitting}
+            />
           )}
 
           {videoError && <p className="mt-3 text-center text-sm font-medium text-red-500">{videoError}</p>}
           {flowError && <p className="mt-3 text-center text-sm font-medium text-red-500">{flowError}</p>}
 
-          <Button
-            className="mt-6 w-full rounded-full py-3 text-sm font-semibold shadow-md shadow-accent/20 sm:text-base"
-            size="lg"
-            onClick={handleSubmit}
-            disabled={submitting}
-          >
-            {submitting ? 'Submitting...' : 'Submit application'}
-          </Button>
+          <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row">
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-full rounded-full py-3 text-sm font-semibold sm:flex-1 sm:text-base"
+              size="lg"
+              onClick={handleVideoBack}
+              disabled={submitting}
+            >
+              <ChevronLeft size={18} />
+              Back
+            </Button>
+            <Button
+              className="w-full rounded-full py-3 text-sm font-semibold shadow-md shadow-accent/20 sm:flex-[2] sm:text-base"
+              size="lg"
+              onClick={handleSubmit}
+              disabled={submitting}
+            >
+              {submitting ? 'Submitting...' : 'Submit application'}
+            </Button>
+          </div>
         </StepCard>
-
-        <VideoRecorderModal
-          isOpen={recorderOpen}
-          onClose={() => setRecorderOpen(false)}
-          onRecorded={handleVideoRecorded}
-          title="Record your response"
-        />
       </StepLayout>
     );
   }
@@ -638,7 +713,7 @@ export default function ApplicationPreviewFlow({ job, slug, live = false }) {
             onClick={handleStartNow}
             disabled={submitting}
           >
-            {submitting ? 'Starting...' : 'Start now'}
+            {submitting ? 'Starting...' : applyButtonLabel}
           </Button>
 
           {flowError && (

@@ -11,9 +11,9 @@ import { buildPostgresConnectionOptions } from './database.config';
 loadEnv({ path: resolve(__dirname, '../../.env') });
 
 export default new DataSource({
-    ...buildPostgresConnectionOptions(),
-    // Paths relative to apps/api-app (npm workspace cwd for migration scripts)
-    entities: ['src/modules/**/*.entity{.ts,.js}'],
-    migrations: ['src/migrations/*{.ts,.js}'],
-    synchronize: false,
+  ...buildPostgresConnectionOptions(),
+  // Paths relative to apps/api-app (npm workspace cwd for migration scripts)
+  entities: ['src/modules/**/*.entity{.ts,.js}'],
+  migrations: ['src/migrations/*{.ts,.js}'],
+  synchronize: false,
 });

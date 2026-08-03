@@ -7,12 +7,12 @@ import { ApplicationNotesService } from './application-notes.service';
 import { ApplicationNoteRepository } from './repositories/application-note.repository';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([ApplicationNote]),
-        forwardRef(() => ApplicationModule),
-    ],
-    controllers: [ApplicationNotesController],
-    providers: [ApplicationNotesService, ApplicationNoteRepository],
-    exports: [ApplicationNotesService, ApplicationNoteRepository],
+  imports: [
+    TypeOrmModule.forFeature([ApplicationNote]),
+    forwardRef(() => ApplicationModule),
+  ],
+  controllers: [ApplicationNotesController],
+  providers: [ApplicationNotesService, ApplicationNoteRepository],
+  exports: [ApplicationNotesService, ApplicationNoteRepository],
 })
-export class ApplicationNotesModule { }
+export class ApplicationNotesModule {}

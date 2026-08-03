@@ -11,9 +11,7 @@ import { BASE_ENTITY_COLUMNS } from './helpers/migration-columns';
  * ON DELETE CASCADE on jobId fires only on hard SQL DELETE (future purge).
  * API soft-delete on jobs does NOT trigger CASCADE — child rows remain.
  */
-export class CreateJobApplicationFields1779000003000
-  implements MigrationInterface
-{
+export class CreateJobApplicationFields1779000003000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.createTable(
       new Table({

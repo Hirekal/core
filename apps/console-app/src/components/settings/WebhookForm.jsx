@@ -8,7 +8,10 @@ import {
   Activity,
   Link2,
   CheckCircle2,
+  AlertCircle,
+  Inbox,
 } from 'lucide-react';
+import Button from '../common/Button';
 import Input from '../common/Input';
 import Badge from '../common/Badge';
 import Card from '../common/Card';
@@ -73,9 +76,15 @@ function OptionCard({ icon: Icon, title, description, checked, onChange }) {
   );
 }
 
-export default function WebhookForm({ settings, onChange }) {
+export default function WebhookForm({
+  settings,
+  onChange,
+  logs = [],
+  logsLoading = false,
+  logsError = '',
+  onRefreshLogs,
+}) {
   const webhook = settings.webhook || {};
-  const logs = webhook.logs || [];
   const hasUrl = Boolean(webhook.url?.trim());
   const activeTriggers = [
     webhook.triggers?.newApplication,
@@ -99,7 +108,17 @@ export default function WebhookForm({ settings, onChange }) {
       key: 'status',
       label: 'Status',
       render: (row) => (
-        <Badge status={row.status === 'success' ? 'success' : 'failed'}>{row.status}</Badge>
+        <Badge
+          status={
+            row.status === 'success'
+              ? 'success'
+              : row.status === 'pending'
+                ? 'warning'
+                : 'failed'
+          }
+        >
+          {row.status}
+        </Badge>
       ),
     },
     { key: 'responseCode', label: 'Response' },
@@ -215,8 +234,56 @@ export default function WebhookForm({ settings, onChange }) {
               {logs.length} {logs.length === 1 ? 'entry' : 'entries'}
             </span>
           )}
+          {onRefreshLogs && (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={onRefreshLogs}
+              disabled={logsLoading}
+            >
+              {logsLoading ? 'Refreshing...' : 'Refresh'}
+            </Button>
+          )}
         </div>
-        <Table columns={logColumns} data={logs} emptyMessage="No webhook deliveries yet" />
+        <div className="px-6 pb-6">
+          {logsLoading ? (
+            <Table columns={logColumns} data={[]} loading />
+          ) : logsError ? (
+            <div className="flex flex-col items-center justify-center py-14 text-center">
+              <div className="mb-3 rounded-full bg-amber-50 p-3 text-amber-700">
+                <AlertCircle size={22} strokeWidth={1.75} />
+              </div>
+              <p className="text-sm font-medium text-heading">Could not load delivery logs</p>
+              <p className="mt-1 max-w-md text-xs leading-relaxed text-muted">{logsError}</p>
+              {onRefreshLogs && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="mt-4"
+                  onClick={onRefreshLogs}
+                >
+                  Try again
+                </Button>
+              )}
+            </div>
+          ) : logs.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center text-muted">
+              <div className="mb-3 rounded-full bg-hover p-3">
+                <Inbox size={22} strokeWidth={1.75} />
+              </div>
+              <p className="text-sm font-medium text-heading">No webhook deliveries yet</p>
+              <p className="mt-1 max-w-sm text-xs leading-relaxed">
+                {hasUrl && activeTriggers > 0
+                  ? 'Nothing has been sent to your webhook URL for this job yet. Logs appear here after a candidate applies or a stage changes.'
+                  : 'Set your webhook URL, enable at least one trigger, and save changes. Delivery attempts will show up here.'}
+              </p>
+            </div>
+          ) : (
+            <Table columns={logColumns} data={logs} />
+          )}
+        </div>
       </Card>
     </div>
   );
