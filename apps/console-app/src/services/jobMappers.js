@@ -1,4 +1,5 @@
 import { defaultJobSettings } from '../data/dummyStages';
+import { DEFAULT_APPLY_BUTTON_LABEL } from '../components/jobs/jobFormUtils';
 
 const EMPLOYMENT_TO_API = {
     'Full-time': 'FULL_TIME',
@@ -367,6 +368,7 @@ export function jobToUi(job) {
         candidateIntroTitle: job.candidateIntroTitle || '',
         candidateInstructions: job.candidateInstructions || '',
         applicationSectionTitle: job.applicationSectionTitle || '',
+        applyButtonLabel: job.applyButtonLabel || DEFAULT_APPLY_BUTTON_LABEL,
         introMedia: introMediaToUi(job.introMedia),
         createdAt: job.createdAt,
         updatedAt: job.updatedAt,
@@ -383,10 +385,6 @@ export function jobToUi(job) {
             questionRetakes: toUiRetakes(job.questionRetakes),
             transcriptionLanguage: job.transcriptionLanguage || 'english',
             aiTranscripts: job.aiTranscripts !== false,
-            general: {
-                ...defaultJobSettings.general,
-                ...(settingsEntity?.general || {}),
-            },
             thankYouPage: {
                 ...defaultJobSettings.thankYouPage,
                 ...(settingsEntity?.thankYouPage || {}),
@@ -401,7 +399,6 @@ export function jobToUi(job) {
             webhook: {
                 ...defaultJobSettings.webhook,
                 ...(settingsEntity?.webhook || {}),
-                logs: settingsEntity?.webhook?.logs || defaultJobSettings.webhook.logs,
             },
         },
     };
@@ -428,6 +425,7 @@ export function jobFormToApi(formData, options = {}) {
         candidateIntroTitle: formData.candidateIntroTitle || undefined,
         candidateInstructions: formData.candidateInstructions || undefined,
         applicationSectionTitle: formData.applicationSectionTitle || undefined,
+        applyButtonLabel: formData.applyButtonLabel || undefined,
         questionRetakes: toApiRetakes(settings.questionRetakes),
         transcriptionLanguage: settings.transcriptionLanguage || undefined,
         aiTranscripts:

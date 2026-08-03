@@ -4,24 +4,44 @@ import PageHeader from '../../components/layout/PageHeader';
 import Button from '../../components/common/Button';
 import EmptyState from '../../components/common/EmptyState';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
-import * as settingsService from '../../services/settingsService';
+import * as notificationService from '../../services/notificationService';
 import { formatRelative } from '../../utils/formatDate';
+
+const POLL_INTERVAL_MS = 30_000;
 
 export default function NotificationsPage() {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    settingsService.getNotifications().then(setNotifications).finally(() => setLoading(false));
+    let cancelled = false;
+
+    const load = () =>
+      notificationService
+        .getNotifications()
+        .then((items) => {
+          if (!cancelled) setNotifications(items);
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+
+    load();
+    const timer = setInterval(load, POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
   }, []);
 
   const handleMarkRead = async (id) => {
-    await settingsService.markNotificationRead(id);
+    await notificationService.markNotificationRead(id);
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
   };
 
   const handleMarkAllRead = async () => {
-    const updated = await settingsService.markAllNotificationsRead();
+    const updated = await notificationService.markAllNotificationsRead();
     setNotifications(updated);
   };
 

@@ -8,13 +8,13 @@ import { ApplicationAnswersService } from './application-answers.service';
 import { ApplicationAnswerRepository } from './repositories/application-answer.repository';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([ApplicationAnswer]),
-        CloudStorageModule,
-        forwardRef(() => ApplicationModule),
-    ],
-    controllers: [ApplicationAnswersController],
-    providers: [ApplicationAnswersService, ApplicationAnswerRepository],
-    exports: [ApplicationAnswersService, ApplicationAnswerRepository],
+  imports: [
+    TypeOrmModule.forFeature([ApplicationAnswer]),
+    CloudStorageModule,
+    forwardRef(() => ApplicationModule),
+  ],
+  controllers: [ApplicationAnswersController],
+  providers: [ApplicationAnswersService, ApplicationAnswerRepository],
+  exports: [ApplicationAnswersService, ApplicationAnswerRepository],
 })
 export class ApplicationAnswersModule {}

@@ -36,9 +36,51 @@ function resolveVideoUrl(source) {
 function getAnswerSummary(answer) {
     if (!answer) return '';
     if (answer.type === 'video') {
+        if (answer.transcript?.text) {
+            return answer.transcript.text;
+        }
+        if (answer.transcript?.isPending) {
+            return 'Transcription in progress...';
+        }
         return resolveVideoUrl(answer) ? 'Video response recorded' : 'No video recorded';
     }
     return answer.answer?.trim() || 'No answer provided';
+}
+
+function TranscriptBlock({ transcript }) {
+    if (!transcript) return null;
+
+    if (transcript.isPending) {
+        return (
+            <p className="mt-3 text-sm text-muted italic">
+                Transcribing video response...
+            </p>
+        );
+    }
+
+    if (transcript.isFailed) {
+        return (
+            <p className="mt-3 text-sm text-red-500">
+                {transcript.errorMessage || 'Transcription failed'}
+            </p>
+        );
+    }
+
+    if (!transcript.text?.trim()) {
+        return null;
+    }
+
+    return (
+        <div className="mt-4 rounded-lg border border-border bg-hover/30 px-4 py-3">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
+                Transcript
+                {transcript.language ? ` · ${transcript.language}` : ''}
+            </p>
+            <p className="text-sm leading-relaxed text-heading whitespace-pre-wrap">
+                {transcript.text}
+            </p>
+        </div>
+    );
 }
 
 /**
@@ -413,11 +455,14 @@ export default function CandidateDrawer({
                                                     </div>
                                                     <div className="p-4">
                                                         {answer.type === 'video' ? (
-                                                            <VideoPreview
-                                                                thumbnail={answer.videoThumbnail || mainVideoThumbnail}
-                                                                videoUrl={videoUrl || mainVideoUrl}
-                                                                label="Play video response"
-                                                            />
+                                                            <>
+                                                                <VideoPreview
+                                                                    thumbnail={answer.videoThumbnail || mainVideoThumbnail}
+                                                                    videoUrl={videoUrl || mainVideoUrl}
+                                                                    label="Play video response"
+                                                                />
+                                                                <TranscriptBlock transcript={answer.transcript} />
+                                                            </>
                                                         ) : (
                                                             <p className="text-sm leading-relaxed text-muted">
                                                                 {answer.answer?.trim() || 'No answer provided'}

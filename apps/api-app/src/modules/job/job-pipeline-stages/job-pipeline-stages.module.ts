@@ -7,15 +7,12 @@ import { JobPipelineStagesService } from './job-pipeline-stages.service';
 import { JobPipelineStageRepository } from './repositories/job-pipeline-stage.repository';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([JobPipelineStage]),
-        forwardRef(() => JobModule),
-    ],
-    controllers: [JobPipelineStagesController],
-    providers: [
-        JobPipelineStagesService,
-        JobPipelineStageRepository,
-    ],
-    exports: [JobPipelineStagesService, JobPipelineStageRepository],
+  imports: [
+    TypeOrmModule.forFeature([JobPipelineStage]),
+    forwardRef(() => JobModule),
+  ],
+  controllers: [JobPipelineStagesController],
+  providers: [JobPipelineStagesService, JobPipelineStageRepository],
+  exports: [JobPipelineStagesService, JobPipelineStageRepository],
 })
-export class JobPipelineStagesModule { }
+export class JobPipelineStagesModule {}

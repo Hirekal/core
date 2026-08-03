@@ -7,12 +7,12 @@ import { JobQuestionsService } from './job-questions.service';
 import { JobQuestionRepository } from './repositories/job-question.repository';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([JobQuestion]),
-        forwardRef(() => JobModule),
-    ],
-    controllers: [JobQuestionsController],
-    providers: [JobQuestionsService, JobQuestionRepository],
-    exports: [JobQuestionsService, JobQuestionRepository],
+  imports: [
+    TypeOrmModule.forFeature([JobQuestion]),
+    forwardRef(() => JobModule),
+  ],
+  controllers: [JobQuestionsController],
+  providers: [JobQuestionsService, JobQuestionRepository],
+  exports: [JobQuestionsService, JobQuestionRepository],
 })
-export class JobQuestionsModule { }
+export class JobQuestionsModule {}

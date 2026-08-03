@@ -7,6 +7,9 @@ const LEGACY_AUTH_KEY = 'talently_auth';
 /** Dispatched when stored tokens are invalid and the local session was cleared. */
 export const AUTH_EXPIRED_EVENT = 'hirekal:auth-expired';
 
+/** In-flight refresh promise so concurrent 401s share a single token rotation. */
+let refreshInFlight = null;
+
 /**
  * Reads the persisted auth session from localStorage.
  *
@@ -254,11 +257,11 @@ export async function apiUpload(path, file, fieldName = 'file') {
 }
 
 /**
- * Attempts to refresh tokens using the stored refresh token.
+ * Performs a single refresh-token exchange and persists the new session.
  *
  * @returns {Promise<boolean>} True when a new session was stored
  */
-async function tryRefreshSession() {
+async function performRefreshSession() {
   const session = readSession();
   if (!session?.refreshToken) {
     return false;
@@ -284,4 +287,19 @@ async function tryRefreshSession() {
     writeSession(null);
     return false;
   }
+}
+
+/**
+ * Attempts to refresh tokens using the stored refresh token.
+ * Concurrent callers wait on the same in-flight refresh.
+ *
+ * @returns {Promise<boolean>} True when a new session was stored
+ */
+function tryRefreshSession() {
+  if (!refreshInFlight) {
+    refreshInFlight = performRefreshSession().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
 }

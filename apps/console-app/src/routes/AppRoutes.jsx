@@ -14,7 +14,6 @@ import AddEditJobPage from '../pages/jobs/AddEditJobPage';
 import ApplicationPreviewPage from '../pages/jobs/ApplicationPreviewPage';
 import PublicApplyPage from '../pages/jobs/PublicApplyPage';
 import JobSettingsPage from '../pages/jobs/JobSettingsPage';
-import JobSettingsGeneralPage from '../pages/jobs/JobSettingsGeneralPage';
 import JobSettingsThankYouPage from '../pages/jobs/JobSettingsThankYouPage';
 import JobSettingsStagesPage from '../pages/jobs/JobSettingsStagesPage';
 import JobSettingsWebhookPage from '../pages/jobs/JobSettingsWebhookPage';
@@ -75,8 +74,7 @@ export default function AppRoutes() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<Navigate to="general" replace />} />
-        <Route path="general" element={<JobSettingsGeneralPage />} />
+        <Route index element={<Navigate to="thank-you" replace />} />
         <Route path="thank-you" element={<JobSettingsThankYouPage />} />
         <Route path="stages" element={<JobSettingsStagesPage />} />
         <Route path="email-automation" element={<JobSettingsEmailAutomationPage />} />

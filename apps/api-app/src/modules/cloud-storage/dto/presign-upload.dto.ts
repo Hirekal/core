@@ -7,16 +7,16 @@ const MAX_PRESIGN_BYTES = 100 * 1024 * 1024;
  * Request body for generating a presigned direct-to-R2 upload URL.
  */
 export class PresignUploadDto {
-    @IsString()
-    @IsNotEmpty()
-    fileName!: string;
+  @IsString()
+  @IsNotEmpty()
+  fileName!: string;
 
-    @IsString()
-    @IsNotEmpty()
-    contentType!: string;
+  @IsString()
+  @IsNotEmpty()
+  contentType!: string;
 
-    @IsInt()
-    @Min(1)
-    @Max(MAX_PRESIGN_BYTES)
-    size!: number;
+  @IsInt()
+  @Min(1)
+  @Max(MAX_PRESIGN_BYTES)
+  size!: number;
 }

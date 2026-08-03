@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Plus, Trash2, GripVertical, Video,
   Briefcase, MessageSquare, FormInput, SlidersHorizontal,
@@ -15,6 +15,7 @@ import {
   MEDIA_TYPES,
   DEFAULT_MEDIA_QUESTION,
   DEFAULT_APPLICATION_SECTION_TITLE,
+  DEFAULT_APPLY_BUTTON_LABEL,
   normalizeQuestions,
   normalizeApplicationFields,
 } from './jobFormUtils';
@@ -81,6 +82,7 @@ function createInitialForm(initialData) {
     candidateIntroTitle: initialData?.candidateIntroTitle ?? '',
     candidateInstructions: initialData?.candidateInstructions ?? '',
     applicationSectionTitle: initialData?.applicationSectionTitle ?? '',
+    applyButtonLabel: initialData?.applyButtonLabel ?? DEFAULT_APPLY_BUTTON_LABEL,
     questions: formQuestions,
     applicationFields: normalizeApplicationFields(initialData?.applicationFields),
     settings: normalizeSettings(initialData?.settings),
@@ -99,6 +101,7 @@ function prepareFormPayload(form) {
     candidateIntroTitle: form.candidateIntroTitle.trim(),
     candidateInstructions: form.candidateInstructions.trim(),
     applicationSectionTitle: form.applicationSectionTitle.trim() || DEFAULT_APPLICATION_SECTION_TITLE,
+    applyButtonLabel: form.applyButtonLabel.trim() || DEFAULT_APPLY_BUTTON_LABEL,
     questions: form.questions.map((q) => ({
       ...q,
       label: q.label.trim() || (q.builtIn ? DEFAULT_MEDIA_QUESTION.label : ''),
@@ -168,6 +171,11 @@ export default function JobForm({ initialData, onSubmit, loading }) {
   const [form, setForm] = useState(() => createInitialForm(initialData));
 
   const [activeSection, setActiveSection] = useState('basic');
+
+  useEffect(() => {
+    if (!initialData) return;
+    setForm(createInitialForm(initialData));
+  }, [initialData?.id, initialData?.updatedAt]);
 
   const updateField = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
 
@@ -506,6 +514,12 @@ export default function JobForm({ initialData, onSubmit, loading }) {
                   value={form.applicationSectionTitle}
                   onChange={(e) => updateField('applicationSectionTitle', e.target.value)}
                   placeholder="Complete your application"
+                />
+                <Input
+                  label="Apply Button Text"
+                  value={form.applyButtonLabel}
+                  onChange={(e) => updateField('applyButtonLabel', e.target.value)}
+                  placeholder="Start now"
                 />
                 <div>
                   <label className="text-sm font-medium text-heading mb-2 block">
