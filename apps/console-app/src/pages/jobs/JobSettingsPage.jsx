@@ -4,11 +4,13 @@ import PageHeader from '../../components/layout/PageHeader';
 import SettingsNav from '../../components/settings/SettingsNav';
 import Button from '../../components/common/Button';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+import { useToast } from '../../context/ToastContext';
 import * as jobService from '../../services/jobService';
 import { toUserErrorMessage } from '../../utils/errorMessage';
 
 export default function JobSettingsPage() {
   const { id } = useParams();
+  const { showSuccess, showError } = useToast();
   const [job, setJob] = useState(null);
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -38,8 +40,11 @@ export default function JobSettingsPage() {
       const updated = await jobService.updateJobSettings(id, settings);
       setJob(updated);
       setSettings(updated?.settings || settings);
+      showSuccess('Changes saved');
     } catch (err) {
-      setError(toUserErrorMessage(err, 'Failed to save settings'));
+      const message = toUserErrorMessage(err, 'Failed to save settings');
+      setError(message);
+      showError(err, 'Failed to save settings');
     } finally {
       setSaving(false);
     }

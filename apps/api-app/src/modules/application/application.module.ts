@@ -1,5 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { UsersModule } from '../auth/users/users.module';
 import { CloudStorageModule } from '../cloud-storage/cloud-storage.module';
 import { JobModule } from '../job/job.module';
 import { JobSettingsModule } from '../job/job-settings/job-settings.module';
@@ -43,6 +44,7 @@ import { WebhookDeliveryQueueRepository } from './webhook-delivery/repositories/
       WebhookDeliveryQueue,
       TranscriptionJob,
     ]),
+    UsersModule,
     CloudStorageModule,
     JobModule,
     JobSettingsModule,

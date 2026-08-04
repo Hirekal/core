@@ -21,10 +21,19 @@ export default function NotificationBell() {
 
     load();
     const timer = setInterval(load, POLL_INTERVAL_MS);
+    const onUpdated = () => load();
+    window.addEventListener(
+      notificationService.NOTIFICATIONS_UPDATED_EVENT,
+      onUpdated,
+    );
 
     return () => {
       cancelled = true;
       clearInterval(timer);
+      window.removeEventListener(
+        notificationService.NOTIFICATIONS_UPDATED_EVENT,
+        onUpdated,
+      );
     };
   }, []);
 
