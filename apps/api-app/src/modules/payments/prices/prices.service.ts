@@ -15,6 +15,11 @@ import {
   LOG_MESSAGES,
 } from '../common/messages/payment.messages';
 import { RecordStatus } from '../common/enums/payment.enums';
+import {
+  PAYMENT_CATALOG_CACHE_KEYS,
+  PAYMENT_CONSTANTS,
+} from '../common/constants/payment.constants';
+import { CatalogCacheService } from '../catalog/catalog-cache.service';
 
 @Injectable()
 export class PricesService {
@@ -26,6 +31,7 @@ export class PricesService {
     private readonly productsService: ProductsService,
     private readonly paymentProvidersService: PaymentProvidersService,
     private readonly paymentProviderRegistry: PaymentProviderRegistry,
+    private readonly catalogCacheService: CatalogCacheService,
   ) {}
 
   /*
@@ -80,7 +86,7 @@ export class PricesService {
         });
       }
 
-      return BaseRepository.createAndSave(this.pricesRepository, {
+      const price = await BaseRepository.createAndSave(this.pricesRepository, {
         productId: product.id,
         paymentProviderId: provider.id,
         providerPriceId: providerPrice.providerPriceId,
@@ -91,6 +97,8 @@ export class PricesService {
         status: RecordStatus.ACTIVE,
         metadata: dto.metadata ?? {},
       });
+      await this.catalogCacheService.invalidatePrices();
+      return price;
     } catch (error) {
       this.logger.error(LOG_MESSAGES.PRICE.CREATE_FAILED(dto.productId), error);
       throw error;
@@ -100,13 +108,23 @@ export class PricesService {
   /*
    * Lists prices with product and provider relations, optionally by product.
    */
-  async findAll(productId?: string): Promise<Price[]> {
+  async findAll(productId?: string, refresh = false): Promise<Price[]> {
     try {
-      return this.pricesRepository.find({
-        where: productId ? { productId } : {},
-        relations: { product: true, paymentProvider: true },
-        order: { createdAt: 'DESC' },
-      });
+      const cacheKey = productId
+        ? PAYMENT_CATALOG_CACHE_KEYS.pricesByProduct(productId)
+        : PAYMENT_CATALOG_CACHE_KEYS.PRICES_ALL;
+
+      return this.catalogCacheService.getOrLoad(
+        cacheKey,
+        () =>
+          this.pricesRepository.find({
+            where: productId ? { productId } : {},
+            relations: { product: true, paymentProvider: true },
+            order: { createdAt: 'DESC' },
+          }),
+        PAYMENT_CONSTANTS.CATALOG_CACHE_TTL_MS,
+        refresh,
+      );
     } catch (error) {
       this.logger.error(LOG_MESSAGES.PRICE.LIST_FAILED, error);
       throw error;

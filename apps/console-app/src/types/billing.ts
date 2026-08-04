@@ -150,6 +150,7 @@ export interface PlanChangePreview {
 export interface CheckoutSessionResponse {
   clientSecret: string;
   sessionId: string;
+  providerSubscriptionId: string;
   publishableKey: string;
 }
 

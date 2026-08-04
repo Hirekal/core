@@ -97,13 +97,13 @@ export interface ProviderPlanChangePreviewResult {
 export interface ProviderCheckoutSessionInput {
   providerCustomerId: string;
   providerPriceId: string;
-  returnUrl: string;
   metadata?: Record<string, string>;
 }
 
 export interface ProviderCheckoutSessionResult {
   clientSecret: string;
   sessionId: string;
+  providerSubscriptionId: string;
 }
 
 export interface ProviderBillingPortalSessionInput {

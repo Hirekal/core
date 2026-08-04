@@ -567,35 +567,43 @@ export class StripeProvider implements PaymentProvider {
   }
 
   /*
-   * Creates an embedded Stripe Checkout session for in-app subscription signup.
+   * Creates an incomplete subscription and returns the first invoice payment secret.
    */
   async createCheckoutSession(
     input: ProviderCheckoutSessionInput,
   ): Promise<ProviderCheckoutSessionResult> {
     try {
-      const checkoutSession = await this.stripeService
+      const subscription = await this.stripeService
         .getClient()
-        .checkout.sessions.create({
-          mode: 'subscription',
-          ui_mode: 'embedded_page',
+        .subscriptions.create({
           customer: input.providerCustomerId,
-          line_items: [{ price: input.providerPriceId, quantity: 1 }],
-          return_url: input.returnUrl,
+          items: [{ price: input.providerPriceId, quantity: 1 }],
+          payment_behavior: 'default_incomplete',
+          payment_settings: {
+            save_default_payment_method: 'on_subscription',
+          },
+          expand: ['latest_invoice.confirmation_secret'],
           metadata: input.metadata,
-          subscription_data: input.metadata
-            ? { metadata: input.metadata }
-            : undefined,
         });
 
-      if (!checkoutSession.client_secret) {
+      const latestInvoice = subscription.latest_invoice;
+      if (!latestInvoice || typeof latestInvoice === 'string') {
+        throw new BadRequestException(
+          ERROR_MESSAGES.CHECKOUT.SESSION_CREATE_FAILED,
+        );
+      }
+
+      const clientSecret = latestInvoice.confirmation_secret?.client_secret;
+      if (!clientSecret) {
         throw new BadRequestException(
           ERROR_MESSAGES.CHECKOUT.SESSION_CREATE_FAILED,
         );
       }
 
       return {
-        clientSecret: checkoutSession.client_secret,
-        sessionId: checkoutSession.id,
+        clientSecret,
+        sessionId: subscription.id,
+        providerSubscriptionId: subscription.id,
       };
     } catch (error) {
       rethrowStripeError(error);

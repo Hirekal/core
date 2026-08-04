@@ -64,12 +64,18 @@ export default function ManageSubscriptionPage() {
       setSubscription(sub);
       persistSubscriptionSession(sub.id, sub.paymentProviderId, sub.customerId);
 
-      const methods = await billingService.getPaymentMethods(sub.paymentProviderId);
-      setPaymentMethod(methods.find((method) => method.isDefault) ?? methods[0] ?? null);
-
       const scheduledPriceId = getScheduledPlanPriceId(sub);
-      if (scheduledPriceId) {
-        const scheduledPrice = await billingService.getPrice(scheduledPriceId);
+      const [methods, scheduledPrice] = await Promise.all([
+        billingService.getPaymentMethods(sub.paymentProviderId),
+        scheduledPriceId
+          ? billingService.getPrice(scheduledPriceId)
+          : Promise.resolve(null),
+      ]);
+      setPaymentMethod(
+        methods.find((method) => method.isDefault) ?? methods[0] ?? null,
+      );
+
+      if (scheduledPrice) {
         setScheduledPlan({
           product: scheduledPrice.product!,
           price: scheduledPrice,

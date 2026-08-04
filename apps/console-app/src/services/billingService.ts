@@ -371,19 +371,33 @@ export async function getCheckoutConfig(): Promise<{ publishableKey: string }> {
 }
 
 /*
- * Creates an embedded Stripe Checkout session via the backend.
+ * Creates a checkout payment intent via the backend.
  */
 export async function createCheckoutSession(input: {
   priceId: string;
   email: string;
   name?: string;
-  returnUrl?: string;
 }): Promise<CheckoutSessionResponse> {
   return withBillingErrorHandling(() =>
     apiRequest('/payments/checkout', {
       method: 'POST',
       auth: true,
       body: input,
+    }),
+  );
+}
+
+/*
+ * Syncs the local subscription after custom checkout payment succeeds.
+ */
+export async function syncCheckoutSubscription(
+  providerSubscriptionId: string,
+): Promise<Subscription | null> {
+  return withBillingErrorHandling(() =>
+    apiRequest('/payments/checkout/sync', {
+      method: 'POST',
+      auth: true,
+      body: { providerSubscriptionId },
     }),
   );
 }

@@ -10,8 +10,9 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
-import { ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { Auth } from '../../auth/common/decorators/auth.decorator';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -37,8 +38,13 @@ export class ProductsController {
    */
   @Get()
   @ApiOperation({ summary: 'List products' })
-  findAll() {
-    return this.productsService.findAll();
+  @ApiQuery({
+    name: 'refresh',
+    required: false,
+    description: 'Set to true to bypass cache and reload from database',
+  })
+  findAll(@Query('refresh') refresh?: string) {
+    return this.productsService.findAll(refresh === 'true');
   }
 
   /*

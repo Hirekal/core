@@ -13,6 +13,11 @@ import {
   LOG_MESSAGES,
 } from '../common/messages/payment.messages';
 import { RecordStatus } from '../common/enums/payment.enums';
+import {
+  PAYMENT_CATALOG_CACHE_KEYS,
+  PAYMENT_CONSTANTS,
+} from '../common/constants/payment.constants';
+import { CatalogCacheService } from '../catalog/catalog-cache.service';
 
 @Injectable()
 export class ProductsService {
@@ -21,6 +26,7 @@ export class ProductsService {
   constructor(
     @InjectRepository(Product)
     private readonly productsRepository: Repository<Product>,
+    private readonly catalogCacheService: CatalogCacheService,
   ) {}
 
   /*
@@ -35,13 +41,19 @@ export class ProductsService {
         throw new ConflictException(ERROR_MESSAGES.PRODUCT.CODE_ALREADY_EXISTS);
       }
 
-      return BaseRepository.createAndSave(this.productsRepository, {
-        name: dto.name,
-        code: dto.code.toUpperCase(),
-        description: dto.description ?? null,
-        status: dto.status ?? RecordStatus.ACTIVE,
-        metadata: dto.metadata ?? {},
-      });
+      const product = await BaseRepository.createAndSave(
+        this.productsRepository,
+        {
+          name: dto.name,
+          code: dto.code.toUpperCase(),
+          description: dto.description ?? null,
+          status: dto.status ?? RecordStatus.ACTIVE,
+          metadata: dto.metadata ?? {},
+        },
+      );
+      this.catalogCacheService.invalidateProducts();
+      this.catalogCacheService.invalidatePrices();
+      return product;
     } catch (error) {
       this.logger.error(LOG_MESSAGES.PRODUCT.CREATE_FAILED(dto.code), error);
       throw error;
@@ -51,9 +63,14 @@ export class ProductsService {
   /*
    * Lists all products ordered by newest first.
    */
-  async findAll(): Promise<Product[]> {
+  async findAll(refresh = false): Promise<Product[]> {
     try {
-      return this.productsRepository.find({ order: { createdAt: 'DESC' } });
+      return this.catalogCacheService.getOrLoad(
+        PAYMENT_CATALOG_CACHE_KEYS.PRODUCTS_ALL,
+        () => this.productsRepository.find({ order: { createdAt: 'DESC' } }),
+        PAYMENT_CONSTANTS.CATALOG_CACHE_TTL_MS,
+        refresh,
+      );
     } catch (error) {
       this.logger.error(LOG_MESSAGES.PRODUCT.LIST_FAILED, error);
       throw error;
@@ -83,7 +100,10 @@ export class ProductsService {
     try {
       const product = await this.findOne(id);
       Object.assign(product, dto);
-      return this.productsRepository.save(product);
+      const updatedProduct = await this.productsRepository.save(product);
+      this.catalogCacheService.invalidateProducts();
+      this.catalogCacheService.invalidatePrices();
+      return updatedProduct;
     } catch (error) {
       this.logger.error(LOG_MESSAGES.PRODUCT.UPDATE_FAILED(id), error);
       throw error;
@@ -100,6 +120,8 @@ export class ProductsService {
         { id },
         ERROR_MESSAGES.PRODUCT.NOT_FOUND,
       );
+      this.catalogCacheService.invalidateProducts();
+      this.catalogCacheService.invalidatePrices();
     } catch (error) {
       this.logger.error(LOG_MESSAGES.PRODUCT.REMOVE_FAILED(id), error);
       throw error;

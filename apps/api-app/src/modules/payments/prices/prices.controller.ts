@@ -36,11 +36,17 @@ export class PricesController {
   @Get()
   @ApiOperation({ summary: 'List prices' })
   @ApiQuery({ name: 'productId', format: 'uuid', required: false })
+  @ApiQuery({
+    name: 'refresh',
+    required: false,
+    description: 'Set to true to bypass cache and reload from database',
+  })
   findAll(
     @Query('productId', new ParseUUIDPipe({ optional: true }))
     productId?: string,
+    @Query('refresh') refresh?: string,
   ) {
-    return this.pricesService.findAll(productId);
+    return this.pricesService.findAll(productId, refresh === 'true');
   }
 
   /*

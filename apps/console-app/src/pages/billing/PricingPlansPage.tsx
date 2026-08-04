@@ -34,10 +34,13 @@ export default function PricingPlansPage() {
   const { user } = useAuth();
   const { showSuccess, showError } = useToast();
 
+  const checkoutState = location.state as
+    | { subscription?: Subscription; subscribed?: boolean }
+    | null;
+
   const [plans, setPlans] = useState<BillingPlan[]>([]);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
-  const [providerId, setProviderId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [actionPriceId, setActionPriceId] = useState<string | null>(null);
@@ -45,46 +48,82 @@ export default function PricingPlansPage() {
   /*
    * Loads catalog plans, subscription state, and default payment method.
    */
-  const loadData = useCallback(async () => {
-    try {
-      const provider = await billingService.getDefaultPaymentProvider();
-      setProviderId(provider.id);
+  const loadData = useCallback(
+    async (
+      retrySubscription = false,
+      fallbackSubscription: Subscription | null = null,
+    ) => {
+      try {
+        const [catalog, latestSubscription] = await Promise.all([
+          billingService.getBillingPlans(),
+          billingService.getMySubscription(),
+        ]);
+        setPlans(catalog);
 
-      const [catalog, latestSubscription] = await Promise.all([
-        billingService.getBillingPlans(),
-        billingService.getMySubscription(),
-      ]);
-      setPlans(catalog);
+        let resolvedSubscription = isBillableSubscription(latestSubscription)
+          ? latestSubscription
+          : null;
 
-      const subscription = isBillableSubscription(latestSubscription)
-        ? latestSubscription
-        : null;
+        if (
+          !resolvedSubscription &&
+          fallbackSubscription &&
+          isBillableSubscription(fallbackSubscription)
+        ) {
+          resolvedSubscription = fallbackSubscription;
+        }
 
-      if (subscription) {
-        setSubscription(subscription);
-        persistSubscriptionSession(
-          subscription.id,
-          subscription.paymentProviderId,
-          subscription.customerId,
-        );
-      } else {
-        setSubscription(null);
+        if (!resolvedSubscription && retrySubscription) {
+          for (let attempt = 0; attempt < 5; attempt += 1) {
+            await new Promise((resolve) => {
+              window.setTimeout(resolve, 1000);
+            });
+            const polledSubscription = await billingService.getMySubscription();
+            if (isBillableSubscription(polledSubscription)) {
+              resolvedSubscription = polledSubscription;
+              break;
+            }
+          }
+        }
+
+        if (resolvedSubscription) {
+          setSubscription(resolvedSubscription);
+          persistSubscriptionSession(
+            resolvedSubscription.id,
+            resolvedSubscription.paymentProviderId,
+            resolvedSubscription.customerId,
+          );
+
+          const methods = await billingService.getPaymentMethods(
+            resolvedSubscription.paymentProviderId,
+          );
+          setPaymentMethod(
+            methods.find((method) => method.isDefault) ?? methods[0] ?? null,
+          );
+        } else {
+          setSubscription(null);
+          setPaymentMethod(null);
+        }
+      } catch (error) {
+        throw error;
       }
-
-      const methods = await billingService.getPaymentMethods(provider.id);
-      setPaymentMethod(methods.find((method) => method.isDefault) ?? methods[0] ?? null);
-    } catch (error) {
-      throw error;
-    }
-  }, []);
+    },
+    [],
+  );
 
   useEffect(() => {
+    const retrySubscription = Boolean(checkoutState?.subscribed);
+    const fallbackSubscription = checkoutState?.subscription ?? null;
+
     setLoading(true);
     setError('');
-    loadData()
+    loadData(retrySubscription, fallbackSubscription)
       .catch((err) => setError(toUserErrorMessage(err, 'Failed to load pricing plans')))
       .finally(() => setLoading(false));
-  }, [loadData, location.key]);
+
+    if (retrySubscription) {
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [checkoutState?.subscribed, checkoutState?.subscription, loadData, location.pathname, navigate]);
 
   const currentPlan = useMemo(() => {
     if (!subscription?.priceId) return null;
@@ -151,7 +190,6 @@ export default function PricingPlansPage() {
    */
   const handlePlanAction = async (plan: BillingPlan) => {
     try {
-      if (!providerId) return;
       if (plan.price.id === currentPriceId) return;
 
       if (!subscription) {

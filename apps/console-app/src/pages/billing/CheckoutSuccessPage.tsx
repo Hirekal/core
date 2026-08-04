@@ -18,7 +18,7 @@ const POLL_INTERVAL_MS = 2000;
 const MAX_POLL_ATTEMPTS = 10;
 
 /**
- * Shows payment success details after embedded checkout completes.
+ * Shows payment success details after checkout completes.
  */
 export default function CheckoutSuccessPage() {
   const navigate = useNavigate();

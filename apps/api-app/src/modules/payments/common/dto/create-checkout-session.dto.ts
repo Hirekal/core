@@ -6,8 +6,6 @@ import {
   IsOptional,
   IsString,
   IsUUID,
-  IsUrl,
-  Matches,
   MaxLength,
 } from 'class-validator';
 
@@ -23,20 +21,4 @@ export class CreateCheckoutSessionDto {
   @IsString()
   @MaxLength(255)
   name?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(2048)
-  @Matches(/^https?:\/\/.+/, {
-    message: 'returnUrl must be an http(s) URL',
-  })
-  returnUrl?: string;
-
-  @IsOptional()
-  @IsUrl()
-  successUrl?: string;
-
-  @IsOptional()
-  @IsUrl()
-  cancelUrl?: string;
 }

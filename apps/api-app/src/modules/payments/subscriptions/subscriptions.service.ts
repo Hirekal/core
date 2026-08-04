@@ -549,6 +549,11 @@ export class SubscriptionsService {
    */
   async findLatestByUserId(userId: string): Promise<Subscription | null> {
     try {
+      const activeSubscription = await this.findActiveByUserId(userId);
+      if (activeSubscription) {
+        return activeSubscription;
+      }
+
       const subscription = await this.subscriptionsRepository.findOne({
         where: { userId },
         relations: {
@@ -559,11 +564,7 @@ export class SubscriptionsService {
         order: { createdAt: 'DESC' },
       });
 
-      if (!subscription) {
-        return null;
-      }
-
-      return this.refreshFromProvider(subscription);
+      return subscription ?? null;
     } catch (error) {
       this.logger.error(LOG_MESSAGES.SUBSCRIPTION.FIND_FAILED(userId), error);
       throw error;
@@ -700,9 +701,6 @@ export class SubscriptionsService {
         input.providerSubscriptionId,
         input.providerCode,
       );
-      if (existingSubscription) {
-        return existingSubscription;
-      }
 
       let customer =
         await this.paymentCustomersService.findByProviderCustomerId(
@@ -736,6 +734,15 @@ export class SubscriptionsService {
       );
 
       let localPriceId = input.priceId;
+      if (localPriceId) {
+        try {
+          const localPrice = await this.pricesService.findOne(localPriceId);
+          localPriceId = localPrice.id;
+        } catch {
+          localPriceId = undefined;
+        }
+      }
+
       if (!localPriceId) {
         const localPrice = await this.pricesService.findByProviderPriceId(
           providerSubscription.providerPriceId,
@@ -749,6 +756,15 @@ export class SubscriptionsService {
           `Skipping subscription sync ${input.providerSubscriptionId}: local price not found for ${providerSubscription.providerPriceId}`,
         );
         return null;
+      }
+
+      if (existingSubscription) {
+        return this.syncFromProviderResult(
+          existingSubscription,
+          providerSubscription,
+          input.metadata,
+          localPriceId,
+        );
       }
 
       return this.saveFromProviderResult({

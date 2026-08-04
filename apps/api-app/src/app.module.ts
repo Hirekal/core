@@ -64,7 +64,7 @@ import { PaymentsModule } from './modules/payments/payments.module';
             'http://localhost:5173/billing/success',
           cancelUrl:
             configService.get<string>('STRIPE_CHECKOUT_CANCEL_URL') ??
-            'http://localhost:5173/billing/cancel',
+            'http://localhost:5173/billing/plans',
         },
       }),
     }),

@@ -35,6 +35,7 @@ import { StripeService } from './providers/stripe/stripe.service';
 import { StripeProvider } from './providers/stripe/stripe.provider';
 import { StripeWebhookHandler } from './providers/stripe/stripe.webhook';
 import { WebhookProcessorService } from './webhooks/webhook-processor.service';
+import { CatalogCacheService } from './catalog/catalog-cache.service';
 
 export interface PaymentsModuleAsyncOptions {
   imports?: Array<Type<unknown> | DynamicModule>;
@@ -92,6 +93,7 @@ export class PaymentsModule {
         StripeProvider,
         StripeWebhookHandler,
         WebhookProcessorService,
+        CatalogCacheService,
       ],
       exports: [
         PAYMENTS_MODULE_OPTIONS,
@@ -106,6 +108,7 @@ export class PaymentsModule {
         InvoicesService,
         WebhookEventsService,
         PaymentProviderRegistry,
+        CatalogCacheService,
         TypeOrmModule,
       ],
     };

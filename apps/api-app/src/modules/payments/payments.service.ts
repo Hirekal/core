@@ -3,6 +3,7 @@
  */
 import {
   BadRequestException,
+  ForbiddenException,
   Inject,
   Injectable,
   Logger,
@@ -29,6 +30,7 @@ import {
 import type { PaymentProvider } from './providers/payment-provider.interface';
 import { PaymentProviderCode } from './common/enums/payment.enums';
 import { StripeService } from './providers/stripe/stripe.service';
+import { resolveStripeResourceId } from './common/utils/payment-mapper.util';
 
 @Injectable()
 export class PaymentsService {
@@ -135,14 +137,9 @@ export class PaymentsService {
         });
       }
 
-      const returnUrl =
-        dto.returnUrl ??
-        `${this.options.stripe?.successUrl ?? 'http://localhost:5173/billing/success'}?session_id={CHECKOUT_SESSION_ID}`;
-
       const session = await client.createCheckoutSession({
         providerCustomerId: customer.providerCustomerId,
         providerPriceId: price.providerPriceId,
-        returnUrl,
         metadata: { userId, priceId: price.id },
       });
 
@@ -152,6 +149,81 @@ export class PaymentsService {
       };
     } catch (error) {
       this.logger.error(LOG_MESSAGES.CHECKOUT.CREATE_FAILED(userId), error);
+      throw error;
+    }
+  }
+
+  /*
+   * Persists the subscription locally after custom checkout payment succeeds.
+   */
+  async syncCheckoutSubscription(
+    userId: string,
+    providerSubscriptionId: string,
+  ) {
+    try {
+      const stripe = this.stripeService.getClient();
+      let stripeSubscription = await stripe.subscriptions.retrieve(
+        providerSubscriptionId,
+      );
+
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        if (
+          stripeSubscription.status === 'active' ||
+          stripeSubscription.status === 'trialing' ||
+          stripeSubscription.status === 'past_due'
+        ) {
+          break;
+        }
+
+        await new Promise((resolve) => {
+          setTimeout(resolve, 1000);
+        });
+        stripeSubscription = await stripe.subscriptions.retrieve(
+          providerSubscriptionId,
+        );
+      }
+
+      const metadata = stripeSubscription.metadata ?? {};
+      const metadataUserId = metadata.userId;
+
+      if (metadataUserId && metadataUserId !== userId) {
+        throw new ForbiddenException(ERROR_MESSAGES.SUBSCRIPTION.NOT_FOUND);
+      }
+
+      const providerCustomerId = resolveStripeResourceId(
+        stripeSubscription.customer,
+      );
+
+      const subscription = await this.subscriptionsService.syncFromStripeCheckout(
+        {
+          userId,
+          providerCode: PaymentProviderCode.STRIPE,
+          providerCustomerId,
+          providerSubscriptionId,
+          priceId: metadata.priceId,
+          metadata: metadata as Record<string, unknown>,
+        },
+      );
+
+      if (!subscription) {
+        throw new BadRequestException(ERROR_MESSAGES.SUBSCRIPTION.NOT_FOUND);
+      }
+
+      try {
+        await this.listPaymentMethods(userId, subscription.paymentProviderId);
+      } catch (paymentMethodError) {
+        this.logger.warn(
+          `Payment method sync skipped after checkout for user ${userId}`,
+          paymentMethodError,
+        );
+      }
+
+      return subscription;
+    } catch (error) {
+      this.logger.error(
+        `syncCheckoutSubscription failed for user ${userId}, subscription ${providerSubscriptionId}`,
+        error,
+      );
       throw error;
     }
   }

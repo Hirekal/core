@@ -21,6 +21,8 @@ import { CreatePaymentCustomerDto } from './payment-customers/dto/create-payment
 import { CreateCheckoutSessionDto } from './common/dto/create-checkout-session.dto';
 import { CreateBillingPortalSessionDto } from './common/dto/create-billing-portal-session.dto';
 import { AttachPaymentMethodDto } from './common/dto/attach-payment-method.dto';
+import { SyncCheckoutSubscriptionDto } from './common/dto/sync-checkout-subscription.dto';
+import { CatalogCacheService } from './catalog/catalog-cache.service';
 
 @ApiTags('Payments')
 @Auth()
@@ -31,6 +33,7 @@ export class PaymentsController {
   constructor(
     private readonly paymentsService: PaymentsService,
     private readonly paymentCustomersService: PaymentCustomersService,
+    private readonly catalogCacheService: CatalogCacheService,
   ) {}
 
   /*
@@ -89,7 +92,7 @@ export class PaymentsController {
    * Creates an embedded checkout session returning client secret and publishable key.
    */
   @Post('checkout')
-  @ApiOperation({ summary: 'Create embedded checkout session' })
+  @ApiOperation({ summary: 'Create checkout payment intent for custom checkout UI' })
   async createCheckout(
     @CurrentUser() user: User,
     @Body() dto: CreateCheckoutSessionDto,
@@ -98,6 +101,26 @@ export class PaymentsController {
       return await this.paymentsService.createCheckoutSession(user.id, dto);
     } catch (error) {
       this.logger.error(`createCheckout failed for user ${user.id}`, error);
+      throw error;
+    }
+  }
+
+  /*
+   * Syncs local subscription state after custom checkout payment succeeds.
+   */
+  @Post('checkout/sync')
+  @ApiOperation({ summary: 'Sync subscription after custom checkout payment' })
+  async syncCheckoutSubscription(
+    @CurrentUser() user: User,
+    @Body() dto: SyncCheckoutSubscriptionDto,
+  ) {
+    try {
+      return await this.paymentsService.syncCheckoutSubscription(
+        user.id,
+        dto.providerSubscriptionId,
+      );
+    } catch (error) {
+      this.logger.error(`syncCheckoutSubscription failed for user ${user.id}`, error);
       throw error;
     }
   }
@@ -221,6 +244,21 @@ export class PaymentsController {
       );
     } catch (error) {
       this.logger.error(`listInvoices failed for user ${user.id}`, error);
+      throw error;
+    }
+  }
+
+  /*
+   * Clears in-memory product and price list cache.
+   */
+  @Post('catalog/cache/clear')
+  @ApiOperation({ summary: 'Clear payment catalog cache' })
+  clearCatalogCache() {
+    try {
+      this.catalogCacheService.invalidateAll();
+      return { cleared: true };
+    } catch (error) {
+      this.logger.error('clearCatalogCache failed', error);
       throw error;
     }
   }

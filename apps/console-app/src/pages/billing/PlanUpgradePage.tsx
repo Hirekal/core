@@ -61,10 +61,11 @@ export default function PlanUpgradePage() {
 
       setSubscriptionId(subscription.id);
       setPreview(planChangePreview);
+      setPaymentProviderId(subscription.paymentProviderId);
 
-      const provider = await billingService.getDefaultPaymentProvider();
-      setPaymentProviderId(provider.id);
-      const methods = await billingService.getPaymentMethods(provider.id);
+      const methods = await billingService.getPaymentMethods(
+        subscription.paymentProviderId,
+      );
       setPaymentMethod(methods.find((method) => method.isDefault) ?? methods[0] ?? null);
     } catch (error) {
       throw error;

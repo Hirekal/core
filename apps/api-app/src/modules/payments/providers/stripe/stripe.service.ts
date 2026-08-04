@@ -41,7 +41,7 @@ export class StripeService {
     return (
       this.options.stripe?.cancelUrl ??
       process.env.STRIPE_CHECKOUT_CANCEL_URL ??
-      'http://localhost:5173/billing/cancel'
+      'http://localhost:5173/billing/plans'
     );
   }
 

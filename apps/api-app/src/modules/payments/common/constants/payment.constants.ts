@@ -4,6 +4,13 @@
 export const PAYMENT_CONSTANTS = {
   DEFAULT_PROVIDER_CODE: 'STRIPE',
   CURRENCY_DEFAULT: 'USD',
+  CATALOG_CACHE_TTL_MS: 2 * 60 * 60 * 1000,
+} as const;
+
+export const PAYMENT_CATALOG_CACHE_KEYS = {
+  PRODUCTS_ALL: 'catalog:products:all',
+  PRICES_ALL: 'catalog:prices:all',
+  pricesByProduct: (productId: string) => `catalog:prices:product:${productId}`,
 } as const;
 
 export const STRIPE_WEBHOOK_EVENTS = {
