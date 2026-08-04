@@ -173,12 +173,16 @@ export default function AppRoutes() {
         }
       />
       <Route
-        path="/billing/invoices"
+        path="/invoices"
         element={
           <ProtectedRoute>
             <AppLayout><InvoicesPage /></AppLayout>
           </ProtectedRoute>
         }
+      />
+      <Route
+        path="/billing/invoices"
+        element={<Navigate to="/invoices" replace />}
       />
       <Route path="/billing" element={<Navigate to="/billing/plans" replace />} />
 

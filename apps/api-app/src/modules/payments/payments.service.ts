@@ -352,6 +352,16 @@ export class PaymentsService {
   }
 
   /*
+   * Lists invoices for the authenticated user using the default provider.
+   */
+  async listInvoicesForUser(userId: string) {
+    const provider = await this.paymentProvidersService.findByCode(
+      this.options.defaultProviderCode,
+    );
+    return this.listInvoices(userId, provider.id);
+  }
+
+  /*
    * Lists invoices for a provider customer.
    */
   async listInvoices(userId: string, paymentProviderId: string) {

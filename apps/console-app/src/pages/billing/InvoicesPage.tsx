@@ -28,14 +28,9 @@ export default function InvoicesPage() {
    * Loads invoice rows for the default payment provider.
    */
   const loadInvoices = useCallback(async () => {
-    try {
-      const provider = await billingService.getDefaultPaymentProvider();
-      const rows = await billingService.getInvoices(provider.id);
-      setInvoices(rows);
-      setPage(1);
-    } catch (error) {
-      throw error;
-    }
+    const rows = await billingService.getMyInvoices();
+    setInvoices(rows);
+    setPage(1);
   }, []);
 
   useEffect(() => {
@@ -73,7 +68,6 @@ export default function InvoicesPage() {
         description="View and download your billing history"
         breadcrumbs={[
           { to: '/jobs', label: 'Jobs' },
-          { label: 'Billing' },
           { label: 'Invoices' },
         ]}
       />

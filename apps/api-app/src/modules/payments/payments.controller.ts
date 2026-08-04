@@ -191,6 +191,20 @@ export class PaymentsController {
   }
 
   /*
+   * Lists invoices for the authenticated user.
+   */
+  @Get('invoices/me')
+  @ApiOperation({ summary: 'List my invoices' })
+  async listMyInvoices(@CurrentUser() user: User) {
+    try {
+      return await this.paymentsService.listInvoicesForUser(user.id);
+    } catch (error) {
+      this.logger.error(`listMyInvoices failed for user ${user.id}`, error);
+      throw error;
+    }
+  }
+
+  /*
    * Lists invoices from the payment provider for the authenticated user.
    */
   @Get('invoices')

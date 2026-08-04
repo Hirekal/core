@@ -342,6 +342,15 @@ export async function previewPlanChange(
 }
 
 /*
+ * Lists invoices for the authenticated user.
+ */
+export async function getMyInvoices(): Promise<Invoice[]> {
+  return withBillingErrorHandling(() =>
+    apiRequest('/payments/invoices/me', { auth: true }),
+  );
+}
+
+/*
  * Lists invoices for the authenticated user and provider.
  */
 export async function getInvoices(paymentProviderId: string): Promise<Invoice[]> {

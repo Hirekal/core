@@ -307,7 +307,7 @@ export default function ManageSubscriptionPage() {
               Cancel subscription
             </Button>
           ))}
-        <Button variant="ghost" onClick={() => navigate('/billing/invoices')}>
+        <Button variant="ghost" onClick={() => navigate('/invoices')}>
           View invoices
         </Button>
       </div>
