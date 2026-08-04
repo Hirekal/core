@@ -784,7 +784,10 @@ export class StripeProvider implements PaymentProvider {
     try {
       const invoices = await this.stripeService.getClient().invoices.list({
         customer: providerCustomerId,
+        limit: 100,
+        expand: ['data.lines.data.price'],
       });
+
       return invoices.data.map((invoice: Stripe.Invoice) =>
         this.mapInvoice(invoice),
       );
@@ -877,7 +880,72 @@ export class StripeProvider implements PaymentProvider {
       invoiceUrl: invoice.hosted_invoice_url ?? null,
       invoicePdf: invoice.invoice_pdf ?? null,
       paidAt: toDateFromUnix(invoice.status_transitions.paid_at),
+      planName: this.resolveInvoicePlanName(invoice),
+      receiptUrl: this.resolveInvoiceReceiptUrl(invoice),
+      invoiceNumber: invoice.number ?? null,
     };
+  }
+
+  /*
+   * Resolves a customer-facing plan label from invoice line items.
+   */
+  private resolveInvoicePlanName(invoice: Stripe.Invoice): string | null {
+    for (const line of invoice.lines?.data ?? []) {
+      const lineItem = line as Stripe.InvoiceLineItem & {
+        price?: Stripe.Price | string | null;
+      };
+      const price =
+        lineItem.price && typeof lineItem.price === 'object'
+          ? lineItem.price
+          : null;
+      const product =
+        price?.product && typeof price.product === 'object'
+          ? price.product
+          : null;
+
+      if (
+        product &&
+        'name' in product &&
+        typeof product.name === 'string' &&
+        product.name.length > 0
+      ) {
+        return product.name;
+      }
+
+      if (line.description?.trim()) {
+        return (
+          line.description.replace(/^\d+\s×\s/, '').split('(')[0]?.trim() ||
+          line.description
+        );
+      }
+    }
+
+    return invoice.description ?? null;
+  }
+
+  /*
+   * Resolves the Stripe payment receipt URL when a charge exists.
+   */
+  private resolveInvoiceReceiptUrl(invoice: Stripe.Invoice): string | null {
+    const invoiceWithCharges = invoice as Stripe.Invoice & {
+      latest_charge?: string | Stripe.Charge | null;
+      charge?: string | Stripe.Charge | null;
+    };
+
+    for (const chargeRef of [
+      invoiceWithCharges.latest_charge,
+      invoiceWithCharges.charge,
+    ]) {
+      if (chargeRef && typeof chargeRef === 'object' && chargeRef.receipt_url) {
+        return chargeRef.receipt_url;
+      }
+    }
+
+    if (invoice.status === 'paid') {
+      return invoice.hosted_invoice_url ?? invoice.invoice_pdf ?? null;
+    }
+
+    return null;
   }
 
   /*

@@ -24,7 +24,7 @@ export default function Table({ columns, data, onRowClick, emptyMessage = 'No da
             {columns.map((col) => (
               <th
                 key={col.key}
-                className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wide text-muted"
+                className={`px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-muted ${col.headerClassName ?? ''}`}
                 style={{ width: col.width }}
               >
                 {col.label}
@@ -42,7 +42,11 @@ export default function Table({ columns, data, onRowClick, emptyMessage = 'No da
               }`}
             >
               {columns.map((col) => (
-                <td key={col.key} className="px-5 py-4 text-heading">
+                <td
+                  key={col.key}
+                  className={`px-5 py-4 text-left text-heading ${col.cellClassName ?? ''}`}
+                  style={{ width: col.width }}
+                >
                   {col.render ? col.render(row) : row[col.key]}
                 </td>
               ))}

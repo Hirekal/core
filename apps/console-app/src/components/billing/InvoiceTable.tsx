@@ -17,11 +17,12 @@ interface InvoiceTableProps {
   page: number;
   pageSize: number;
   onPageChange: (page: number) => void;
-  onDownload: (invoice: Invoice) => void;
+  onDownloadInvoice: (invoice: Invoice) => void;
+  // onDownloadReceipt: (invoice: Invoice) => void;
 }
 
 /**
- * Renders invoice rows with client-side pagination and download action.
+ * Renders invoice rows with client-side pagination and download actions.
  */
 export default function InvoiceTable({
   invoices,
@@ -29,7 +30,8 @@ export default function InvoiceTable({
   page,
   pageSize,
   onPageChange,
-  onDownload,
+  onDownloadInvoice,
+  // onDownloadReceipt,
 }: InvoiceTableProps) {
   const totalPages = Math.max(1, Math.ceil(invoices.length / pageSize));
   const start = (page - 1) * pageSize;
@@ -39,29 +41,33 @@ export default function InvoiceTable({
     return (
       <EmptyState
         icon={FileText}
-        title="No invoices yet"
-        description="Invoices will appear here after your first payment."
+        title="No payments yet"
+        description="Payments will appear here after your first charge."
       />
     );
   }
 
   const columns = [
     {
-      key: 'number',
-      label: 'Invoice',
+      key: 'planName',
+      label: 'Plan',
       render: (row: Invoice) => (
-        <span className="font-medium text-heading">{row.providerInvoiceId}</span>
+        <span className="font-medium text-heading">{row.planName ?? 'Subscription'}</span>
       ),
     },
     {
       key: 'date',
-      label: 'Date',
-      render: (row: Invoice) => formatDate(row.createdAt),
+      label: 'Payment date',
+      render: (row: Invoice) => formatDate(row.paidAt ?? row.createdAt),
     },
     {
       key: 'amount',
       label: 'Amount',
-      render: (row: Invoice) => formatMoney(row.amountDue, row.currency),
+      render: (row: Invoice) =>
+        formatMoney(
+          row.invoiceStatus === 'PAID' ? row.amountPaid : row.amountDue,
+          row.currency,
+        ),
     },
     {
       key: 'status',
@@ -72,28 +78,47 @@ export default function InvoiceTable({
     },
     {
       key: 'actions',
-      label: '',
+      label: 'Action',
       width: '120px',
+      headerClassName: 'text-left',
+      cellClassName: 'text-left',
       render: (row: Invoice) => (
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={!row.invoicePdf && !row.invoiceUrl}
-          onClick={(event) => {
-            event.stopPropagation();
-            onDownload(row);
-          }}
-        >
-          <Download size={16} />
-          Download
-        </Button>
+        <>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="justify-start px-0"
+            disabled={!row.invoicePdf && !row.invoiceUrl}
+            onClick={(event) => {
+              event.stopPropagation();
+              onDownloadInvoice(row);
+            }}
+          >
+            <Download size={16} />
+            Download
+          </Button>
+          {/* Receipt disabled until Stripe receipt URLs are available.
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={!row.receiptUrl}
+            onClick={(event) => {
+              event.stopPropagation();
+              onDownloadReceipt(row);
+            }}
+          >
+            <Receipt size={16} />
+            Receipt
+          </Button>
+          */}
+        </>
       ),
     },
   ];
 
   return (
     <div className="space-y-4">
-      <Table columns={columns} data={pageRows} loading={loading} emptyMessage="No invoices" />
+      <Table columns={columns} data={pageRows} loading={loading} emptyMessage="No payments" />
       {invoices.length > pageSize && (
         <div className="flex items-center justify-between text-sm text-muted">
           <span>

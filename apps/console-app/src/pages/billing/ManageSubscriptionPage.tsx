@@ -177,7 +177,7 @@ export default function ManageSubscriptionPage() {
   if (!subscription) {
     return (
       <div className="mx-auto w-full max-w-3xl space-y-6">
-        <PageHeader title="Subscription" description="Manage your billing subscription" />
+        <PageHeader title="Subscription" description="Manage your billing subscription" breadcrumbs={[{ to: '/billing/plans', label: 'Billing' }, { label: 'Subscription' }]} />
         <BillingErrorState message={error || 'You do not have a subscription yet.'} />
         <Button onClick={() => navigate('/billing/plans')}>View pricing plans</Button>
       </div>
@@ -199,8 +199,7 @@ export default function ManageSubscriptionPage() {
         title="Subscription"
         description="Manage your plan, billing cycle, and renewal"
         breadcrumbs={[
-          { to: '/jobs', label: 'Jobs' },
-          { label: 'Billing' },
+          { to: '/billing/plans', label: 'Billing' },
           { label: 'Subscription' },
         ]}
         actions={
@@ -316,8 +315,8 @@ export default function ManageSubscriptionPage() {
               Cancel subscription
             </Button>
           ))}
-        <Button variant="ghost" onClick={() => navigate('/invoices')}>
-          View invoices
+        <Button variant="ghost" onClick={() => navigate('/payments')}>
+          View payments
         </Button>
       </div>
 

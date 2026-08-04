@@ -23,6 +23,26 @@ import {
 import { ProviderInvoiceResult } from '../providers/payment-provider.interface';
 import { toMajorAmount } from '../common/utils/currency-amount.util';
 
+export interface InvoiceResponse {
+  id: string;
+  userId: string;
+  subscriptionId: string | null;
+  paymentProviderId: string;
+  providerInvoiceId: string;
+  planName: string | null;
+  invoiceNumber: string;
+  receiptUrl: string | null;
+  amountDue: number;
+  amountPaid: number;
+  currency: string;
+  invoiceStatus: InvoiceStatus;
+  invoiceUrl: string | null;
+  invoicePdf: string | null;
+  paidAt: string | null;
+  createdAt: string;
+  metadata: Record<string, unknown> | null;
+}
+
 @Injectable()
 export class InvoicesService {
   private readonly logger = new Logger(InvoicesService.name);
@@ -59,7 +79,7 @@ export class InvoicesService {
   async listByCustomer(
     customerId: string,
     paymentProviderId: string,
-  ): Promise<Invoice[]> {
+  ): Promise<InvoiceResponse[]> {
     try {
       const customer = await this.paymentCustomersService.findOne(customerId);
       const provider =
@@ -71,17 +91,26 @@ export class InvoicesService {
         customer.providerCustomerId,
       );
 
-      for (const providerInvoice of providerInvoices) {
-        await this.syncFromProviderResult(
-          paymentProviderId,
-          customer.userId,
-          providerInvoice,
-        );
-      }
+      await Promise.all(
+        providerInvoices.map((providerInvoice) =>
+          this.syncFromProviderResult(
+            paymentProviderId,
+            customer.userId,
+            providerInvoice,
+          ),
+        ),
+      );
 
       return (
         await this.invoicesRepository.find({
           where: { userId: customer.userId },
+          relations: {
+            subscription: {
+              price: {
+                product: true,
+              },
+            },
+          },
           order: { createdAt: 'DESC' },
         })
       ).map((invoice) => this.formatInvoiceForApi(invoice));
@@ -163,6 +192,10 @@ export class InvoicesService {
           invoicePdf: providerResult.invoicePdf,
           paidAt: providerResult.paidAt,
           status: RecordStatus.ACTIVE,
+          metadata: this.buildInvoiceMetadata(
+            existingInvoice.metadata,
+            providerResult,
+          ),
         });
         return this.invoicesRepository.save(existingInvoice);
       }
@@ -181,7 +214,7 @@ export class InvoicesService {
         invoicePdf: providerResult.invoicePdf,
         paidAt: providerResult.paidAt,
         status: RecordStatus.ACTIVE,
-        metadata: {},
+        metadata: this.buildInvoiceMetadata(null, providerResult),
       });
     } catch (error) {
       this.logger.error(
@@ -195,11 +228,80 @@ export class InvoicesService {
   /*
    * Converts stored minor-unit invoice amounts to major units for API clients.
    */
-  private formatInvoiceForApi(invoice: Invoice): Invoice {
+  private formatInvoiceForApi(invoice: Invoice): InvoiceResponse {
+    const metadata = invoice.metadata ?? {};
+    const planName =
+      (typeof metadata.planName === 'string' && metadata.planName.length > 0
+        ? metadata.planName
+        : null) ??
+      invoice.subscription?.price?.product?.name ??
+      null;
+
     return {
-      ...invoice,
+      id: invoice.id,
+      userId: invoice.userId,
+      subscriptionId: invoice.subscriptionId,
+      paymentProviderId: invoice.paymentProviderId,
+      providerInvoiceId: invoice.providerInvoiceId,
+      planName,
+      invoiceNumber:
+        (typeof metadata.invoiceNumber === 'string' &&
+        metadata.invoiceNumber.length > 0
+          ? metadata.invoiceNumber
+          : null) ?? invoice.providerInvoiceId,
+      receiptUrl: this.resolveReceiptUrlForApi(invoice, metadata),
       amountDue: toMajorAmount(invoice.amountDue, invoice.currency),
       amountPaid: toMajorAmount(invoice.amountPaid, invoice.currency),
+      currency: invoice.currency,
+      invoiceStatus: invoice.invoiceStatus,
+      invoiceUrl: invoice.invoiceUrl,
+      invoicePdf: invoice.invoicePdf,
+      paidAt: invoice.paidAt?.toISOString() ?? null,
+      createdAt: invoice.createdAt.toISOString(),
+      metadata: invoice.metadata,
     };
+  }
+
+  /*
+   * Persists invoice display metadata synced from the payment provider.
+   */
+  private buildInvoiceMetadata(
+    existing: Record<string, unknown> | null | undefined,
+    providerResult: ProviderInvoiceResult,
+  ): Record<string, unknown> {
+    const metadata = { ...(existing ?? {}) };
+
+    if (providerResult.planName) {
+      metadata.planName = providerResult.planName;
+    }
+    if (providerResult.receiptUrl) {
+      metadata.receiptUrl = providerResult.receiptUrl;
+    }
+    if (providerResult.invoiceNumber) {
+      metadata.invoiceNumber = providerResult.invoiceNumber;
+    }
+
+    return metadata;
+  }
+
+  /*
+   * Resolves a receipt URL from synced metadata or paid invoice links.
+   */
+  private resolveReceiptUrlForApi(
+    invoice: Invoice,
+    metadata: Record<string, unknown>,
+  ): string | null {
+    if (
+      typeof metadata.receiptUrl === 'string' &&
+      metadata.receiptUrl.length > 0
+    ) {
+      return metadata.receiptUrl;
+    }
+
+    if (invoice.invoiceStatus !== InvoiceStatus.PAID) {
+      return null;
+    }
+
+    return invoice.invoiceUrl ?? invoice.invoicePdf ?? null;
   }
 }

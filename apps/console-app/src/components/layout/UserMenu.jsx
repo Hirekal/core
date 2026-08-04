@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ChevronDown, User, Building2, ExternalLink, LogOut, CreditCard, FileText } from 'lucide-react';
+import { ChevronDown, User, Building2, LogOut } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 export default function UserMenu() {
@@ -42,25 +42,6 @@ export default function UserMenu() {
       description: 'Company & team info',
       icon: Building2,
       to: '/organization',
-    },
-    {
-      label: 'Billing',
-      description: 'Plans & subscription',
-      icon: CreditCard,
-      to: '/billing/plans',
-    },
-    {
-      label: 'Invoices',
-      description: 'Billing history & downloads',
-      icon: FileText,
-      to: '/invoices',
-    },
-    {
-      label: 'Support',
-      description: 'Help & documentation',
-      icon: ExternalLink,
-      href: '#',
-      onClick: (e) => e.preventDefault(),
     },
   ];
 

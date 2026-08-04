@@ -136,6 +136,9 @@ export interface ProviderInvoiceResult {
   invoiceUrl: string | null;
   invoicePdf: string | null;
   paidAt: Date | null;
+  planName?: string | null;
+  receiptUrl?: string | null;
+  invoiceNumber?: string | null;
 }
 
 export interface ProviderPaymentResult {

@@ -28,6 +28,7 @@ import CheckoutSuccessPage from '../pages/billing/CheckoutSuccessPage';
 import CheckoutFailedPage from '../pages/billing/CheckoutFailedPage';
 import ManageSubscriptionPage from '../pages/billing/ManageSubscriptionPage';
 import InvoicesPage from '../pages/billing/InvoicesPage';
+import SupportPage from '../pages/support/SupportPage';
 
 function AppLayout({ children }) {
   return (
@@ -173,16 +174,25 @@ export default function AppRoutes() {
         }
       />
       <Route
-        path="/invoices"
+        path="/payments"
         element={
           <ProtectedRoute>
             <AppLayout><InvoicesPage /></AppLayout>
           </ProtectedRoute>
         }
       />
+      <Route path="/invoices" element={<Navigate to="/payments" replace />} />
       <Route
         path="/billing/invoices"
-        element={<Navigate to="/invoices" replace />}
+        element={<Navigate to="/payments" replace />}
+      />
+      <Route
+        path="/support"
+        element={
+          <ProtectedRoute>
+            <AppLayout><SupportPage /></AppLayout>
+          </ProtectedRoute>
+        }
       />
       <Route path="/billing" element={<Navigate to="/billing/plans" replace />} />
 

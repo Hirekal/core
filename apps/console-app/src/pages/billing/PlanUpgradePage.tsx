@@ -139,7 +139,7 @@ export default function PlanUpgradePage() {
         title="Upgrade plan"
         description="Review your prorated charge before confirming"
         breadcrumbs={[
-          { to: '/billing/plans', label: 'Plans' },
+          { to: '/billing/plans', label: 'Billing' },
           { label: 'Upgrade' },
         ]}
       />

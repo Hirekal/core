@@ -108,12 +108,15 @@ export interface Invoice {
   subscriptionId: string | null;
   paymentProviderId: string;
   providerInvoiceId: string;
+  planName: string | null;
+  invoiceNumber: string;
   amountDue: number;
   amountPaid: number;
   currency: string;
   invoiceStatus: InvoiceStatus;
   invoiceUrl: string | null;
   invoicePdf: string | null;
+  receiptUrl: string | null;
   paidAt: string | null;
   createdAt: string;
   metadata: Record<string, unknown> | null;

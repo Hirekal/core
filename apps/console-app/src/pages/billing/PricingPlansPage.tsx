@@ -166,15 +166,23 @@ export default function PricingPlansPage() {
   );
 
   const subscriptionForDisplay = useMemo(() => {
-    if (!subscription || !currentPlan) return subscription;
+    if (!subscription) return subscription;
+
+    const matchedPlan =
+      currentPlan ?? plans.find((plan) => plan.price.id === subscription.priceId) ?? null;
+
+    if (!matchedPlan) {
+      return subscription;
+    }
+
     return {
       ...subscription,
       price: {
-        ...currentPlan.price,
-        product: currentPlan.product,
+        ...matchedPlan.price,
+        product: matchedPlan.product,
       },
     };
-  }, [subscription, currentPlan]);
+  }, [subscription, currentPlan, plans]);
 
   const currentPriceId = subscription?.priceId ?? null;
 
@@ -262,7 +270,7 @@ export default function PricingPlansPage() {
   if (loading) {
     return (
       <div className="mx-auto w-full max-w-6xl">
-        <PageHeader title="Pricing Plans" description="Loading plans…" />
+        <PageHeader title="Pricing Plans" description="Loading plans…" breadcrumbs={[{ to: '/billing/plans', label: 'Billing' }, { label: 'Plans' }]} />
         <div className="mt-8">
           <BillingSkeleton rows={3} />
         </div>
@@ -276,8 +284,7 @@ export default function PricingPlansPage() {
         title="Pricing Plans"
         description={headerDescription}
         breadcrumbs={[
-          { to: '/jobs', label: 'Jobs' },
-          { label: 'Billing' },
+          { to: '/billing/plans', label: 'Billing' },
           { label: 'Plans' },
         ]}
         actions={
