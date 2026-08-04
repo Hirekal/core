@@ -45,6 +45,9 @@ interface CheckoutPaymentFormProps {
   name: string;
   clientSecret: string;
   providerSubscriptionId: string;
+  payAmount?: number;
+  successMessage?: string;
+  navigationState?: Record<string, unknown>;
   onEmailChange: (value: string) => void;
   onNameChange: (value: string) => void;
 }
@@ -58,6 +61,9 @@ export default function CheckoutPaymentForm({
   name,
   clientSecret,
   providerSubscriptionId,
+  payAmount,
+  successMessage = 'Subscription activated successfully',
+  navigationState,
   onEmailChange,
   onNameChange,
 }: CheckoutPaymentFormProps) {
@@ -119,13 +125,14 @@ export default function CheckoutPaymentForm({
         subscription.customerId,
       );
 
-      showSuccess('Subscription activated successfully');
+      showSuccess(successMessage);
 
       navigate('/billing/plans', {
         replace: true,
         state: {
           subscription,
           subscribed: true,
+          ...navigationState,
         },
       });
     } catch (err) {
@@ -194,7 +201,7 @@ export default function CheckoutPaymentForm({
         >
           {processing
             ? 'Processing…'
-            : `Pay ${formatMoney(price.amount, price.currency)}`}
+            : `Pay ${formatMoney(payAmount ?? price.amount, price.currency)}`}
         </Button>
       </div>
     </form>

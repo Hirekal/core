@@ -23,6 +23,7 @@ import OrganizationPage from '../pages/organization/OrganizationPage';
 import ProfileSettingsPage from '../pages/profile/ProfileSettingsPage';
 import PricingPlansPage from '../pages/billing/PricingPlansPage';
 import PlanUpgradePage from '../pages/billing/PlanUpgradePage';
+import UpgradeCheckoutPage from '../pages/billing/UpgradeCheckoutPage';
 import CheckoutPage from '../pages/billing/CheckoutPage';
 import CheckoutSuccessPage from '../pages/billing/CheckoutSuccessPage';
 import CheckoutFailedPage from '../pages/billing/CheckoutFailedPage';
@@ -130,6 +131,14 @@ export default function AppRoutes() {
         element={
           <ProtectedRoute>
             <AppLayout><PricingPlansPage /></AppLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/billing/upgrade/checkout/:priceId"
+        element={
+          <ProtectedRoute>
+            <AppLayout><UpgradeCheckoutPage /></AppLayout>
           </ProtectedRoute>
         }
       />

@@ -35,6 +35,7 @@ export default function ManageSubscriptionPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [resumeOpen, setResumeOpen] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [updatingPaymentMethod, setUpdatingPaymentMethod] = useState(false);
 
@@ -126,6 +127,7 @@ export default function ManageSubscriptionPage() {
     try {
       const updated = await billingService.resumeSubscription(subscription.id);
       setSubscription(updated);
+      setResumeOpen(false);
       showSuccess('Subscription resumed successfully');
     } catch (err) {
       showError(err, 'Failed to resume subscription');
@@ -192,6 +194,10 @@ export default function ManageSubscriptionPage() {
   const hasScheduledDowngrade = Boolean(
     subscription.metadata?.pendingDowngradePriceId,
   );
+  const planName =
+    subscription.price?.product?.name ??
+    scheduledPlan?.product.name ??
+    'your current plan';
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-8">
@@ -307,7 +313,7 @@ export default function ManageSubscriptionPage() {
         </Button>
         {!isEnded &&
           (subscription.cancelAtPeriodEnd ? (
-            <Button disabled={processing} onClick={handleResume}>
+            <Button disabled={processing} onClick={() => setResumeOpen(true)}>
               Resume subscription
             </Button>
           ) : (
@@ -323,11 +329,22 @@ export default function ManageSubscriptionPage() {
       <ConfirmationModal
         isOpen={cancelOpen}
         title="Cancel subscription"
-        message="Your subscription will remain active until the end of the current billing period. You can resume before that date."
+        message={`Your ${planName} subscription will remain active until ${formatDate(subscription.currentPeriodEnd)}. After that date, you will lose access to paid features. You can resume anytime before then.`}
         confirmLabel="Cancel at period end"
         loading={processing}
         onConfirm={handleCancel}
         onClose={() => setCancelOpen(false)}
+      />
+
+      <ConfirmationModal
+        isOpen={resumeOpen}
+        title="Resume subscription"
+        message={`Your ${planName} subscription will stay active and renew on ${formatDate(subscription.currentPeriodEnd)}. The scheduled cancellation will be removed and your saved payment method will be charged on the next billing date.`}
+        confirmLabel="Resume subscription"
+        confirmVariant="primary"
+        loading={processing}
+        onConfirm={handleResume}
+        onClose={() => setResumeOpen(false)}
       />
     </div>
   );

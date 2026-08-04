@@ -9,6 +9,9 @@ import type { Price, Product } from '../../types/billing';
 interface CheckoutOrderSummaryProps {
   product: Product;
   price: Price;
+  mode?: 'subscribe' | 'upgrade';
+  amountDueToday?: number;
+  currentProductName?: string | null;
 }
 
 /**
@@ -17,7 +20,13 @@ interface CheckoutOrderSummaryProps {
 export default function CheckoutOrderSummary({
   product,
   price,
+  mode = 'subscribe',
+  amountDueToday,
+  currentProductName = null,
 }: CheckoutOrderSummaryProps) {
+  const isUpgrade = mode === 'upgrade';
+  const totalDue = amountDueToday ?? price.amount;
+
   return (
     <div className="flex h-full flex-col bg-[#f6f9fc] px-6 py-8 sm:px-10 lg:px-12">
       <div className="flex items-center gap-3">
@@ -35,16 +44,24 @@ export default function CheckoutOrderSummary({
       </div>
 
       <div className="mt-10">
-        <p className="text-sm text-muted">Subscribe to</p>
+        <p className="text-sm text-muted">{isUpgrade ? 'Upgrade to' : 'Subscribe to'}</p>
         <p className="mt-1 text-3xl font-semibold tracking-tight text-heading sm:text-4xl">
-          {formatMoney(price.amount, price.currency)}
+          {formatMoney(totalDue, price.currency)}
         </p>
         <p className="mt-1 text-sm text-muted">
-          per {formatIntervalShort(price.interval, price.intervalCount ?? 1).replace('Per ', '').toLowerCase()}
+          {isUpgrade
+            ? 'Prorated amount due today'
+            : `per ${formatIntervalShort(price.interval, price.intervalCount ?? 1).replace('Per ', '').toLowerCase()}`}
         </p>
       </div>
 
       <div className="mt-10 space-y-4 border-t border-black/10 pt-6">
+        {isUpgrade && currentProductName && (
+          <div className="flex items-start justify-between gap-4 text-sm">
+            <span className="text-muted">Current plan</span>
+            <span className="font-medium text-heading">{currentProductName}</span>
+          </div>
+        )}
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="font-medium text-heading">{product.name}</p>
@@ -60,12 +77,12 @@ export default function CheckoutOrderSummary({
 
       <div className="mt-auto space-y-3 border-t border-black/10 pt-6 text-sm">
         <div className="flex items-center justify-between gap-4">
-          <span className="text-muted">Subtotal</span>
-          <span className="text-heading">{formatMoney(price.amount, price.currency)}</span>
+          <span className="text-muted">{isUpgrade ? 'Prorated charge' : 'Subtotal'}</span>
+          <span className="text-heading">{formatMoney(totalDue, price.currency)}</span>
         </div>
         <div className="flex items-center justify-between gap-4 font-semibold text-heading">
           <span>Total due today</span>
-          <span>{formatMoney(price.amount, price.currency)}</span>
+          <span>{formatMoney(totalDue, price.currency)}</span>
         </div>
       </div>
 

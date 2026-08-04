@@ -9,6 +9,7 @@ import Button from '../../components/common/Button';
 import PlanCard from '../../components/billing/PlanCard';
 import BillingSkeleton from '../../components/billing/BillingSkeleton';
 import BillingErrorState from '../../components/billing/BillingErrorState';
+import ConfirmationModal from '../../components/billing/ConfirmationModal';
 import BillingPeriodToggle from '../../components/billing/BillingPeriodToggle';
 import BillingSummaryCard from '../../components/billing/BillingSummaryCard';
 import SubscriptionStatusBadge from '../../components/billing/SubscriptionStatusBadge';
@@ -18,6 +19,7 @@ import * as billingService from '../../services/billingService';
 import { persistSubscriptionSession } from '../../utils/billingStorage';
 import {
   comparePriceTier,
+  formatMoney,
   getBillingPeriodLabel,
   getScheduledPlanChangeAt,
   getScheduledPlanPriceId,
@@ -28,7 +30,7 @@ import {
 } from '../../utils/billingFormat';
 import { formatDate } from '../../utils/formatDate';
 import { toUserErrorMessage } from '../../utils/errorMessage';
-import type { BillingPlan, PaymentMethod, Subscription } from '../../types/billing';
+import type { BillingPlan, PaymentMethod, PlanChangePreview, Subscription } from '../../types/billing';
 
 /**
  * Displays catalog plans and handles plan change actions.
@@ -49,6 +51,10 @@ export default function PricingPlansPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [actionPriceId, setActionPriceId] = useState<string | null>(null);
+  const [confirmDowngradePlan, setConfirmDowngradePlan] = useState<BillingPlan | null>(null);
+  const [confirmUpgradePlan, setConfirmUpgradePlan] = useState<BillingPlan | null>(null);
+  const [upgradePreview, setUpgradePreview] = useState<PlanChangePreview | null>(null);
+  const [upgradePreviewLoading, setUpgradePreviewLoading] = useState(false);
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly');
   const subscriptionPeriodSyncedRef = useRef(false);
 
@@ -157,6 +163,37 @@ export default function PricingPlansPage() {
     }
   }, [subscription?.priceId, subscription?.price, currentPlan?.price]);
 
+  useEffect(() => {
+    if (!confirmUpgradePlan || !subscription) {
+      setUpgradePreview(null);
+      return;
+    }
+
+    let cancelled = false;
+    setUpgradePreviewLoading(true);
+    billingService
+      .previewPlanChange(subscription.id, confirmUpgradePlan.price.id)
+      .then((preview) => {
+        if (!cancelled) {
+          setUpgradePreview(preview);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setUpgradePreview(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setUpgradePreviewLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [confirmUpgradePlan, subscription]);
+
   const visiblePlans = useMemo(
     () =>
       plans
@@ -203,26 +240,26 @@ export default function PricingPlansPage() {
   /*
    * Applies an immediate upgrade or schedules a downgrade through the billing API.
    */
-  const applyPlanChange = async (plan: BillingPlan) => {
-    if (!subscription || !currentPlan?.price) return;
+  const applyPlanChange = async (plan: BillingPlan): Promise<boolean> => {
+    if (!subscription || !currentPlan?.price) return false;
 
     setActionPriceId(plan.price.id);
     try {
       const direction = comparePriceTier(currentPlan.price, plan.price);
-      let updated: Subscription;
-      if (direction === 'upgrade') {
-        updated = await billingService.upgradeSubscription(subscription.id, plan.price.id);
-        showSuccess('Subscription upgraded successfully');
-      } else if (direction === 'downgrade') {
-        updated = await billingService.downgradeSubscription(subscription.id, plan.price.id);
+      if (direction === 'downgrade') {
+        const updated = await billingService.downgradeSubscription(
+          subscription.id,
+          plan.price.id,
+        );
         showSuccess('Downgrade scheduled for the next billing cycle');
-      } else {
-        return;
+        setSubscription(updated);
+        persistSubscriptionSession(updated.id, updated.paymentProviderId, updated.customerId);
+        return true;
       }
-      setSubscription(updated);
-      persistSubscriptionSession(updated.id, updated.paymentProviderId, updated.customerId);
+      return false;
     } catch (err) {
       showError(err, 'Failed to change plan');
+      return false;
     } finally {
       setActionPriceId(null);
     }
@@ -245,7 +282,12 @@ export default function PricingPlansPage() {
 
       const direction = comparePriceTier(activePrice, plan.price);
       if (direction === 'upgrade') {
-        navigate(`/billing/upgrade/${plan.price.id}`);
+        setConfirmUpgradePlan(plan);
+        return;
+      }
+
+      if (direction === 'downgrade') {
+        setConfirmDowngradePlan(plan);
         return;
       }
 
@@ -254,6 +296,37 @@ export default function PricingPlansPage() {
       showError(err, 'Failed to change plan');
     }
   };
+
+  const handleConfirmDowngrade = async () => {
+    if (!confirmDowngradePlan) return;
+    const success = await applyPlanChange(confirmDowngradePlan);
+    if (success) {
+      setConfirmDowngradePlan(null);
+    }
+  };
+
+  const handleConfirmUpgrade = () => {
+    if (!confirmUpgradePlan) return;
+    const priceId = confirmUpgradePlan.price.id;
+    setConfirmUpgradePlan(null);
+    setUpgradePreview(null);
+    navigate(`/billing/upgrade/checkout/${priceId}`);
+  };
+
+  const upgradeConfirmMessage = useMemo(() => {
+    if (!confirmUpgradePlan || !currentPlan) {
+      return '';
+    }
+
+    const chargeText = upgradePreview?.preview
+      ? `Your card will be charged ${formatMoney(
+          upgradePreview.preview.estimatedAmountPayable,
+          upgradePreview.preview.currency,
+        )} today for the prorated difference.`
+      : 'Your card will be charged a prorated amount today.';
+
+    return `You're upgrading from ${currentPlan.product.name} to ${confirmUpgradePlan.product.name}. ${chargeText} You'll enter your card details on the next step to complete the upgrade.`;
+  }, [confirmUpgradePlan, currentPlan, upgradePreview]);
 
   const scheduledPlanPriceId = getScheduledPlanPriceId(subscription);
   const scheduledPlanChangeAt = getScheduledPlanChangeAt(subscription);
@@ -375,6 +448,35 @@ export default function PricingPlansPage() {
           Signed in as {user?.email}. Select a plan to continue to checkout.
         </p>
       )}
+
+      <ConfirmationModal
+        isOpen={Boolean(confirmUpgradePlan)}
+        title="Upgrade plan"
+        message={upgradeConfirmMessage}
+        confirmLabel="Continue to checkout"
+        confirmVariant="primary"
+        loading={upgradePreviewLoading}
+        onConfirm={handleConfirmUpgrade}
+        onClose={() => {
+          setConfirmUpgradePlan(null);
+          setUpgradePreview(null);
+        }}
+      />
+
+      <ConfirmationModal
+        isOpen={Boolean(confirmDowngradePlan)}
+        title="Downgrade plan"
+        message={
+          confirmDowngradePlan && currentPlan && subscription
+            ? `You're switching from ${currentPlan.product.name} to ${confirmDowngradePlan.product.name}. The downgrade takes effect on ${formatDate(subscription.currentPeriodEnd)}. You'll keep your current plan and features until then.`
+            : ''
+        }
+        confirmLabel="Schedule downgrade"
+        confirmVariant="primary"
+        loading={Boolean(actionPriceId)}
+        onConfirm={handleConfirmDowngrade}
+        onClose={() => setConfirmDowngradePlan(null)}
+      />
     </div>
   );
 }

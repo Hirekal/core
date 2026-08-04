@@ -106,6 +106,19 @@ export interface ProviderCheckoutSessionResult {
   providerSubscriptionId: string;
 }
 
+export interface ProviderUpgradeCheckoutSessionInput {
+  providerCustomerId: string;
+  providerSubscriptionId: string;
+  providerPriceId: string;
+  metadata?: Record<string, string>;
+}
+
+export interface ProviderUpgradeCheckoutSessionResult
+  extends ProviderCheckoutSessionResult {
+  amountDue: number;
+  currency: string;
+}
+
 export interface ProviderBillingPortalSessionInput {
   providerCustomerId: string;
   returnUrl: string;
@@ -197,6 +210,9 @@ export interface PaymentProvider {
   createCheckoutSession(
     input: ProviderCheckoutSessionInput,
   ): Promise<ProviderCheckoutSessionResult>;
+  createUpgradeCheckoutSession(
+    input: ProviderUpgradeCheckoutSessionInput,
+  ): Promise<ProviderUpgradeCheckoutSessionResult>;
   retrieveCheckoutSession(sessionId: string): Promise<{
     status: string | null;
     providerSubscriptionId: string | null;

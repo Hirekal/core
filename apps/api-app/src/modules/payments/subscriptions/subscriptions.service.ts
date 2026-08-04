@@ -42,6 +42,8 @@ import {
 } from '../common/constants/subscription.constants';
 import { rethrowStripeError } from '../common/utils/stripe-error.util';
 import { toIsoString } from '../common/utils/date.util';
+import { StripeService } from '../providers/stripe/stripe.service';
+import { ProviderUpgradeCheckoutSessionResult } from '../providers/payment-provider.interface';
 
 @Injectable()
 export class SubscriptionsService {
@@ -54,6 +56,7 @@ export class SubscriptionsService {
     private readonly pricesService: PricesService,
     private readonly paymentProvidersService: PaymentProvidersService,
     private readonly paymentProviderRegistry: PaymentProviderRegistry,
+    private readonly stripeService: StripeService,
   ) {}
 
   /*
@@ -175,6 +178,68 @@ export class SubscriptionsService {
     } catch (error) {
       this.logger.error(
         LOG_MESSAGES.SUBSCRIPTION.CHANGE_PLAN_FAILED(id),
+        error,
+      );
+      rethrowStripeError(error);
+    }
+  }
+
+  /*
+   * Creates an upgrade checkout session so the user can pay proration with a card.
+   */
+  async createUpgradeCheckout(
+    userId: string,
+    subscriptionId: string,
+    newPriceId: string,
+  ): Promise<ProviderUpgradeCheckoutSessionResult & { publishableKey: string }> {
+    try {
+      const subscription = await this.findOne(subscriptionId);
+      if (subscription.userId !== userId) {
+        throw new ForbiddenException(ERROR_MESSAGES.SUBSCRIPTION.NOT_FOUND);
+      }
+
+      this.assertSubscriptionChangeable(subscription);
+
+      const currentPrice = await this.ensureCurrentPrice(subscription);
+      const newPrice = await this.pricesService.findOne(newPriceId);
+      this.validatePlanChange(
+        currentPrice,
+        newPrice,
+        SubscriptionPlanChangeAction.UPGRADE,
+        false,
+      );
+
+      const provider = await this.paymentProvidersService.findById(
+        subscription.paymentProviderId,
+      );
+      const paymentProvider = this.paymentProviderRegistry.resolve(
+        provider.code,
+      );
+
+      const publishableKey = this.stripeService.getPublishableKey();
+      if (!publishableKey) {
+        throw new BadRequestException(
+          ERROR_MESSAGES.CHECKOUT.MISSING_PUBLISHABLE_KEY,
+        );
+      }
+
+      const session = await paymentProvider.createUpgradeCheckoutSession({
+        providerCustomerId: subscription.customer.providerCustomerId,
+        providerSubscriptionId: subscription.providerSubscriptionId,
+        providerPriceId: newPrice.providerPriceId,
+        metadata: {
+          userId,
+          priceId: newPrice.id,
+        },
+      });
+
+      return {
+        ...session,
+        publishableKey,
+      };
+    } catch (error) {
+      this.logger.error(
+        LOG_MESSAGES.SUBSCRIPTION.CHANGE_PLAN_FAILED(subscriptionId),
         error,
       );
       rethrowStripeError(error);

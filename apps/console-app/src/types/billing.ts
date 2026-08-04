@@ -157,6 +157,11 @@ export interface CheckoutSessionResponse {
   publishableKey: string;
 }
 
+export interface UpgradeCheckoutSessionResponse extends CheckoutSessionResponse {
+  amountDue: number;
+  currency: string;
+}
+
 export interface CheckoutSessionStatusResponse {
   sessionId: string;
   status: string | null;

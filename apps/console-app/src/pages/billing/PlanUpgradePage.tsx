@@ -12,7 +12,6 @@ import PlanChangeSummary from '../../components/billing/PlanChangeSummary';
 import PaymentMethodCard from '../../components/billing/PaymentMethodCard';
 import { useToast } from '../../context/ToastContext';
 import * as billingService from '../../services/billingService';
-import { persistSubscriptionSession } from '../../utils/billingStorage';
 import { toUserErrorMessage } from '../../utils/errorMessage';
 import type { PaymentMethod, PlanChangePreview } from '../../types/billing';
 
@@ -22,15 +21,13 @@ import type { PaymentMethod, PlanChangePreview } from '../../types/billing';
 export default function PlanUpgradePage() {
   const { priceId } = useParams();
   const navigate = useNavigate();
-  const { showSuccess, showError } = useToast();
+  const { showError } = useToast();
 
   const [preview, setPreview] = useState<PlanChangePreview | null>(null);
-  const [subscriptionId, setSubscriptionId] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
   const [paymentProviderId, setPaymentProviderId] = useState<string | null>(null);
   const [updatingPaymentMethod, setUpdatingPaymentMethod] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
 
   /*
@@ -59,7 +56,6 @@ export default function PlanUpgradePage() {
         return;
       }
 
-      setSubscriptionId(subscription.id);
       setPreview(planChangePreview);
       setPaymentProviderId(subscription.paymentProviderId);
 
@@ -99,25 +95,6 @@ export default function PlanUpgradePage() {
     }
   };
 
-  /*
-   * Confirms the prorated upgrade and charges the saved payment method.
-   */
-  const handleConfirmUpgrade = async () => {
-    if (!subscriptionId || !priceId) return;
-
-    setProcessing(true);
-    try {
-      const updated = await billingService.upgradeSubscription(subscriptionId, priceId);
-      persistSubscriptionSession(updated.id, updated.paymentProviderId, updated.customerId);
-      showSuccess('Subscription upgraded successfully');
-      navigate('/billing/plans', { replace: true, state: { upgraded: true } });
-    } catch (err) {
-      showError(err, 'Failed to upgrade subscription');
-    } finally {
-      setProcessing(false);
-    }
-  };
-
   if (loading) {
     return <LoadingSpinner message="Calculating prorated amount…" />;
   }
@@ -149,9 +126,8 @@ export default function PlanUpgradePage() {
           <Card>
             <h3 className="text-sm font-semibold text-heading">Confirm upgrade</h3>
             <p className="mt-2 text-sm text-muted">
-              Prorated upgrades charge your card on file automatically — you do not
-              re-enter card details unless you subscribed with a different flow or need
-              to update your payment method.
+              Review the prorated charge below, then continue to checkout to enter
+              your card details and complete the upgrade.
             </p>
             <div className="mt-4">
               <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">
@@ -163,27 +139,18 @@ export default function PlanUpgradePage() {
                   variant="ghost"
                   size="sm"
                   className="mt-3"
-                  disabled={processing || updatingPaymentMethod}
+                  disabled={updatingPaymentMethod}
                   onClick={handleUpdatePaymentMethod}
                 >
                   {updatingPaymentMethod ? 'Opening…' : 'Use a different card'}
                 </Button>
               )}
             </div>
-            {!paymentMethod && (
-              <p className="mt-3 text-sm text-amber-800 dark:text-amber-200">
-                Add a card during initial checkout before upgrading. Subscribe to a plan
-                first if you do not have a saved payment method.
-              </p>
-            )}
             <div className="mt-6 flex flex-wrap gap-3">
-              <Button
-                disabled={processing || !paymentMethod}
-                onClick={handleConfirmUpgrade}
-              >
-                {processing ? 'Processing…' : 'Confirm and pay'}
+              <Button onClick={() => navigate(`/billing/upgrade/checkout/${priceId}`)}>
+                Continue to payment
               </Button>
-              <Button variant="secondary" disabled={processing} onClick={() => navigate('/billing/plans')}>
+              <Button variant="secondary" onClick={() => navigate('/billing/plans')}>
                 Cancel
               </Button>
             </div>

@@ -204,6 +204,26 @@ export class SubscriptionsController {
   /*
    * Upgrades the subscription to a higher plan with immediate proration.
    */
+  @Post(':id/upgrade/checkout')
+  @ApiOperation({ summary: 'Create upgrade checkout session' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  async createUpgradeCheckout(
+    @CurrentUser() user: User,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ChangeSubscriptionPlanDto,
+  ) {
+    try {
+      return await this.subscriptionsService.createUpgradeCheckout(
+        user.id,
+        id,
+        dto.priceId,
+      );
+    } catch (error) {
+      this.logger.error(`createUpgradeCheckout failed for subscription ${id}`, error);
+      throw error;
+    }
+  }
+
   @Post(':id/upgrade')
   @ApiOperation({ summary: 'Upgrade subscription' })
   @ApiParam({ name: 'id', format: 'uuid' })

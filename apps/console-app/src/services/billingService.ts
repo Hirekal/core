@@ -14,6 +14,7 @@ import type {
   Price,
   Product,
   Subscription,
+  UpgradeCheckoutSessionResponse,
 } from '../types/billing';
 import {
   getProductFeatures,
@@ -367,6 +368,22 @@ export async function getInvoices(paymentProviderId: string): Promise<Invoice[]>
 export async function getCheckoutConfig(): Promise<{ publishableKey: string }> {
   return withBillingErrorHandling(() =>
     apiRequest('/payments/checkout/config', { auth: true }),
+  );
+}
+
+/*
+ * Creates a prorated upgrade checkout session for card payment.
+ */
+export async function createUpgradeCheckoutSession(
+  subscriptionId: string,
+  priceId: string,
+): Promise<UpgradeCheckoutSessionResponse> {
+  return withBillingErrorHandling(() =>
+    apiRequest(`/payments/subscriptions/${subscriptionId}/upgrade/checkout`, {
+      method: 'POST',
+      auth: true,
+      body: { priceId },
+    }),
   );
 }
 

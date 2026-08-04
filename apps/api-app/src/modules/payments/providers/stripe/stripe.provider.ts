@@ -10,6 +10,8 @@ import {
   ProviderChangeSubscriptionPlanInput,
   ProviderCheckoutSessionInput,
   ProviderCheckoutSessionResult,
+  ProviderUpgradeCheckoutSessionInput,
+  ProviderUpgradeCheckoutSessionResult,
   ProviderCustomerInput,
   ProviderCustomerResult,
   ProviderInvoiceResult,
@@ -644,6 +646,73 @@ export class StripeProvider implements PaymentProvider {
         clientSecret,
         sessionId: subscription.id,
         providerSubscriptionId: subscription.id,
+      };
+    } catch (error) {
+      rethrowStripeError(error);
+    }
+  }
+
+  /*
+   * Applies an upgrade with incomplete payment and returns the proration invoice secret.
+   */
+  async createUpgradeCheckoutSession(
+    input: ProviderUpgradeCheckoutSessionInput,
+  ): Promise<ProviderUpgradeCheckoutSessionResult> {
+    try {
+      const stripe = this.stripeService.getClient();
+      const subscription = await stripe.subscriptions.retrieve(
+        input.providerSubscriptionId,
+      );
+      const subscriptionItem = subscription.items.data[0];
+      if (!subscriptionItem) {
+        throw new BadRequestException(ERROR_MESSAGES.SUBSCRIPTION.NOT_FOUND);
+      }
+
+      await this.releaseSubscriptionSchedule(input.providerSubscriptionId);
+
+      const currentProviderPriceId = resolveStripeResourceId(subscriptionItem.price);
+      const intervalChange = await this.isBillingIntervalChange(
+        currentProviderPriceId,
+        input.providerPriceId,
+      );
+
+      const updatedSubscription = await stripe.subscriptions.update(
+        input.providerSubscriptionId,
+        {
+          items: [{ id: subscriptionItem.id, price: input.providerPriceId }],
+          proration_behavior: UPGRADE_PRORATION_BEHAVIOR,
+          payment_behavior: 'default_incomplete',
+          billing_cycle_anchor: intervalChange ? 'now' : 'unchanged',
+          expand: ['latest_invoice.confirmation_secret'],
+          metadata: {
+            ...(subscription.metadata ?? {}),
+            ...(input.metadata ?? {}),
+          },
+        },
+      );
+
+      const latestInvoice = updatedSubscription.latest_invoice;
+      if (!latestInvoice || typeof latestInvoice === 'string') {
+        throw new BadRequestException(
+          ERROR_MESSAGES.CHECKOUT.SESSION_CREATE_FAILED,
+        );
+      }
+
+      const clientSecret = latestInvoice.confirmation_secret?.client_secret;
+      if (!clientSecret) {
+        throw new BadRequestException(
+          ERROR_MESSAGES.CHECKOUT.SESSION_CREATE_FAILED,
+        );
+      }
+
+      const currency = latestInvoice.currency.toUpperCase();
+
+      return {
+        clientSecret,
+        sessionId: updatedSubscription.id,
+        providerSubscriptionId: updatedSubscription.id,
+        amountDue: toMajorAmount(latestInvoice.amount_due, currency),
+        currency,
       };
     } catch (error) {
       rethrowStripeError(error);
