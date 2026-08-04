@@ -27,4 +27,16 @@ export const ApplicationErrors = {
   INVALID_STAGE: 'Invalid pipeline stage for this job',
   INVALID_RATING: 'Rating must be between 1 and 5',
   RETAKE_LIMIT_REACHED: 'Retake limit reached for this question',
+  UNSUPPORTED_MEDIA_TYPE: (mimetype: string) =>
+    `Unsupported media type: ${mimetype}`,
+  VIDEO_TOO_LARGE: 'Video exceeds maximum size of 100MB',
+  PDF_ONLY_FIELD: 'Only PDF files are supported for this field',
+  FIELD_FILE_TOO_LARGE: 'File exceeds maximum size of 10MB',
+  INVALID_MEDIA_WORKER_CALLBACK:
+    'Invalid media worker success callback payload',
+  TRANSCRIPTION_FAILED: 'Transcription failed',
+  NO_VIDEO_URL_FOR_TRANSCRIPTION:
+    'No accessible video URL for transcription',
+  MEDIA_WORKER_RETURNED: (status: number) =>
+    `Media worker returned ${status}`,
 } as const;

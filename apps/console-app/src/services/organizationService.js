@@ -1,3 +1,4 @@
+import { API_ENDPOINTS } from '../constants/apiEndpoints';
 import { apiRequest } from './apiClient';
 import { getJobs } from './jobService';
 
@@ -73,7 +74,7 @@ function toTeamMember(user, currentUserId) {
  * @returns {Promise<Array<{ value: string, label: string }>>}
  */
 export async function getAssignableRoles() {
-  const roles = await apiRequest('/roles', { auth: true });
+  const roles = await apiRequest(API_ENDPOINTS.roles.list, { auth: true });
   const list = Array.isArray(roles) ? roles : [];
   const allowed = new Set([
     TEAM_ROLES.ADMIN.toLowerCase(),
@@ -109,11 +110,12 @@ export async function getOrganization(organizationId) {
   }
 
   const [org, members, jobs] = await Promise.all([
-    apiRequest(`/organizations/${organizationId}`, { auth: true }),
-    apiRequest(
-      `/users?organizationId=${encodeURIComponent(organizationId)}`,
-      { auth: true },
-    ),
+    apiRequest(API_ENDPOINTS.organizations.byId(organizationId), {
+      auth: true,
+    }),
+    apiRequest(API_ENDPOINTS.users.byOrganization(organizationId), {
+      auth: true,
+    }),
     getJobs({ status: 'active', limit: 100 }).catch(() => []),
   ]);
 
@@ -142,7 +144,7 @@ export async function getTeamMembers(organizationId, currentUserId) {
   if (!organizationId) return [];
 
   const users = await apiRequest(
-    `/users?organizationId=${encodeURIComponent(organizationId)}`,
+    API_ENDPOINTS.users.byOrganization(organizationId),
     { auth: true },
   );
 
@@ -166,13 +168,15 @@ export async function addTeamMember({ name, email, role }) {
     throw new Error('Name and email are required');
   }
 
+  // Basic email shape check: local-part @ domain . tld (no spaces).
+  // Rejects obviously invalid invites before calling the users API.
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
     throw new Error('Please enter a valid email address');
   }
 
   const oneTimePassword = generateOneTimePassword();
 
-  const user = await apiRequest('/users', {
+  const user = await apiRequest(API_ENDPOINTS.users.create, {
     method: 'POST',
     auth: true,
     body: {
@@ -205,7 +209,7 @@ export async function deleteTeamMember(id, options = {}) {
     throw new Error('Organization admins cannot be removed');
   }
 
-  await apiRequest(`/users/${id}`, {
+  await apiRequest(API_ENDPOINTS.users.byId(id), {
     method: 'DELETE',
     auth: true,
   });
@@ -221,7 +225,7 @@ export async function deleteTeamMember(id, options = {}) {
  * @returns {Promise<object>}
  */
 export async function updateOrganization(organizationId, payload) {
-  return apiRequest(`/organizations/${organizationId}`, {
+  return apiRequest(API_ENDPOINTS.organizations.byId(organizationId), {
     method: 'PATCH',
     auth: true,
     body: payload,

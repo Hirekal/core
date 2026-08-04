@@ -1,7 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   IsArray,
-  IsIn,
+  IsEnum,
   IsNumber,
   IsOptional,
   IsString,
@@ -9,6 +9,7 @@ import {
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
+import { MediaWorkerPayloadStatus } from '../../enums/application.enums';
 
 export class MediaWorkerTranscriptSegmentDto {
   @IsNumber()
@@ -33,27 +34,42 @@ export class MediaWorkerCallbackDto {
   job_id!: string;
 
   @IsOptional()
-  @IsIn(['completed', 'failed', 'accepted'])
-  status?: string;
+  @IsEnum(MediaWorkerPayloadStatus)
+  status?: MediaWorkerPayloadStatus;
 
-  @ValidateIf((o: MediaWorkerCallbackDto) => o.status === 'failed')
+  @ValidateIf(
+    (o: MediaWorkerCallbackDto) =>
+      o.status === MediaWorkerPayloadStatus.FAILED,
+  )
   @IsString()
   error?: string;
 
-  @ValidateIf((o: MediaWorkerCallbackDto) => o.status !== 'failed')
+  @ValidateIf(
+    (o: MediaWorkerCallbackDto) =>
+      o.status !== MediaWorkerPayloadStatus.FAILED,
+  )
   @IsString()
   language?: string;
 
-  @ValidateIf((o: MediaWorkerCallbackDto) => o.status !== 'failed')
+  @ValidateIf(
+    (o: MediaWorkerCallbackDto) =>
+      o.status !== MediaWorkerPayloadStatus.FAILED,
+  )
   @IsNumber()
   @Min(0)
   duration?: number;
 
-  @ValidateIf((o: MediaWorkerCallbackDto) => o.status !== 'failed')
+  @ValidateIf(
+    (o: MediaWorkerCallbackDto) =>
+      o.status !== MediaWorkerPayloadStatus.FAILED,
+  )
   @IsString()
   text?: string;
 
-  @ValidateIf((o: MediaWorkerCallbackDto) => o.status !== 'failed')
+  @ValidateIf(
+    (o: MediaWorkerCallbackDto) =>
+      o.status !== MediaWorkerPayloadStatus.FAILED,
+  )
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => MediaWorkerTranscriptSegmentDto)
@@ -63,5 +79,5 @@ export class MediaWorkerCallbackDto {
 /** Immediate ack from POST /transcribe (Path B-only; no transcript body). */
 export interface MediaWorkerAcceptResponse {
   job_id: string;
-  status: 'accepted';
+  status: MediaWorkerPayloadStatus.ACCEPTED;
 }

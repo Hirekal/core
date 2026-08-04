@@ -70,6 +70,11 @@ export class PublicApplicationController {
 
   /**
    * Presigns a PDF upload URL for a FILE application field.
+   * @param id - The ID of the application.
+   * @param fieldId - The ID of the FILE application field.
+   * @param token - The public session token.
+   * @param dto - Upload metadata used for presigning.
+   * @returns Presigned upload URL, storage key, and public URL.
    */
   @Public()
   @Post(':id/fields/:fieldId/file/upload-url')
@@ -96,6 +101,11 @@ export class PublicApplicationController {
 
   /**
    * Confirms a PDF upload for a FILE application field.
+   * @param id - The ID of the application.
+   * @param fieldId - The ID of the FILE application field.
+   * @param token - The public session token.
+   * @param dto - Confirmed upload metadata.
+   * @returns Stored field file metadata.
    */
   @Public()
   @Post(':id/fields/:fieldId/file/confirm')

@@ -1,3 +1,4 @@
+import { API_ENDPOINTS } from '../constants/apiEndpoints';
 import { apiRequest } from './apiClient';
 
 export const NOTIFICATIONS_PAGE_SIZE = 25;
@@ -14,7 +15,9 @@ export async function getNotifications(params = {}) {
     limit: String(limit),
   });
 
-  const data = await apiRequest(`/notifications?${query}`, { auth: true });
+  const data = await apiRequest(API_ENDPOINTS.notifications.list(query), {
+    auth: true,
+  });
 
   // Backward-compatible if an older API still returns a bare array.
   if (Array.isArray(data)) {
@@ -35,19 +38,21 @@ export async function getNotifications(params = {}) {
 }
 
 export async function getUnreadNotificationCount() {
-  const data = await apiRequest('/notifications/unread-count', { auth: true });
+  const data = await apiRequest(API_ENDPOINTS.notifications.unreadCount, {
+    auth: true,
+  });
   return typeof data?.count === 'number' ? data.count : 0;
 }
 
 export async function markNotificationRead(id) {
-  return apiRequest(`/notifications/${id}/read`, {
+  return apiRequest(API_ENDPOINTS.notifications.markRead(id), {
     method: 'PATCH',
     auth: true,
   });
 }
 
 export async function markAllNotificationsRead() {
-  return apiRequest('/notifications/read-all', {
+  return apiRequest(API_ENDPOINTS.notifications.markAllRead, {
     method: 'PATCH',
     auth: true,
   });

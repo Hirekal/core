@@ -82,11 +82,23 @@ export class CronService {
     }
   }
 
+  /**
+   * Whether this process should run scheduled cron jobs.
+   * Defaults to true when IS_CRON_SERVER is unset.
+   * @returns True when cron should run.
+   */
   private isCronServerEnabled(): boolean {
-    const value = this.configService.get<string>('IS_CRON_SERVER');
-    if (value == null || value === '') {
+    try {
+      const value = this.configService.get<string>('IS_CRON_SERVER');
+      if (value == null || value === '') {
+        return true;
+      }
+      return value === 'true';
+    } catch (error) {
+      this.logger.error(
+        `isCronServerEnabled failed: ${(error as Error).message}`,
+      );
       return true;
     }
-    return value === 'true';
   }
 }

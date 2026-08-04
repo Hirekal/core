@@ -145,6 +145,9 @@ export class ApplicationService {
    * Records a public job page view.
    * - visitorCount: every page load
    * - viewers: first visit per browser session (sessionId)
+   * @param slug - The public job slug.
+   * @param sessionId - Browser session id used for unique viewer tracking.
+   * @returns Whether the page view was tracked.
    */
   async trackPageView(
     slug: string,
@@ -559,6 +562,11 @@ export class ApplicationService {
 
   /**
    * Presigns a PDF upload for a FILE application field.
+   * @param id - The ID of the application.
+   * @param token - The public session token.
+   * @param fieldId - The ID of the FILE application field.
+   * @param dto - Upload metadata used for presigning.
+   * @returns Presigned upload URL, storage key, and public URL.
    */
   async presignFieldFile(
     id: string,
@@ -607,6 +615,11 @@ export class ApplicationService {
 
   /**
    * Confirms a PDF upload and stores metadata on the field value.
+   * @param id - The ID of the application.
+   * @param token - The public session token.
+   * @param fieldId - The ID of the FILE application field.
+   * @param dto - Confirmed upload metadata.
+   * @returns Stored field file metadata.
    */
   async confirmFieldFile(
     id: string,
@@ -684,9 +697,19 @@ export class ApplicationService {
     jobId: string,
     organizationId: string,
   ): Promise<void> {
-    const job = await this.jobRepository.findByIdForOrg(jobId, organizationId);
-    if (!job) {
-      throw new NotFoundException(`Job ${jobId} not found`);
+    try {
+      const job = await this.jobRepository.findByIdForOrg(
+        jobId,
+        organizationId,
+      );
+      if (!job) {
+        throw new NotFoundException(`Job ${jobId} not found`);
+      }
+    } catch (error) {
+      this.logger.error(
+        `assertJobAccess failed jobId=${jobId}: ${(error as Error).message}`,
+      );
+      throw error;
     }
   }
 
@@ -702,30 +725,45 @@ export class ApplicationService {
     fields: JobApplicationField[],
     custom: Record<string, string>,
   ): Promise<void> {
-    for (const [fieldId, rawValue] of Object.entries(custom)) {
-      const field = fields.find((f) => f.id === fieldId);
-      if (!field || field.builtIn) {
-        throw new BadRequestException(ApplicationErrors.INVALID_FIELD);
-      }
-
-      if (this.isFileField(field)) {
-        const trimmed = rawValue?.trim() ?? '';
-        if (!trimmed) {
-          await this.fieldValueRepository.upsert(applicationId, fieldId, null);
-          continue;
-        }
-        if (!parseFieldFileValue(trimmed)) {
+    try {
+      for (const [fieldId, rawValue] of Object.entries(custom)) {
+        const field = fields.find((f) => f.id === fieldId);
+        if (!field || field.builtIn) {
           throw new BadRequestException(ApplicationErrors.INVALID_FIELD);
         }
-        await this.fieldValueRepository.upsert(applicationId, fieldId, trimmed);
-        continue;
-      }
 
-      await this.fieldValueRepository.upsert(
-        applicationId,
-        fieldId,
-        rawValue?.trim() ?? null,
+        if (this.isFileField(field)) {
+          const trimmed = rawValue?.trim() ?? '';
+          if (!trimmed) {
+            await this.fieldValueRepository.upsert(
+              applicationId,
+              fieldId,
+              null,
+            );
+            continue;
+          }
+          if (!parseFieldFileValue(trimmed)) {
+            throw new BadRequestException(ApplicationErrors.INVALID_FIELD);
+          }
+          await this.fieldValueRepository.upsert(
+            applicationId,
+            fieldId,
+            trimmed,
+          );
+          continue;
+        }
+
+        await this.fieldValueRepository.upsert(
+          applicationId,
+          fieldId,
+          rawValue?.trim() ?? null,
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        `saveCustomFieldValues failed applicationId=${applicationId}: ${(error as Error).message}`,
       );
+      throw error;
     }
   }
 
@@ -741,77 +779,111 @@ export class ApplicationService {
     fields: JobApplicationField[],
     questions: JobQuestion[],
   ): void {
-    for (const field of fields) {
-      if (!field.required) continue;
+    try {
+      for (const field of fields) {
+        if (!field.required) continue;
 
-      if (field.builtIn && field.fieldKey) {
-        const key = field.fieldKey as BuiltInFieldKey;
-        if (!BUILT_IN_FIELD_KEYS.includes(key)) continue;
-        const value = application[key];
-        if (!value?.trim()) {
+        if (field.builtIn && field.fieldKey) {
+          const key = field.fieldKey as BuiltInFieldKey;
+          if (!BUILT_IN_FIELD_KEYS.includes(key)) continue;
+          const value = application[key];
+          if (!value?.trim()) {
+            throw new BadRequestException(
+              ApplicationErrors.MISSING_REQUIRED_FIELDS,
+            );
+          }
+          continue;
+        }
+
+        const stored = application.fieldValues?.find(
+          (fv) => fv.applicationFieldId === field.id,
+        );
+
+        if (this.isFileField(field)) {
+          if (!hasFieldFileValue(stored?.value)) {
+            throw new BadRequestException(
+              ApplicationErrors.MISSING_REQUIRED_FIELDS,
+            );
+          }
+          continue;
+        }
+
+        if (!stored?.value?.trim()) {
           throw new BadRequestException(
             ApplicationErrors.MISSING_REQUIRED_FIELDS,
           );
         }
-        continue;
       }
 
-      const stored = application.fieldValues?.find(
-        (fv) => fv.applicationFieldId === field.id,
+      const answers = application.answers ?? [];
+      for (const question of questions) {
+        if (!question.required) continue;
+
+        const answer = answers.find((a) => a.questionId === question.id);
+        if (this.publicAccessService.isMediaQuestion(question)) {
+          if (!answer?.mediaStorageKey && !answer?.mediaUrl) {
+            throw new BadRequestException(
+              ApplicationErrors.MISSING_VIDEO_ANSWER,
+            );
+          }
+          continue;
+        }
+
+        if (!answer?.answerText?.trim()) {
+          throw new BadRequestException(
+            ApplicationErrors.MISSING_REQUIRED_ANSWERS,
+          );
+        }
+      }
+    } catch (error) {
+      this.logger.error(
+        `validateRequiredForSubmit failed applicationId=${application.id}: ${(error as Error).message}`,
       );
-
-      if (this.isFileField(field)) {
-        if (!hasFieldFileValue(stored?.value)) {
-          throw new BadRequestException(
-            ApplicationErrors.MISSING_REQUIRED_FIELDS,
-          );
-        }
-        continue;
-      }
-
-      if (!stored?.value?.trim()) {
-        throw new BadRequestException(
-          ApplicationErrors.MISSING_REQUIRED_FIELDS,
-        );
-      }
-    }
-
-    const answers = application.answers ?? [];
-    for (const question of questions) {
-      if (!question.required) continue;
-
-      const answer = answers.find((a) => a.questionId === question.id);
-      if (this.publicAccessService.isMediaQuestion(question)) {
-        if (!answer?.mediaStorageKey && !answer?.mediaUrl) {
-          throw new BadRequestException(ApplicationErrors.MISSING_VIDEO_ANSWER);
-        }
-        continue;
-      }
-
-      if (!answer?.answerText?.trim()) {
-        throw new BadRequestException(
-          ApplicationErrors.MISSING_REQUIRED_ANSWERS,
-        );
-      }
+      throw error;
     }
   }
 
+  /**
+   * Whether a job application field is a FILE field.
+   * @param field - The field to check.
+   * @returns True when the field type is FILE.
+   */
   private isFileField(field: JobApplicationField): boolean {
-    return (
-      field.type === ApplicationFieldType.FILE ||
-      String(field.type).toUpperCase() === 'FILE'
-    );
+    try {
+      return (
+        field.type === ApplicationFieldType.FILE ||
+        String(field.type).toUpperCase() === 'FILE'
+      );
+    } catch (error) {
+      this.logger.error(
+        `isFileField failed fieldId=${field?.id}: ${(error as Error).message}`,
+      );
+      throw error;
+    }
   }
 
+  /**
+   * Finds a custom FILE application field by id.
+   * @param fields - Job application fields to search.
+   * @param fieldId - The field id to find.
+   * @returns The matching FILE field.
+   */
   private findCustomFileField(
     fields: JobApplicationField[],
     fieldId: string,
   ): JobApplicationField {
-    const field = fields.find((f) => f.id === fieldId);
-    if (!field || field.builtIn || !this.isFileField(field)) {
-      throw new BadRequestException(ApplicationErrors.INVALID_FIELD);
+    try {
+      const field = fields.find((f) => f.id === fieldId);
+      if (!field || field.builtIn || !this.isFileField(field)) {
+        throw new BadRequestException(ApplicationErrors.INVALID_FIELD);
+      }
+      return field;
+    } catch (error) {
+      this.logger.error(
+        `findCustomFileField failed fieldId=${fieldId}: ${(error as Error).message}`,
+      );
+      throw error;
     }
-    return field;
   }
 
   /**
@@ -824,20 +896,27 @@ export class ApplicationService {
     application: Application,
     job: NonNullable<Application['job']>,
   ): void {
-    void this.transcriptionJobsService
-      .enqueueAfterSubmit({
-        applicationId: application.id,
-        jobId: job.id,
-        organizationId: application.organizationId,
-        aiTranscripts: job.aiTranscripts,
-        transcriptionLanguage: job.transcriptionLanguage,
-        questions: job.questions ?? [],
-      })
-      .catch((error) => {
-        this.logger.error(
-          `Transcription enqueue failed applicationId=${application.id}: ${(error as Error).message}`,
-        );
-      });
+    try {
+      void this.transcriptionJobsService
+        .enqueueAfterSubmit({
+          applicationId: application.id,
+          jobId: job.id,
+          organizationId: application.organizationId,
+          aiTranscripts: job.aiTranscripts,
+          transcriptionLanguage: job.transcriptionLanguage,
+          questions: job.questions ?? [],
+        })
+        .catch((error) => {
+          this.logger.error(
+            `Transcription enqueue failed applicationId=${application.id}: ${(error as Error).message}`,
+          );
+        });
+    } catch (error) {
+      this.logger.error(
+        `scheduleTranscription failed applicationId=${application.id}: ${(error as Error).message}`,
+      );
+      throw error;
+    }
   }
 
   /**
@@ -846,11 +925,18 @@ export class ApplicationService {
    * @returns The formatted candidate name.
    */
   private formatCandidateName(application: Application): string {
-    const name = [application.firstName, application.lastName]
-      .filter(Boolean)
-      .join(' ')
-      .trim();
-    return name || application.email?.trim() || 'A candidate';
+    try {
+      const name = [application.firstName, application.lastName]
+        .filter(Boolean)
+        .join(' ')
+        .trim();
+      return name || application.email?.trim() || 'A candidate';
+    } catch (error) {
+      this.logger.error(
+        `formatCandidateName failed applicationId=${application?.id}: ${(error as Error).message}`,
+      );
+      throw error;
+    }
   }
 
   /**
@@ -859,15 +945,22 @@ export class ApplicationService {
    * @returns The ApplicationSortBy enum value.
    */
   private parseSortBy(value?: string): ApplicationSortBy {
-    switch (value) {
-      case ApplicationSortBy.NAME:
-      case 'name':
-        return ApplicationSortBy.NAME;
-      case ApplicationSortBy.STAGE:
-      case 'stage':
-        return ApplicationSortBy.STAGE;
-      default:
-        return ApplicationSortBy.SUBMITTED;
+    try {
+      switch (value) {
+        case ApplicationSortBy.NAME:
+        case 'name':
+          return ApplicationSortBy.NAME;
+        case ApplicationSortBy.STAGE:
+        case 'stage':
+          return ApplicationSortBy.STAGE;
+        default:
+          return ApplicationSortBy.SUBMITTED;
+      }
+    } catch (error) {
+      this.logger.error(
+        `parseSortBy failed value=${value}: ${(error as Error).message}`,
+      );
+      throw error;
     }
   }
 }
