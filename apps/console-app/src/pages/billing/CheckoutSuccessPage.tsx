@@ -118,7 +118,7 @@ export default function CheckoutSuccessPage() {
         <p className="mt-2 text-sm text-muted">
           You are subscribed to <span className="font-medium text-heading">{productName}</span>
           {subscription?.price &&
-            ` at ${formatMoney(subscription.price.amount, subscription.price.currency)} ${formatIntervalShort(subscription.price.interval).toLowerCase()}`}
+            ` at ${formatMoney(subscription.price.amount, subscription.price.currency)} ${formatIntervalShort(subscription.price.interval, subscription.price.intervalCount ?? 1).toLowerCase()}`}
           .
         </p>
         {subscription?.currentPeriodEnd && (

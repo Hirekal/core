@@ -40,7 +40,7 @@ export default function CheckoutOrderSummary({
           {formatMoney(price.amount, price.currency)}
         </p>
         <p className="mt-1 text-sm text-muted">
-          per {formatIntervalShort(price.interval).replace('Per ', '').toLowerCase()}
+          per {formatIntervalShort(price.interval, price.intervalCount ?? 1).replace('Per ', '').toLowerCase()}
         </p>
       </div>
 
@@ -49,7 +49,7 @@ export default function CheckoutOrderSummary({
           <div>
             <p className="font-medium text-heading">{product.name}</p>
             <p className="mt-1 text-sm text-muted">
-              {formatIntervalShort(price.interval)} subscription
+              {formatIntervalShort(price.interval, price.intervalCount ?? 1)} subscription
             </p>
           </div>
           <p className="text-sm font-medium text-heading">

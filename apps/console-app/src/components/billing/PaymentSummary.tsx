@@ -28,7 +28,9 @@ export default function PaymentSummary({ product, price, taxAmount = null }: Pay
         </div>
         <div className="flex justify-between gap-4">
           <dt className="text-muted">Billing interval</dt>
-          <dd className="font-medium text-heading">{formatIntervalShort(price.interval)}</dd>
+          <dd className="font-medium text-heading">
+            {formatIntervalShort(price.interval, price.intervalCount ?? 1)}
+          </dd>
         </div>
         <div className="flex justify-between gap-4">
           <dt className="text-muted">Amount</dt>

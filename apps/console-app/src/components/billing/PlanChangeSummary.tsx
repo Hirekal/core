@@ -44,7 +44,9 @@ export default function PlanChangeSummary({
         </div>
         <div className="flex justify-between gap-4">
           <dt className="text-muted">Billing interval</dt>
-          <dd className="font-medium text-heading">{formatIntervalShort(newPrice.interval)}</dd>
+          <dd className="font-medium text-heading">
+            {formatIntervalShort(newPrice.interval, newPrice.intervalCount ?? 1)}
+          </dd>
         </div>
         {preview.prorationCredit > 0 && (
           <div className="flex justify-between gap-4">

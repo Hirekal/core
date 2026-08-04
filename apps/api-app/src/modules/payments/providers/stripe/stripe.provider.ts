@@ -242,13 +242,23 @@ export class StripeProvider implements PaymentProvider {
         periodStart ??
         subscription.start_date;
 
+      const currentProviderPriceId = resolveStripeResourceId(subscriptionItem.price);
+      const intervalChange = await this.isBillingIntervalChange(
+        currentProviderPriceId,
+        input.providerPriceId,
+      );
+
+      const subscriptionDetails: Stripe.InvoiceCreatePreviewParams.SubscriptionDetails =
+        {
+          items: [{ id: subscriptionItem.id, price: input.providerPriceId }],
+          proration_behavior: 'create_prorations',
+          ...(intervalChange ? { billing_cycle_anchor: 'now' } : {}),
+        };
+
       const invoicePreview = await stripe.invoices.createPreview({
         customer: input.providerCustomerId,
         subscription: input.providerSubscriptionId,
-        subscription_details: {
-          items: [{ id: subscriptionItem.id, price: input.providerPriceId }],
-          proration_behavior: 'create_prorations',
-        },
+        subscription_details: subscriptionDetails,
       });
 
       const currency = invoicePreview.currency.toUpperCase();
@@ -392,13 +402,19 @@ export class StripeProvider implements PaymentProvider {
 
       await this.releaseSubscriptionSchedule(input.providerSubscriptionId);
 
+      const currentProviderPriceId = resolveStripeResourceId(subscriptionItem.price);
+      const intervalChange = await this.isBillingIntervalChange(
+        currentProviderPriceId,
+        input.providerPriceId,
+      );
+
       const updatedSubscription = await stripe.subscriptions.update(
         input.providerSubscriptionId,
         {
           items: [{ id: subscriptionItem.id, price: input.providerPriceId }],
           proration_behavior: UPGRADE_PRORATION_BEHAVIOR,
           payment_behavior: 'error_if_incomplete',
-          billing_cycle_anchor: 'unchanged',
+          billing_cycle_anchor: intervalChange ? 'now' : 'unchanged',
         },
       );
 
@@ -487,6 +503,30 @@ export class StripeProvider implements PaymentProvider {
         effectiveAt: toDateFromUnix(periodEnd)!,
       };
       return providerSubscriptionResult;
+    } catch (error) {
+      rethrowStripeError(error);
+    }
+  }
+
+  /*
+   * Returns true when a plan change switches billing interval or cadence.
+   */
+  private async isBillingIntervalChange(
+    currentProviderPriceId: string,
+    newProviderPriceId: string,
+  ): Promise<boolean> {
+    try {
+      const stripe = this.stripeService.getClient();
+      const [currentPrice, newPrice] = await Promise.all([
+        stripe.prices.retrieve(currentProviderPriceId),
+        stripe.prices.retrieve(newProviderPriceId),
+      ]);
+
+      return (
+        currentPrice.recurring?.interval !== newPrice.recurring?.interval ||
+        (currentPrice.recurring?.interval_count ?? 1) !==
+          (newPrice.recurring?.interval_count ?? 1)
+      );
     } catch (error) {
       rethrowStripeError(error);
     }

@@ -62,7 +62,7 @@ export default function PlanCard({
             <h3 className="text-lg font-semibold text-heading">{product.name}</h3>
             <p className="mt-1 text-sm text-muted">{product.description}</p>
           </div>
-          {isCurrent && <Badge status="active">Current plan</Badge>}
+          {isCurrent && <Badge status="active">Current</Badge>}
           {isScheduled && <Badge status="success">Scheduled</Badge>}
         </div>
 
@@ -77,7 +77,9 @@ export default function PlanCard({
           <p className="text-3xl font-semibold tabular-nums text-heading">
             {formatMoney(price.amount, price.currency)}
           </p>
-          <p className="mt-1 text-sm text-muted">{formatIntervalShort(price.interval)}</p>
+          <p className="mt-1 text-sm text-muted">
+            {formatIntervalShort(price.interval, price.intervalCount ?? 1)}
+          </p>
         </div>
 
         <ul className="mt-6 space-y-2.5">

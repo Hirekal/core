@@ -275,7 +275,10 @@ export default function ManageSubscriptionPage() {
           <div>
             <dt className="text-muted">Billing cycle</dt>
             <dd className="mt-1 font-medium text-heading">
-              {formatIntervalShort(subscription.price?.interval ?? null)}
+              {formatIntervalShort(
+                subscription.price?.interval ?? null,
+                subscription.price?.intervalCount ?? 1,
+              )}
             </dd>
           </div>
           <div>

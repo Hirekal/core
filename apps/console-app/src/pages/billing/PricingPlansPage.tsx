@@ -1,7 +1,7 @@
 /**
  * @fileoverview Pricing plans page with subscribe, upgrade, and downgrade actions.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import PageHeader from '../../components/layout/PageHeader';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
@@ -9,6 +9,7 @@ import Button from '../../components/common/Button';
 import PlanCard from '../../components/billing/PlanCard';
 import BillingSkeleton from '../../components/billing/BillingSkeleton';
 import BillingErrorState from '../../components/billing/BillingErrorState';
+import BillingPeriodToggle from '../../components/billing/BillingPeriodToggle';
 import BillingSummaryCard from '../../components/billing/BillingSummaryCard';
 import SubscriptionStatusBadge from '../../components/billing/SubscriptionStatusBadge';
 import { useAuth } from '../../context/AuthContext';
@@ -17,9 +18,13 @@ import * as billingService from '../../services/billingService';
 import { persistSubscriptionSession } from '../../utils/billingStorage';
 import {
   comparePriceTier,
+  getBillingPeriodLabel,
   getScheduledPlanChangeAt,
   getScheduledPlanPriceId,
   isBillableSubscription,
+  matchesBillingPeriod,
+  resolveBillingPeriod,
+  type BillingPeriod,
 } from '../../utils/billingFormat';
 import { formatDate } from '../../utils/formatDate';
 import { toUserErrorMessage } from '../../utils/errorMessage';
@@ -44,6 +49,8 @@ export default function PricingPlansPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [actionPriceId, setActionPriceId] = useState<string | null>(null);
+  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly');
+  const subscriptionPeriodSyncedRef = useRef(false);
 
   /*
    * Loads catalog plans, subscription state, and default payment method.
@@ -129,6 +136,34 @@ export default function PricingPlansPage() {
     if (!subscription?.priceId) return null;
     return plans.find((plan) => plan.price.id === subscription.priceId) ?? null;
   }, [plans, subscription?.priceId]);
+
+  useEffect(() => {
+    if (subscriptionPeriodSyncedRef.current) {
+      return;
+    }
+
+    const activePrice = subscription?.price ?? currentPlan?.price;
+    if (!activePrice) {
+      return;
+    }
+
+    const activePeriod = resolveBillingPeriod(
+      activePrice.interval,
+      activePrice.intervalCount,
+    );
+    if (activePeriod) {
+      setBillingPeriod(activePeriod);
+      subscriptionPeriodSyncedRef.current = true;
+    }
+  }, [subscription?.priceId, subscription?.price, currentPlan?.price]);
+
+  const visiblePlans = useMemo(
+    () =>
+      plans
+        .filter((plan) => matchesBillingPeriod(plan.price, billingPeriod))
+        .sort((a, b) => a.sortOrder - b.sortOrder || a.price.amount - b.price.amount),
+    [plans, billingPeriod],
+  );
 
   const subscriptionForDisplay = useMemo(() => {
     if (!subscription || !currentPlan) return subscription;
@@ -286,8 +321,14 @@ export default function PricingPlansPage() {
       {plans.length === 0 && !error ? (
         <BillingErrorState message="No pricing plans are available yet." />
       ) : (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {plans.map((plan) => {
+        <>
+          <BillingPeriodToggle value={billingPeriod} onChange={setBillingPeriod} />
+
+          {visiblePlans.length === 0 ? (
+            <BillingErrorState message={`No ${getBillingPeriodLabel(billingPeriod).toLowerCase()} plans are available yet.`} />
+          ) : (
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {visiblePlans.map((plan) => {
             const isCurrent = plan.price.id === currentPriceId;
             const isScheduled = Boolean(
               scheduledPlanPriceId && plan.price.id === scheduledPlanPriceId,
@@ -317,7 +358,9 @@ export default function PricingPlansPage() {
               />
             );
           })}
-        </div>
+            </div>
+          )}
+        </>
       )}
 
       {!subscription && !loading && plans.length > 0 && (

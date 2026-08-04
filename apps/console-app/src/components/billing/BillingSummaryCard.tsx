@@ -47,7 +47,8 @@ export default function BillingSummaryCard({
           <p className="text-xs font-medium uppercase tracking-wide text-muted">Current plan</p>
           <p className="mt-1 text-xl font-semibold text-heading">{product.name}</p>
           <p className="mt-1 text-sm text-muted">
-            {formatMoney(price.amount, price.currency)} · {formatIntervalShort(price.interval)}
+            {formatMoney(price.amount, price.currency)} ·{' '}
+            {formatIntervalShort(price.interval, price.intervalCount ?? 1)}
           </p>
         </div>
         <SubscriptionStatusBadge
@@ -62,7 +63,7 @@ export default function BillingSummaryCard({
           <p className="mt-1 text-muted">
             Switching to {scheduledPlan.product.name} (
             {formatMoney(scheduledPlan.price.amount, scheduledPlan.price.currency)}{' '}
-            {formatIntervalShort(scheduledPlan.price.interval).toLowerCase()}) on{' '}
+            {formatIntervalShort(scheduledPlan.price.interval, scheduledPlan.price.intervalCount ?? 1).toLowerCase()}) on{' '}
             {formatDate(scheduledPlanChangeAt)}.
           </p>
         </div>

@@ -106,6 +106,17 @@ export function AuthProvider({ children }) {
   );
 }
 
+/**
+ * @returns {{
+ *   user: { id: string, email: string, name?: string | null } | null,
+ *   loading: boolean,
+ *   login: (email: string, password: string) => Promise<unknown>,
+ *   signUp: (name: string, email: string, password: string) => Promise<unknown>,
+ *   logout: () => Promise<void>,
+ *   updateUser: (data: Record<string, unknown>) => Promise<unknown>,
+ *   isAuthenticated: boolean
+ * }}
+ */
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) throw new Error('useAuth must be used within AuthProvider');

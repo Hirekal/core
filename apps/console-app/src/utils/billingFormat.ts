@@ -3,6 +3,38 @@
  */
 import type { Price, PriceInterval, Subscription, SubscriptionStatus } from '../types/billing';
 
+export type BillingPeriod = 'monthly' | 'quarterly' | 'yearly';
+
+const BILLING_PERIOD_LABELS: Record<BillingPeriod, string> = {
+  monthly: 'Monthly',
+  quarterly: 'Quarterly',
+  yearly: 'Yearly',
+};
+
+export const BILLING_PERIODS: BillingPeriod[] = ['monthly', 'quarterly', 'yearly'];
+
+export function getBillingPeriodLabel(period: BillingPeriod): string {
+  return BILLING_PERIOD_LABELS[period];
+}
+
+export function resolveBillingPeriod(
+  interval: PriceInterval | null,
+  intervalCount: number | null = 1,
+): BillingPeriod | null {
+  const count = intervalCount ?? 1;
+  if (interval === 'MONTH' && count === 1) return 'monthly';
+  if (interval === 'MONTH' && count === 3) return 'quarterly';
+  if (interval === 'YEAR' && count === 1) return 'yearly';
+  return null;
+}
+
+export function matchesBillingPeriod(
+  price: Pick<Price, 'interval' | 'intervalCount'>,
+  period: BillingPeriod,
+): boolean {
+  return resolveBillingPeriod(price.interval, price.intervalCount) === period;
+}
+
 const BILLABLE_SUBSCRIPTION_STATUSES: SubscriptionStatus[] = [
   'ACTIVE',
   'TRIALING',
@@ -81,8 +113,12 @@ export function formatInterval(interval: PriceInterval | null, count = 1): strin
 /**
  * Returns display interval shorthand such as "Monthly".
  */
-export function formatIntervalShort(interval: PriceInterval | null): string {
-  if (interval === 'MONTH') return 'Monthly';
+export function formatIntervalShort(
+  interval: PriceInterval | null,
+  intervalCount = 1,
+): string {
+  if (interval === 'MONTH' && intervalCount === 3) return 'Quarterly';
+  if (interval === 'MONTH' && intervalCount === 1) return 'Monthly';
   if (interval === 'YEAR') return 'Yearly';
   if (interval === 'WEEK') return 'Weekly';
   if (interval === 'DAY') return 'Daily';

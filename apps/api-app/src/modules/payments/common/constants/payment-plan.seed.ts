@@ -51,6 +51,24 @@ export const PAYMENT_PLAN_SEED: PaymentPlanProductSeed[] = [
         intervalCount: 1,
         metadata: { billingLabel: 'Billed monthly' },
       },
+      {
+        code: 'STARTER_QUARTERLY',
+        providerPriceId: 'price_1U0gEmJCYGyYR7NP0l80Beso',
+        currency: 'USD',
+        amount: 78,
+        interval: PriceInterval.MONTH,
+        intervalCount: 3,
+        metadata: { billingLabel: 'Billed every 3 months' },
+      },
+      {
+        code: 'STARTER_YEARLY',
+        providerPriceId: 'price_1U0gFaJCYGyYR7NPYxUHbLPp',
+        currency: 'USD',
+        amount: 290,
+        interval: PriceInterval.YEAR,
+        intervalCount: 1,
+        metadata: { billingLabel: 'Billed yearly' },
+      },
     ],
   },
   {
@@ -79,6 +97,24 @@ export const PAYMENT_PLAN_SEED: PaymentPlanProductSeed[] = [
         interval: PriceInterval.MONTH,
         intervalCount: 1,
         metadata: { billingLabel: 'Billed monthly' },
+      },
+      {
+        code: 'PROFESSIONAL_QUARTERLY',
+        providerPriceId: 'price_1U0gGHJCYGyYR7NPkZC3jNm6',
+        currency: 'USD',
+        amount: 213,
+        interval: PriceInterval.MONTH,
+        intervalCount: 3,
+        metadata: { billingLabel: 'Billed every 3 months' },
+      },
+      {
+        code: 'PROFESSIONAL_YEARLY',
+        providerPriceId: 'price_1U0gGpJCYGyYR7NPm7jPue4m',
+        currency: 'USD',
+        amount: 790,
+        interval: PriceInterval.YEAR,
+        intervalCount: 1,
+        metadata: { billingLabel: 'Billed yearly' },
       },
     ],
   },
@@ -109,6 +145,30 @@ export const PAYMENT_PLAN_SEED: PaymentPlanProductSeed[] = [
         intervalCount: 1,
         metadata: { billingLabel: 'Billed monthly' },
       },
+      {
+        code: 'ENTERPRISE_QUARTERLY',
+        providerPriceId: 'price_1U0gIHJCYGyYR7NPPKrv45Jk',
+        currency: 'USD',
+        amount: 537,
+        interval: PriceInterval.MONTH,
+        intervalCount: 3,
+        metadata: { billingLabel: 'Billed every 3 months' },
+      },
+      {
+        code: 'ENTERPRISE_YEARLY',
+        providerPriceId: 'price_1U0gIjJCYGyYR7NPYHIn8e9a',
+        currency: 'USD',
+        amount: 1990,
+        interval: PriceInterval.YEAR,
+        intervalCount: 1,
+        metadata: { billingLabel: 'Billed yearly' },
+      },
     ],
   },
 ];
+
+export const PAYMENT_PLAN_NON_MONTHLY_SEED_CODES = PAYMENT_PLAN_SEED.flatMap((plan) =>
+  plan.prices
+    .filter((price) => !price.code.endsWith('_MONTHLY'))
+    .map((price) => price.code),
+);
