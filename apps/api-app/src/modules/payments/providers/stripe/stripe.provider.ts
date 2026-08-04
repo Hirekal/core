@@ -43,6 +43,12 @@ import { rethrowStripeError } from '../../common/utils/stripe-error.util';
 import { ERROR_MESSAGES } from '../../common/messages/payment.messages';
 import { now, toDate } from '../../common/utils/date.util';
 
+/*
+ * Immediately invoices proration adjustments during upgrades so they are not
+ * collected again on the next billing cycle invoice.
+ */
+const UPGRADE_PRORATION_BEHAVIOR = 'always_invoice' as const;
+
 @Injectable()
 export class StripeProvider implements PaymentProvider {
   readonly code = PaymentProviderCode.STRIPE;
@@ -390,8 +396,9 @@ export class StripeProvider implements PaymentProvider {
         input.providerSubscriptionId,
         {
           items: [{ id: subscriptionItem.id, price: input.providerPriceId }],
-          proration_behavior: 'create_prorations',
+          proration_behavior: UPGRADE_PRORATION_BEHAVIOR,
           payment_behavior: 'error_if_incomplete',
+          billing_cycle_anchor: 'unchanged',
         },
       );
 
