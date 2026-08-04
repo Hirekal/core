@@ -54,6 +54,7 @@ import {
 import { TranscriptionJobsService } from './transcription-jobs/transcription-jobs.service';
 import { WebhookDeliveryService } from './webhook-delivery/webhook-delivery.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { UsersService } from '../auth/users/users.service';
 
 @Injectable()
 export class ApplicationService {
@@ -70,6 +71,7 @@ export class ApplicationService {
     private readonly transcriptionJobsService: TranscriptionJobsService,
     private readonly webhookDeliveryService: WebhookDeliveryService,
     private readonly notificationsService: NotificationsService,
+    private readonly usersService: UsersService,
     private readonly r2Service: R2Service,
   ) {}
 
@@ -393,11 +395,13 @@ export class ApplicationService {
         transcriptionJobs.map((item) => [item.applicationAnswerId, item]),
       );
 
-      return toApplicationDetail(
-        application,
-        job?.questions ?? [],
-        transcriptionByAnswerId,
-        job?.applicationFields ?? [],
+      return this.withNoteAuthors(
+        toApplicationDetail(
+          application,
+          job?.questions ?? [],
+          transcriptionByAnswerId,
+          job?.applicationFields ?? [],
+        ),
       );
     } catch (error) {
       if (error instanceof HttpException) throw error;
@@ -406,6 +410,43 @@ export class ApplicationService {
       );
       throw new InternalServerErrorException(ApplicationErrors.FAILED_TO_GET);
     }
+  }
+
+  /**
+   * Attaches author display names to application notes.
+   */
+  private async withNoteAuthors(
+    detail: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    const rawNotes = detail.notes;
+    if (!Array.isArray(rawNotes) || rawNotes.length === 0) {
+      return detail;
+    }
+
+    type NoteRow = Record<string, unknown> & {
+      authorId?: string | null;
+    };
+
+    const notes: NoteRow[] = rawNotes.filter(
+      (note): note is NoteRow =>
+        Boolean(note) && typeof note === 'object' && !Array.isArray(note),
+    );
+
+    const authorIds = notes
+      .map((note) => note.authorId)
+      .filter((id): id is string => typeof id === 'string' && id.length > 0);
+
+    const names = await this.usersService.findNamesByIds(authorIds);
+
+    const notesWithAuthors: NoteRow[] = notes.map((note) => ({
+      ...note,
+      author: (note.authorId && names.get(note.authorId)) || 'Team member',
+    }));
+
+    return {
+      ...detail,
+      notes: notesWithAuthors,
+    };
   }
 
   /**

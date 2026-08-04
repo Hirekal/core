@@ -3,6 +3,15 @@ import { apiRequest } from './apiClient';
 
 export const NOTIFICATIONS_PAGE_SIZE = 25;
 
+/** Fired when unread notification state may have changed (mark read / mark all). */
+export const NOTIFICATIONS_UPDATED_EVENT = 'hirekal:notifications-updated';
+
+function notifyNotificationsUpdated() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(NOTIFICATIONS_UPDATED_EVENT));
+  }
+}
+
 /**
  * @param {{ page?: number, limit?: number }} [params]
  * @returns {Promise<{ items: object[], total: number, page: number, limit: number }>}
@@ -45,15 +54,19 @@ export async function getUnreadNotificationCount() {
 }
 
 export async function markNotificationRead(id) {
-  return apiRequest(API_ENDPOINTS.notifications.markRead(id), {
+  const result = await apiRequest(API_ENDPOINTS.notifications.markRead(id), {
     method: 'PATCH',
     auth: true,
   });
+  notifyNotificationsUpdated();
+  return result;
 }
 
 export async function markAllNotificationsRead() {
-  return apiRequest(API_ENDPOINTS.notifications.markAllRead, {
+  const result = await apiRequest(API_ENDPOINTS.notifications.markAllRead, {
     method: 'PATCH',
     auth: true,
   });
+  notifyNotificationsUpdated();
+  return result;
 }

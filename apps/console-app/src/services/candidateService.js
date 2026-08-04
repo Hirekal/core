@@ -132,7 +132,8 @@ function mapApplicationToCandidate(application) {
         notes: (application.notes || []).map((note) => ({
             id: note.id,
             text: note.text,
-            author: note.authorId ? 'Team member' : 'Team member',
+            author: note.author || 'Team member',
+            authorId: note.authorId || null,
             createdAt: note.createdAt,
         })),
         fieldValues,
