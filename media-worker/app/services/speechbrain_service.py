@@ -87,6 +87,7 @@ class SpeechBrainService:
         *,
         transcript_text: str,
         audio_duration: float,
+        whisper_language: str | None = None,
     ) -> SpeechAnalysisResult | None:
         if not self.is_loaded:
             logger.warning(
@@ -104,6 +105,7 @@ class SpeechBrainService:
                 audio_path,
                 transcript_text,
                 audio_duration,
+                whisper_language,
             )
         except Exception:
             logger.exception("SpeechBrain analysis failed | audio=%s", audio_path)
@@ -121,11 +123,22 @@ class SpeechBrainService:
         audio_path: Path,
         transcript_text: str,
         audio_duration: float,
+        whisper_language: str | None = None,
     ) -> SpeechAnalysisResult:
         metrics: dict[str, float | str] = {}
 
+        if whisper_language:
+            metrics["language"] = whisper_language.strip().lower()
+            metrics["language_confidence"] = None
+
         try:
-            metrics.update(self._language_metrics(audio_path))
+            lang_metrics = self._language_metrics(audio_path)
+            if whisper_language:
+                lang_metrics.pop("language", None)
+                if lang_metrics.get("language_confidence") is not None:
+                    metrics["language_confidence"] = lang_metrics["language_confidence"]
+            else:
+                metrics.update(lang_metrics)
         except Exception:
             logger.exception("SpeechBrain language identification failed | audio=%s", audio_path)
 
@@ -222,6 +235,15 @@ class SpeechBrainService:
 
 
 def _parse_language_label(text_lab: str) -> str:
+    match = re.search(r"([a-z]{2,3})\s*:", text_lab, re.IGNORECASE)
+    if match:
+        return match.group(1).lower()
+
+    match = re.search(r"['\"]?([a-z]{2,3})['\"]?", text_lab, re.IGNORECASE)
+    if match:
+        return match.group(1).lower()
+
     if ":" in text_lab:
-        return text_lab.split(":", 1)[0].strip()
-    return text_lab.strip()
+        return text_lab.split(":", 1)[0].strip().strip("[]'\"").lower()
+
+    return text_lab.strip().strip("[]'\"").lower()

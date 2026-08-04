@@ -29,7 +29,37 @@ class SpeechMetrics(BaseModel):
     speaking_rate: float | None = None
 
 
+class PhonemeFeedback(BaseModel):
+    index: int = Field(..., ge=0)
+    expected: str | None = None
+    actual: str | None = None
+    status: str
+    score: float = Field(..., ge=0, le=100)
+
+
+class WordFeedback(BaseModel):
+    word: str
+    expected_ipa: str
+    actual_ipa: str | None = None
+    accuracy_score: float = Field(..., ge=0, le=100)
+    status: str
+    phoneme_start_index: int = Field(..., ge=0)
+    phonemes: list[PhonemeFeedback] = Field(default_factory=list)
+
+
+class PronunciationAssessment(BaseModel):
+    pronunciation_accuracy: float = Field(..., ge=0, le=100)
+    prosody_score: float = Field(..., ge=0, le=100)
+    fluency_score: float = Field(..., ge=0, le=100)
+    completeness_score: float | None = Field(default=None, ge=0, le=100)
+    reference_text: str
+    asr_transcript: str
+    phonemes: list[PhonemeFeedback] = Field(default_factory=list)
+    words: list[WordFeedback] = Field(default_factory=list)
+
+
 class TranscribeResponse(BaseModel):
     job_id: str
     transcript: TranscriptResult
     speech: SpeechMetrics | None = None
+    assessment: PronunciationAssessment | None = None

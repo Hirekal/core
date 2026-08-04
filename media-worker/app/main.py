@@ -22,6 +22,7 @@ from app.core.logging import get_logger, setup_logging
 from app.services.callback_service import CallbackService
 from app.services.downloader_service import DownloaderService
 from app.services.ffmpeg_service import FFmpegService
+from app.services.pronunciation_service import PronunciationService
 from app.services.speechbrain_service import SpeechBrainService
 from app.services.whisper_service import WhisperService
 from app.utils.temp_directory import cleanup_stale_temp_dirs, ensure_temp_base_dir
@@ -68,19 +69,30 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     except Exception:
         logger.exception("SpeechBrain unavailable; transcription will continue without speech metrics")
 
+    pronunciation_service = PronunciationService(model_name=settings.pronunciation_model)
+    if settings.pronunciation_enabled:
+        try:
+            pronunciation_service.load_model()
+        except Exception:
+            logger.exception(
+                "Pronunciation assessment unavailable; transcription will continue without assessment"
+            )
+
     app.state.downloader_service = DownloaderService(settings)
     app.state.ffmpeg_service = FFmpegService(settings)
     app.state.whisper_service = whisper_service
     app.state.speechbrain_service = speechbrain_service
+    app.state.pronunciation_service = pronunciation_service
     app.state.callback_service = CallbackService(settings)
 
     stop_event = asyncio.Event()
     cleanup_task = asyncio.create_task(periodic_stale_temp_cleanup(settings, stop_event))
 
     logger.info(
-        "Media worker started | model=%s speechbrain=%s callback_enabled=%s",
+        "Media worker started | model=%s speechbrain=%s pronunciation=%s callback_enabled=%s",
         settings.whisper_model,
         speechbrain_service.is_loaded,
+        pronunciation_service.is_loaded,
         bool(settings.transcript_callback_url),
     )
     yield

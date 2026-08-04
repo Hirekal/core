@@ -49,8 +49,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system app \
     && useradd --system --gid app --create-home --home-dir /home/app app \
-    && mkdir -p /tmp/media-worker /tmp/speechbrain-models \
-    && chown -R app:app /app /tmp/media-worker /tmp/speechbrain-models
+    && mkdir -p /tmp/media-worker /tmp/speechbrain-models /tmp/pronunciation-models \
+    && chown -R app:app /app /tmp/media-worker /tmp/speechbrain-models /tmp/pronunciation-models
 
 COPY --from=builder /wheels /wheels
 COPY requirements.txt .
@@ -65,7 +65,7 @@ USER app
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=180s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=300s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"
 
 ENTRYPOINT ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
