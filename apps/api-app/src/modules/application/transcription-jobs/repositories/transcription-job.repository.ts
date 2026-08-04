@@ -1,11 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import {
-  FindOptionsOrder,
-  FindOptionsWhere,
-  In,
-  Repository,
-} from 'typeorm';
+import { FindOptionsOrder, FindOptionsWhere, In, Repository } from 'typeorm';
 import { TranscriptionJobStatus } from '../../enums/application.enums';
 import { TranscriptionJob } from '../entities/transcription-job.entity';
 

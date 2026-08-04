@@ -2,9 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DeepPartial, Repository } from 'typeorm';
 import { Notification } from '../entities/notification.entity';
-import {
-  NOTIFICATIONS_DEFAULT_LIMIT,
-} from '../dto/list-notifications-query.dto';
+import { NOTIFICATIONS_DEFAULT_LIMIT } from '../dto/list-notifications-query.dto';
 
 export type NotificationListQuery = {
   page?: number;
@@ -47,10 +45,7 @@ export class NotificationRepository {
     query: NotificationListQuery = {},
   ): Promise<NotificationListResult> {
     const page = Math.max(1, query.page ?? 1);
-    const limit = Math.max(
-      1,
-      query.limit ?? NOTIFICATIONS_DEFAULT_LIMIT,
-    );
+    const limit = Math.max(1, query.limit ?? NOTIFICATIONS_DEFAULT_LIMIT);
     const skip = (page - 1) * limit;
 
     const [items, total] = await this.repository.findAndCount({

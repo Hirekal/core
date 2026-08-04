@@ -38,37 +38,32 @@ export class MediaWorkerCallbackDto {
   status?: MediaWorkerPayloadStatus;
 
   @ValidateIf(
-    (o: MediaWorkerCallbackDto) =>
-      o.status === MediaWorkerPayloadStatus.FAILED,
+    (o: MediaWorkerCallbackDto) => o.status === MediaWorkerPayloadStatus.FAILED,
   )
   @IsString()
   error?: string;
 
   @ValidateIf(
-    (o: MediaWorkerCallbackDto) =>
-      o.status !== MediaWorkerPayloadStatus.FAILED,
+    (o: MediaWorkerCallbackDto) => o.status !== MediaWorkerPayloadStatus.FAILED,
   )
   @IsString()
   language?: string;
 
   @ValidateIf(
-    (o: MediaWorkerCallbackDto) =>
-      o.status !== MediaWorkerPayloadStatus.FAILED,
+    (o: MediaWorkerCallbackDto) => o.status !== MediaWorkerPayloadStatus.FAILED,
   )
   @IsNumber()
   @Min(0)
   duration?: number;
 
   @ValidateIf(
-    (o: MediaWorkerCallbackDto) =>
-      o.status !== MediaWorkerPayloadStatus.FAILED,
+    (o: MediaWorkerCallbackDto) => o.status !== MediaWorkerPayloadStatus.FAILED,
   )
   @IsString()
   text?: string;
 
   @ValidateIf(
-    (o: MediaWorkerCallbackDto) =>
-      o.status !== MediaWorkerPayloadStatus.FAILED,
+    (o: MediaWorkerCallbackDto) => o.status !== MediaWorkerPayloadStatus.FAILED,
   )
   @IsArray()
   @ValidateNested({ each: true })

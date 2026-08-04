@@ -35,8 +35,6 @@ export const ApplicationErrors = {
   INVALID_MEDIA_WORKER_CALLBACK:
     'Invalid media worker success callback payload',
   TRANSCRIPTION_FAILED: 'Transcription failed',
-  NO_VIDEO_URL_FOR_TRANSCRIPTION:
-    'No accessible video URL for transcription',
-  MEDIA_WORKER_RETURNED: (status: number) =>
-    `Media worker returned ${status}`,
+  NO_VIDEO_URL_FOR_TRANSCRIPTION: 'No accessible video URL for transcription',
+  MEDIA_WORKER_RETURNED: (status: number) => `Media worker returned ${status}`,
 } as const;

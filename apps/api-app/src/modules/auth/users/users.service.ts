@@ -13,10 +13,7 @@ import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import {
-  SYSTEM_ROLES,
-  UserStatus,
-} from '../common/constants/auth.constants';
+import { SYSTEM_ROLES, UserStatus } from '../common/constants/auth.constants';
 import { hashPassword } from '../common/utils/hash.util';
 import { BaseRepository } from '../common/repositories/base.repository';
 import { ERROR_MESSAGES, LOG_MESSAGES } from '../common/constants/messages';

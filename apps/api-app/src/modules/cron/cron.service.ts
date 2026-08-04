@@ -1,9 +1,4 @@
-import {
-  forwardRef,
-  Inject,
-  Injectable,
-  Logger,
-} from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression, SchedulerRegistry } from '@nestjs/schedule';
 import { WebhookDeliveryService } from '../application/webhook-delivery/webhook-delivery.service';
@@ -70,9 +65,7 @@ export class CronService {
       this.isProcessingWebhooks = true;
       const processed =
         await this.webhookDeliveryService.processReadyQueue(WEBHOOK_BATCH_SIZE);
-      this.logger.log(
-        `Webhook delivery cron ran processed=${processed}`,
-      );
+      this.logger.log(`Webhook delivery cron ran processed=${processed}`);
     } catch (error) {
       this.logger.error(
         `Webhook delivery cron failed: ${(error as Error).message}`,

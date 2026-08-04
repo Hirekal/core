@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   forwardRef,
-  HttpStatus,
   Inject,
   Injectable,
   Logger,
@@ -43,7 +42,7 @@ export class TranscriptionJobsService {
     private readonly configService: ConfigService,
     @Inject(forwardRef(() => WebhookDeliveryService))
     private readonly webhookDeliveryService: WebhookDeliveryService,
-  ) { }
+  ) {}
 
   /**
    * Queues transcription for all video answers on a submitted application.
@@ -484,12 +483,13 @@ export class TranscriptionJobsService {
         throw new Error(detail);
       }
 
+      // Axios status is a number; use 202 (HttpStatus.ACCEPTED) to satisfy enum lint.
       if (
-        response.status !== HttpStatus.ACCEPTED &&
+        response.status !== 202 &&
         body?.status !== MediaWorkerPayloadStatus.ACCEPTED
       ) {
         this.logger.warn(
-          `Media worker returned ${response.status} for jobId=${jobId}; expecting ${HttpStatus.ACCEPTED} ${MediaWorkerPayloadStatus.ACCEPTED} (Path B). Ignoring body.`,
+          `Media worker returned ${response.status} for jobId=${jobId}; expecting 202 ${MediaWorkerPayloadStatus.ACCEPTED} (Path B). Ignoring body.`,
         );
       }
     } catch (error) {
@@ -498,9 +498,7 @@ export class TranscriptionJobsService {
           error.response?.data &&
           typeof error.response.data === 'object' &&
           'detail' in error.response.data
-            ? String(
-                (error.response.data as { detail?: unknown }).detail,
-              )
+            ? String((error.response.data as { detail?: unknown }).detail)
             : error.message;
         this.logger.error(
           `dispatchToMediaWorker failed jobId=${jobId}: ${detail}`,
@@ -512,7 +510,6 @@ export class TranscriptionJobsService {
         `dispatchToMediaWorker failed jobId=${jobId}: ${(error as Error).message}`,
       );
       throw error;
-
     }
   }
 
@@ -555,9 +552,7 @@ export class TranscriptionJobsService {
 
       return null;
     } catch (error) {
-      this.logger.error(
-        `resolveVideoUrl failed: ${(error as Error).message}`,
-      );
+      this.logger.error(`resolveVideoUrl failed: ${(error as Error).message}`);
       return null;
     }
   }
