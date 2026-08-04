@@ -33,6 +33,11 @@ export async function login(email, password) {
         method: 'POST',
         body: { email, password },
     });
+
+    if (!data?.accessToken || !data?.refreshToken) {
+        throw new Error('Sign in failed: server did not return auth tokens');
+    }
+
     const session = toSession(data);
     writeSession(session);
     return session;

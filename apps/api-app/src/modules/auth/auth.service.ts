@@ -73,6 +73,10 @@ import { logServiceError } from '../../common/utils/error.util';
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
+  private readonly refreshInFlight = new Map<
+    string,
+    Promise<AuthTokensResponse>
+  >();
 
   /**
    * Creates the auth service with injected domain and JWT dependencies.
@@ -280,6 +284,27 @@ export class AuthService {
     refreshToken: string,
     ipAddress?: string,
   ): Promise<AuthTokensResponse> {
+    const refreshTokenHash = hashToken(refreshToken);
+    const inFlight = this.refreshInFlight.get(refreshTokenHash);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const refreshPromise = this.performRefreshToken(
+      refreshToken,
+      ipAddress,
+    ).finally(() => {
+      this.refreshInFlight.delete(refreshTokenHash);
+    });
+
+    this.refreshInFlight.set(refreshTokenHash, refreshPromise);
+    return refreshPromise;
+  }
+
+  private async performRefreshToken(
+    refreshToken: string,
+    ipAddress?: string,
+  ): Promise<AuthTokensResponse> {
     try {
       const session = await this.userSessionsService.findByRefreshTokenHash(
         hashToken(refreshToken),
@@ -305,11 +330,37 @@ export class AuthService {
         LOG_MESSAGES.AUTH.REFRESH_ACCEPTED(session.userId, session.id),
       );
       const user = await this.usersService.findOne(session.userId);
-      await this.userSessionsService.revoke(session.id);
-      this.logger.log(
-        LOG_MESSAGES.AUTH.OLD_SESSION_REVOKED(session.userId, session.id),
+      const payload: JwtPayload = {
+        sub: user.id,
+        email: user.email,
+        organizationId: user.organizationId,
+      };
+
+      const accessExpiresIn =
+        this.authOptions.jwtAccessExpiresIn ??
+        AUTH_CONSTANTS.ACCESS_TOKEN_EXPIRES_IN;
+
+      const accessToken = await this.jwtService.signAsync(payload, {
+        secret: this.authOptions.jwtSecret,
+        expiresIn: accessExpiresIn as
+          number | `${number}${'s' | 'm' | 'h' | 'd'}`,
+      });
+      const accessTokenExpiresAt = addMs(
+        this.resolveExpiresMs(accessExpiresIn),
       );
-      return this.issueTokens(user, ipAddress);
+
+      await this.userSessionsService.updateAccessToken(session.id, {
+        accessTokenHash: hashToken(accessToken),
+        accessTokenExpiresAt,
+        ipAddress: ipAddress ?? session.ipAddress,
+      });
+
+      return {
+        accessToken,
+        refreshToken,
+        accessTokenExpiresAt,
+        refreshTokenExpiresAt: session.refreshTokenExpiresAt,
+      };
     } catch (error) {
       logServiceError(
         this.logger,

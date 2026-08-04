@@ -43,11 +43,22 @@ export default function Modal({ isOpen, onClose, title, children, footer, size =
   );
 }
 
-export function ModalFooter({ onCancel, onConfirm, confirmLabel = 'Confirm', cancelLabel = 'Cancel', loading = false }) {
+export function ModalFooter({
+  onCancel,
+  onConfirm,
+  confirmLabel = 'Confirm',
+  cancelLabel = 'Cancel',
+  confirmVariant = 'primary',
+  loading = false,
+}) {
   return (
     <>
-      <Button variant="secondary" onClick={onCancel}> {cancelLabel} </Button>
-      <Button onClick={onConfirm} disabled={loading}>{loading ? 'Saving...' : confirmLabel}</Button>
+      <Button variant="secondary" onClick={onCancel}>
+        {cancelLabel}
+      </Button>
+      <Button variant={confirmVariant} onClick={onConfirm} disabled={loading}>
+        {loading ? 'Saving...' : confirmLabel}
+      </Button>
     </>
   );
 }

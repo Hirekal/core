@@ -8,6 +8,7 @@ interface ConfirmationModalProps {
   title: string;
   message: string;
   confirmLabel?: string;
+  confirmVariant?: 'primary' | 'danger';
   loading?: boolean;
   onConfirm: () => void;
   onClose: () => void;
@@ -21,19 +22,28 @@ export default function ConfirmationModal({
   title,
   message,
   confirmLabel = 'Confirm',
+  confirmVariant = 'danger',
   loading = false,
   onConfirm,
   onClose,
 }: ConfirmationModalProps) {
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={title} size="sm">
-      <p className="text-sm text-muted">{message}</p>
-      <ModalFooter
-        onCancel={onClose}
-        onConfirm={onConfirm}
-        confirmLabel={confirmLabel}
-        loading={loading}
-      />
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={title}
+      size="sm"
+      footer={
+        <ModalFooter
+          onCancel={onClose}
+          onConfirm={onConfirm}
+          confirmLabel={confirmLabel}
+          confirmVariant={confirmVariant}
+          loading={loading}
+        />
+      }
+    >
+      <p className="text-sm leading-relaxed text-muted">{message}</p>
     </Modal>
   );
 }

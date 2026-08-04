@@ -92,7 +92,7 @@ export class PaymentsService {
     try {
       const publishableKey = this.stripeService.getPublishableKey();
       if (!publishableKey) {
-        throw new BadRequestException(  
+        throw new BadRequestException(
           ERROR_MESSAGES.CHECKOUT.MISSING_PUBLISHABLE_KEY,
         );
       }

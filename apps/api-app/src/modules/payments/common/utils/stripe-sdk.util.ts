@@ -1,10 +1,10 @@
 /**
  * @fileoverview Stripe SDK import helpers for CommonJS / ESM interop.
  */
-import StripeImport from 'stripe';
+import * as StripeImport from 'stripe';
 
 type StripeConstructor = typeof StripeImport;
-type StripeInstance = InstanceType<StripeConstructor>;
+type StripeInstance = StripeImport.Stripe;
 type StripeErrorsNamespace = StripeConstructor['errors'];
 
 /**
@@ -18,7 +18,7 @@ export function resolveStripeConstructor(): StripeConstructor {
   }
 
   const withDefault = imported as { default?: StripeConstructor };
-  if (withDefault.default && typeof withDefault.default === 'function') {
+  if (withDefault?.default && typeof withDefault.default === 'function') {
     return withDefault.default;
   }
 
