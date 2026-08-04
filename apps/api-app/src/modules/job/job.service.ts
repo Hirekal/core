@@ -183,7 +183,7 @@ export class JobService {
               introMediaUrl: dto.introMedia?.url ?? null,
               introMediaStorageKey: dto.introMedia?.storageKey ?? null,
               introMediaFileName: dto.introMedia?.fileName ?? null,
-              questionRetakes: dto.questionRetakes ?? QuestionRetakes.UNLIMITED,
+              questionRetakes: dto.questionRetakes ?? QuestionRetakes.ONE,
               transcriptionLanguage: dto.transcriptionLanguage ?? 'english',
               aiTranscripts: dto.aiTranscripts ?? true,
               visitorCount: 0,

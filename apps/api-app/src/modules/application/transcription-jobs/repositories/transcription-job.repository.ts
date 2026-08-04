@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { FindOptionsOrder, FindOptionsWhere, In, Repository } from 'typeorm';
 import { TranscriptionJobStatus } from '../../enums/application.enums';
 import { TranscriptionJob } from '../entities/transcription-job.entity';
 
@@ -22,12 +22,44 @@ export class TranscriptionJobRepository {
   }
 
   /**
+   * Reusable single-row lookup.
+   * @param where - TypeORM where clause.
+   * @param order - Optional order clause.
+   * @returns Matching job or null.
+   */
+  async findOne(
+    where: FindOptionsWhere<TranscriptionJob>,
+    order?: FindOptionsOrder<TranscriptionJob>,
+  ): Promise<TranscriptionJob | null> {
+    return this.repository.findOne({
+      where,
+      ...(order ? { order } : {}),
+    });
+  }
+
+  /**
+   * Reusable multi-row lookup.
+   * @param where - TypeORM where clause.
+   * @param order - Optional order clause.
+   * @returns Matching jobs.
+   */
+  async findMany(
+    where: FindOptionsWhere<TranscriptionJob>,
+    order?: FindOptionsOrder<TranscriptionJob>,
+  ): Promise<TranscriptionJob[]> {
+    return this.repository.find({
+      where,
+      ...(order ? { order } : {}),
+    });
+  }
+
+  /**
    * Finds a transcription job by ID.
    * @param id - The ID of the transcription job.
    * @returns The transcription job for the given ID.
    */
   async findById(id: string): Promise<TranscriptionJob | null> {
-    return this.repository.findOne({ where: { id } });
+    return this.findOne({ id });
   }
 
   /**
@@ -38,10 +70,7 @@ export class TranscriptionJobRepository {
   async findByApplicationId(
     applicationId: string,
   ): Promise<TranscriptionJob[]> {
-    return this.repository.find({
-      where: { applicationId },
-      order: { createdAt: 'DESC' },
-    });
+    return this.findMany({ applicationId }, { createdAt: 'DESC' });
   }
 
   /**
@@ -52,10 +81,7 @@ export class TranscriptionJobRepository {
   async findLatestByApplicationAnswerId(
     applicationAnswerId: string,
   ): Promise<TranscriptionJob | null> {
-    return this.repository.findOne({
-      where: { applicationAnswerId },
-      order: { createdAt: 'DESC' },
-    });
+    return this.findOne({ applicationAnswerId }, { createdAt: 'DESC' });
   }
 
   /**
@@ -79,6 +105,8 @@ export class TranscriptionJobRepository {
 
   /**
    * True when any transcription job for the application is still in flight.
+   * @param applicationId - The ID of the application.
+   * @returns True when PENDING or SENT jobs exist.
    */
   async hasActiveJobsForApplication(applicationId: string): Promise<boolean> {
     const count = await this.repository.count({

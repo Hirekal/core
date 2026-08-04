@@ -1,10 +1,4 @@
-import {
-  forwardRef,
-  Inject,
-  Injectable,
-  Logger,
-  OnModuleInit,
-} from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression, SchedulerRegistry } from '@nestjs/schedule';
 import { WebhookDeliveryService } from '../application/webhook-delivery/webhook-delivery.service';
@@ -13,7 +7,7 @@ import { CronJobName } from './enums/cron-job-name.enum';
 const WEBHOOK_BATCH_SIZE = 20;
 
 @Injectable()
-export class CronService implements OnModuleInit {
+export class CronService {
   private readonly logger = new Logger(CronService.name);
   private isProcessingWebhooks = false;
 
@@ -24,23 +18,16 @@ export class CronService implements OnModuleInit {
     private readonly webhookDeliveryService: WebhookDeliveryService,
   ) {}
 
-  onModuleInit(): void {
+  /**
+   * Enables or stops registered cron jobs based on IS_CRON_SERVER.
+   * Call from bootstrap after app.init() so jobs are already registered.
+   */
+  applyCronServerGate(): void {
     const isCronServer = this.isCronServerEnabled();
     this.logger.log(`IS_CRON_SERVER=${isCronServer}`);
 
-    // Defer skip/start until cron jobs are registered by the scheduler.
-    setTimeout(() => {
-      this.applyCronServerGate();
-    }, 0);
-  }
-
-  /**
-   * Enables or stops registered cron jobs based on IS_CRON_SERVER.
-   */
-  applyCronServerGate(): void {
     try {
       const jobs = this.schedulerRegistry.getCronJobs();
-      const isCronServer = this.isCronServerEnabled();
 
       jobs.forEach((job, key) => {
         if (isCronServer) {
@@ -78,9 +65,7 @@ export class CronService implements OnModuleInit {
       this.isProcessingWebhooks = true;
       const processed =
         await this.webhookDeliveryService.processReadyQueue(WEBHOOK_BATCH_SIZE);
-      if (processed > 0) {
-        this.logger.log(`Webhook delivery cron processed=${processed}`);
-      }
+      this.logger.log(`Webhook delivery cron ran processed=${processed}`);
     } catch (error) {
       this.logger.error(
         `Webhook delivery cron failed: ${(error as Error).message}`,
@@ -90,11 +75,23 @@ export class CronService implements OnModuleInit {
     }
   }
 
+  /**
+   * Whether this process should run scheduled cron jobs.
+   * Defaults to true when IS_CRON_SERVER is unset.
+   * @returns True when cron should run.
+   */
   private isCronServerEnabled(): boolean {
-    const value = this.configService.get<string>('IS_CRON_SERVER');
-    if (value == null || value === '') {
+    try {
+      const value = this.configService.get<string>('IS_CRON_SERVER');
+      if (value == null || value === '') {
+        return true;
+      }
+      return value === 'true';
+    } catch (error) {
+      this.logger.error(
+        `isCronServerEnabled failed: ${(error as Error).message}`,
+      );
       return true;
     }
-    return value === 'true';
   }
 }

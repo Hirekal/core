@@ -12,6 +12,10 @@ import {
   NotifyNewApplicationParams,
   NotifyStageChangeParams,
 } from './constants/notification.constants';
+import {
+  ListNotificationsQueryDto,
+  NOTIFICATIONS_DEFAULT_LIMIT,
+} from './dto/list-notifications-query.dto';
 import { toNotificationResponse } from './notification.mapper';
 import { NotificationRepository } from './repositories/notification.repository';
 
@@ -25,21 +29,28 @@ export class NotificationsService {
   ) {}
 
   /**
-   * Lists notifications for a user.
-   * @param userId - The ID of the user.
-   * @param organizationId - The ID of the organization.
-   * @returns The notifications for the user.
+   * Lists notifications for a user (paginated).
    */
   async listForUser(
     userId: string,
     organizationId: string,
-  ): Promise<Record<string, unknown>[]> {
+    query: ListNotificationsQueryDto = {},
+  ): Promise<Record<string, unknown>> {
     try {
-      const items = await this.notificationRepository.findForUser(
+      const page = query.page ?? 1;
+      const limit = query.limit ?? NOTIFICATIONS_DEFAULT_LIMIT;
+      const result = await this.notificationRepository.findForUser(
         userId,
         organizationId,
+        { page, limit },
       );
-      return items.map(toNotificationResponse);
+
+      return {
+        items: result.items.map(toNotificationResponse),
+        total: result.total,
+        page: result.page,
+        limit: result.limit,
+      };
     } catch (error) {
       if (error instanceof HttpException) throw error;
       this.logger.error(
@@ -50,11 +61,29 @@ export class NotificationsService {
   }
 
   /**
+   * Unread notification count for the bell badge.
+   */
+  async unreadCount(
+    userId: string,
+    organizationId: string,
+  ): Promise<{ count: number }> {
+    try {
+      const count = await this.notificationRepository.countUnread(
+        userId,
+        organizationId,
+      );
+      return { count };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      this.logger.error(
+        `unreadCount failed userId=${userId}: ${(error as Error).message}`,
+      );
+      throw new InternalServerErrorException(NotificationErrors.FAILED_TO_LIST);
+    }
+  }
+
+  /**
    * Marks a notification as read.
-   * @param id - The ID of the notification.
-   * @param userId - The ID of the user.
-   * @param organizationId - The ID of the organization.
-   * @returns The notification.
    */
   async markRead(
     id: string,
@@ -84,17 +113,14 @@ export class NotificationsService {
 
   /**
    * Marks all notifications as read.
-   * @param userId - The ID of the user.
-   * @param organizationId - The ID of the organization.
-   * @returns The notifications for the user.
    */
   async markAllRead(
     userId: string,
     organizationId: string,
-  ): Promise<Record<string, unknown>[]> {
+  ): Promise<{ ok: true }> {
     try {
       await this.notificationRepository.markAllRead(userId, organizationId);
-      return this.listForUser(userId, organizationId);
+      return { ok: true };
     } catch (error) {
       if (error instanceof HttpException) throw error;
       this.logger.error(
@@ -107,9 +133,7 @@ export class NotificationsService {
   }
 
   /**
-   * Notifies a user that a candidate has submitted an application.
-   * @param params - The parameters for the notification.
-   * @returns The void.
+   * Notifies org users that a candidate submitted an application.
    */
   notifyNewApplication(params: NotifyNewApplicationParams): void {
     void this.dispatch({
@@ -125,9 +149,7 @@ export class NotificationsService {
   }
 
   /**
-   * Notifies a user that a candidate has moved to another stage.
-   * @param params - The parameters for the notification.
-   * @returns The void.
+   * Notifies org users that a candidate moved stages.
    */
   notifyStageChange(params: NotifyStageChangeParams): void {
     void this.dispatch({
@@ -144,11 +166,6 @@ export class NotificationsService {
     });
   }
 
-  /**
-   * Dispatches a notification to a user.
-   * @param params - The parameters for the notification.
-   * @returns The void.
-   */
   private async dispatch(params: {
     organizationId: string;
     jobId: string;

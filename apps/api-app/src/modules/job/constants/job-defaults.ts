@@ -157,3 +157,6 @@ export const VIDEO_MIME_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
 
 export const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
 export const MAX_VIDEO_SIZE_BYTES = 100 * 1024 * 1024;
+
+export const PDF_MIME_TYPES = ['application/pdf'];
+export const MAX_RESUME_SIZE_BYTES = 10 * 1024 * 1024;

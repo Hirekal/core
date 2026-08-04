@@ -10,6 +10,10 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { MaxWords } from '../utils/word-count.util';
+
+/** Max words allowed on a candidate application note. */
+export const APPLICATION_NOTE_MAX_WORDS = 200;
 
 class StartApplicationFieldsDto {
   @IsOptional()
@@ -109,5 +113,8 @@ export class UpdateApplicationRatingDto {
 export class AddApplicationNoteDto {
   @IsString()
   @IsNotEmpty()
+  @MaxWords(APPLICATION_NOTE_MAX_WORDS, {
+    message: `Note must be at most ${APPLICATION_NOTE_MAX_WORDS} words`,
+  })
   text!: string;
 }

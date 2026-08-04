@@ -2,6 +2,19 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DeepPartial, Repository } from 'typeorm';
 import { Notification } from '../entities/notification.entity';
+import { NOTIFICATIONS_DEFAULT_LIMIT } from '../dto/list-notifications-query.dto';
+
+export type NotificationListQuery = {
+  page?: number;
+  limit?: number;
+};
+
+export type NotificationListResult = {
+  items: Notification[];
+  total: number;
+  page: number;
+  limit: number;
+};
 
 @Injectable()
 export class NotificationRepository {
@@ -24,19 +37,33 @@ export class NotificationRepository {
   }
 
   /**
-   * Finds notifications for a user.
-   * @param userId - The ID of the user.
-   * @param organizationId - The ID of the organization.
-   * @returns The notifications for the user.
+   * Finds paginated notifications for a user (newest first).
    */
   async findForUser(
     userId: string,
     organizationId: string,
-  ): Promise<Notification[]> {
-    return this.repository.find({
+    query: NotificationListQuery = {},
+  ): Promise<NotificationListResult> {
+    const page = Math.max(1, query.page ?? 1);
+    const limit = Math.max(1, query.limit ?? NOTIFICATIONS_DEFAULT_LIMIT);
+    const skip = (page - 1) * limit;
+
+    const [items, total] = await this.repository.findAndCount({
       where: { userId, organizationId },
       order: { createdAt: 'DESC' },
-      take: 100,
+      skip,
+      take: limit,
+    });
+
+    return { items, total, page, limit };
+  }
+
+  /**
+   * Counts unread notifications for a user.
+   */
+  async countUnread(userId: string, organizationId: string): Promise<number> {
+    return this.repository.count({
+      where: { userId, organizationId, read: false },
     });
   }
 

@@ -12,10 +12,10 @@ export default function NotificationBell() {
     let cancelled = false;
 
     const load = () => {
-      notificationService.getNotifications().then((items) => {
-        if (!cancelled) {
-          setUnreadCount(items.filter((n) => !n.read).length);
-        }
+      notificationService.getUnreadNotificationCount().then((count) => {
+        if (!cancelled) setUnreadCount(count);
+      }).catch(() => {
+        // Keep last known count on transient errors.
       });
     };
 

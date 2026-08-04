@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   Plus, Trash2, GripVertical, Video,
   Briefcase, MessageSquare, FormInput, SlidersHorizontal,
-  User, Mail, Phone, Type, RotateCcw, Languages, Sparkles,
+  User, Mail, Phone, Type, RotateCcw, Sparkles, FileText,
 } from 'lucide-react';
 import Button from '../common/Button';
 import Input from '../common/Input';
@@ -27,6 +27,7 @@ const FIELD_TYPES = [
   { value: 'number', label: 'Number' },
   { value: 'date', label: 'Date' },
   { value: 'url', label: 'URL' },
+  { value: 'file', label: 'Resume (PDF)' },
 ];
 
 const EMPLOYMENT_TYPES = [
@@ -55,7 +56,7 @@ const STANDARD_QUESTION_TYPES = [
 function normalizeSettings(settings = {}) {
   let questionRetakes = settings.questionRetakes;
   if (!questionRetakes) {
-    questionRetakes = settings.allowRetakes === false ? 'none' : 'unlimited';
+    questionRetakes = settings.allowRetakes === false ? 'none' : '1';
   }
 
   return {
@@ -122,6 +123,7 @@ function getFieldIcon(field) {
   if (FIELD_ICON_MAP[field.id]) return FIELD_ICON_MAP[field.id];
   if (field.type === 'email') return Mail;
   if (field.type === 'phone') return Phone;
+  if (field.type === 'file') return FileText;
   return Type;
 }
 
@@ -316,6 +318,11 @@ export default function JobForm({ initialData, onSubmit, loading }) {
               checked={field.required}
               onChange={(v) => updateApplicationField(globalIndex, { required: v })}
             />
+            {field.type === 'file' && (
+              <p className="sm:col-span-2 text-xs text-muted">
+                Candidates upload a PDF resume (max 10MB). Toggle Required if the resume is mandatory.
+              </p>
+            )}
           </div>
           <button
             type="button"
@@ -543,11 +550,6 @@ export default function JobForm({ initialData, onSubmit, loading }) {
                 icon={MessageSquare}
                 title="Standard Response Questions"
                 description="Text, email, number, date, and multiple choice"
-                action={
-                  <Button type="button" variant="secondary" size="sm" onClick={() => addQuestion('text')}>
-                    <Plus size={16} /> Add Question
-                  </Button>
-                }
               >
                 {standardQuestions.length === 0 ? (
                   <EmptyBlock
@@ -556,12 +558,19 @@ export default function JobForm({ initialData, onSubmit, loading }) {
                     description="Add text, email, or multiple choice questions for candidates"
                     action={
                       <Button type="button" variant="secondary" size="sm" onClick={() => addQuestion('text')}>
-                        <Plus size={16} /> Add your first question
+                        <Plus size={16} /> Add Question
                       </Button>
                     }
                   />
                 ) : (
-                  <div className="space-y-4">{standardQuestions.map((q) => renderQuestionCard(q))}</div>
+                  <div className="space-y-4">
+                    {standardQuestions.map((q) => renderQuestionCard(q))}
+                    <div className="flex justify-start pt-2">
+                      <Button type="button" variant="secondary" size="sm" onClick={() => addQuestion('text')}>
+                        <Plus size={16} /> Add Question
+                      </Button>
+                    </div>
+                  </div>
                 )}
               </SectionCard>
 
@@ -580,11 +589,6 @@ export default function JobForm({ initialData, onSubmit, loading }) {
               icon={FormInput}
               title="Application Fields"
               description="Contact details collected from every candidate"
-              action={
-                <Button type="button" variant="secondary" size="sm" onClick={addApplicationField}>
-                  <Plus size={16} /> Add Field
-                </Button>
-              }
             >
               <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm divide-y divide-border">
                 {builtInFields.map((field) => renderApplicationFieldRow(field))}
@@ -598,6 +602,11 @@ export default function JobForm({ initialData, onSubmit, loading }) {
                   </div>
                   <div className="space-y-3">
                     {customFields.map((field) => renderCustomFieldCard(field))}
+                  </div>
+                  <div className="flex justify-start pt-4">
+                    <Button type="button" variant="secondary" size="sm" onClick={addApplicationField}>
+                      <Plus size={16} /> Add Field
+                    </Button>
                   </div>
                 </div>
               ) : (
@@ -613,7 +622,7 @@ export default function JobForm({ initialData, onSubmit, loading }) {
                     className="mt-4"
                     onClick={addApplicationField}
                   >
-                    <Plus size={16} /> Add custom field
+                    <Plus size={16} /> Add Field
                   </Button>
                 </div>
               )}
@@ -651,23 +660,6 @@ export default function JobForm({ initialData, onSubmit, loading }) {
                     options={RETAKE_OPTIONS}
                     placeholder="Select retake limit"
                   />
-                </div>
-
-                <div className="flex items-center justify-between gap-4 px-5 py-5">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent/10 text-accent">
-                      <Languages size={18} />
-                    </span>
-                    <div>
-                      <p className="text-sm font-medium text-heading">Transcription Language</p>
-                      <p className="text-xs text-muted mt-0.5">
-                        Video and audio responses are transcribed in English
-                      </p>
-                    </div>
-                  </div>
-                  <span className="shrink-0 rounded-lg border border-border bg-gray-50 px-3 py-2 text-sm font-medium text-heading">
-                    English
-                  </span>
                 </div>
 
                 <div className="px-5 py-5">

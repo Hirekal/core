@@ -4,6 +4,7 @@ import { X } from 'lucide-react';
 import ApplicationPreviewFlow, { PublicCareersHeader } from '../../components/jobs/ApplicationPreviewFlow';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import * as jobService from '../../services/jobService';
+import { toUserErrorMessage } from '../../utils/errorMessage';
 
 export default function ApplicationPreviewPage() {
   const { id } = useParams();
@@ -11,16 +12,30 @@ export default function ApplicationPreviewPage() {
   const isAdminPreview = searchParams.get('admin') === '1';
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    jobService.getJobForPreview(id).then((data) => {
-      setJob(data);
-      setLoading(false);
-      if (data?.title) {
-        document.title = `${data.title} | Apply`;
-      }
-    });
+    let cancelled = false;
+
+    jobService
+      .getJobForPreview(id)
+      .then((data) => {
+        if (cancelled) return;
+        setJob(data);
+        if (data?.title) {
+          document.title = `${data.title} | Apply`;
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(toUserErrorMessage(err, 'Failed to load preview'));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
     return () => {
+      cancelled = true;
       document.title = 'Hirekal';
     };
   }, [id]);
@@ -37,10 +52,10 @@ export default function ApplicationPreviewPage() {
     );
   }
 
-  if (!job) {
+  if (error || !job) {
     return (
       <div className="min-h-screen bg-surface flex flex-col items-center justify-center text-muted px-4">
-        <p>This job posting is no longer available.</p>
+        <p>{error || 'This job posting is no longer available.'}</p>
       </div>
     );
   }
