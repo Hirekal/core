@@ -2,7 +2,10 @@
  * @fileoverview Stripe SDK wrapper for low-level API access.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { createStripeClient, type Stripe } from '../../common/utils/stripe-sdk.util';
+import {
+  createStripeClient,
+  type Stripe,
+} from '../../common/utils/stripe-sdk.util';
 import {
   PAYMENTS_MODULE_OPTIONS,
   type PaymentsModuleOptions,

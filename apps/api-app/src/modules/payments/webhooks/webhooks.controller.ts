@@ -49,7 +49,11 @@ export class WebhooksController {
       const signature = stripeSignature ?? '';
       const payload = this.resolveWebhookPayload(req);
 
-      await this.webhookProcessorService.process(providerCode, payload, signature);
+      await this.webhookProcessorService.process(
+        providerCode,
+        payload,
+        signature,
+      );
       return { message: SUCCESS_MESSAGES.WEBHOOK.RECEIVED };
     } catch (error) {
       this.logger.error(`Webhook failed for provider ${providerCode}`, error);

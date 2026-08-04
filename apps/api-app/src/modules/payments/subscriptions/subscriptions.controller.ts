@@ -123,7 +123,10 @@ export class SubscriptionsController {
     @Body() dto: CancelSubscriptionDto,
   ) {
     try {
-      return await this.subscriptionsService.cancel(id, dto.cancelAtPeriodEnd ?? true);
+      return await this.subscriptionsService.cancel(
+        id,
+        dto.cancelAtPeriodEnd ?? true,
+      );
     } catch (error) {
       this.logger.error(`cancel failed for subscription ${id}`, error);
       throw error;
@@ -156,10 +159,8 @@ export class SubscriptionsController {
     @Body() dto: ChangeSubscriptionPlanDto,
   ) {
     try {
-      const planChangePreview = await this.subscriptionsService.previewPlanChange(
-        id,
-        dto.priceId,
-      );
+      const planChangePreview =
+        await this.subscriptionsService.previewPlanChange(id, dto.priceId);
       return {
         currentPlan: planChangePreview.currentPlan,
         newPlan: planChangePreview.newPlan,
@@ -167,7 +168,10 @@ export class SubscriptionsController {
         preview: planChangePreview.preview,
       };
     } catch (error) {
-      this.logger.error(`previewPlanChange failed for subscription ${id}`, error);
+      this.logger.error(
+        `previewPlanChange failed for subscription ${id}`,
+        error,
+      );
       throw error;
     }
   }
@@ -189,7 +193,10 @@ export class SubscriptionsController {
         data: subscription,
       };
     } catch (error) {
-      this.logger.error(`cancelScheduledChange failed for subscription ${id}`, error);
+      this.logger.error(
+        `cancelScheduledChange failed for subscription ${id}`,
+        error,
+      );
       throw error;
     }
   }

@@ -232,7 +232,9 @@ export class StripeProvider implements PaymentProvider {
       const periodStart =
         subscriptionItem.current_period_start ?? subscription.start_date;
       const periodEnd =
-        subscriptionItem.current_period_end ?? periodStart ?? subscription.start_date;
+        subscriptionItem.current_period_end ??
+        periodStart ??
+        subscription.start_date;
 
       const invoicePreview = await stripe.invoices.createPreview({
         customer: input.providerCustomerId,
@@ -404,7 +406,9 @@ export class StripeProvider implements PaymentProvider {
         resolveStripeResourceId(refreshedSubscription.items.data[0]?.price) !==
         input.providerPriceId
       ) {
-        throw new BadRequestException(ERROR_MESSAGES.SUBSCRIPTION.PAYMENT_FAILED);
+        throw new BadRequestException(
+          ERROR_MESSAGES.SUBSCRIPTION.PAYMENT_FAILED,
+        );
       }
 
       return this.mapSubscription(refreshedSubscription);
@@ -430,7 +434,9 @@ export class StripeProvider implements PaymentProvider {
         throw new BadRequestException(ERROR_MESSAGES.SUBSCRIPTION.NOT_FOUND);
       }
 
-      const currentProviderPriceId = resolveStripeResourceId(subscriptionItem.price);
+      const currentProviderPriceId = resolveStripeResourceId(
+        subscriptionItem.price,
+      );
       const periodStart = subscriptionItem.current_period_start;
       const periodEnd = subscriptionItem.current_period_end;
       const existingScheduleId = resolveStripeResourceId(subscription.schedule);
@@ -769,14 +775,14 @@ export class StripeProvider implements PaymentProvider {
     const periodStart =
       subscriptionItem?.current_period_start ?? subscription.start_date;
     const periodEnd =
-      subscriptionItem?.current_period_end ?? periodStart ?? subscription.start_date;
+      subscriptionItem?.current_period_end ??
+      periodStart ??
+      subscription.start_date;
 
     return {
       providerSubscriptionId: subscription.id,
       providerCustomerId: resolveStripeResourceId(subscription.customer),
-      providerPriceId: resolveStripeResourceId(
-        subscriptionItem?.price as string | { id: string } | undefined,
-      ),
+      providerPriceId: resolveStripeResourceId(subscriptionItem?.price),
       subscriptionStatus: mapStripeSubscriptionStatus(subscription.status),
       currentPeriodStart:
         toDateFromUnix(periodStart) ?? toDate(subscription.start_date * 1000),
@@ -796,12 +802,14 @@ export class StripeProvider implements PaymentProvider {
   mapInvoice(invoice: Stripe.Invoice): ProviderInvoiceResult {
     const subscriptionRef =
       invoice.parent?.subscription_details?.subscription ??
-      (invoice as Stripe.Invoice & { subscription?: string | Stripe.Subscription | null })
-        .subscription ??
+      (
+        invoice as Stripe.Invoice & {
+          subscription?: string | Stripe.Subscription | null;
+        }
+      ).subscription ??
       null;
-    const providerSubscriptionId = resolveStripeResourceId(
-      subscriptionRef as string | { id: string } | null | undefined,
-    ) || null;
+    const providerSubscriptionId =
+      resolveStripeResourceId(subscriptionRef) || null;
 
     return {
       providerInvoiceId: invoice.id,

@@ -79,10 +79,12 @@ export class InvoicesService {
         );
       }
 
-      return (await this.invoicesRepository.find({
-        where: { userId: customer.userId },
-        order: { createdAt: 'DESC' },
-      })).map((invoice) => this.formatInvoiceForApi(invoice));
+      return (
+        await this.invoicesRepository.find({
+          where: { userId: customer.userId },
+          order: { createdAt: 'DESC' },
+        })
+      ).map((invoice) => this.formatInvoiceForApi(invoice));
     } catch (error) {
       this.logger.error(LOG_MESSAGES.INVOICE.LIST_FAILED(customerId), error);
       throw error;

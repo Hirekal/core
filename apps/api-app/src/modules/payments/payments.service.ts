@@ -1,7 +1,12 @@
 /**
  * @fileoverview Main payments orchestration service.
  */
-import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import {
   PAYMENTS_MODULE_OPTIONS,
   type PaymentsModuleOptions,
@@ -17,7 +22,10 @@ import { AttachPaymentMethodDto } from './common/dto/attach-payment-method.dto';
 import { PricesService } from './prices/prices.service';
 import { PaymentMethodsService } from './payment-methods/payment-methods.service';
 import { InvoicesService } from './invoices/invoices.service';
-import { LOG_MESSAGES, ERROR_MESSAGES } from './common/messages/payment.messages';
+import {
+  LOG_MESSAGES,
+  ERROR_MESSAGES,
+} from './common/messages/payment.messages';
 import type { PaymentProvider } from './providers/payment-provider.interface';
 import { PaymentProviderCode } from './common/enums/payment.enums';
 import { StripeService } from './providers/stripe/stripe.service';
@@ -80,11 +88,11 @@ export class PaymentsService {
   /*
    * Returns Stripe publishable key required for embedded checkout.
    */
-  async getCheckoutConfig() {
+  getCheckoutConfig() {
     try {
       const publishableKey = this.stripeService.getPublishableKey();
       if (!publishableKey) {
-        throw new BadRequestException(
+        throw new BadRequestException(  
           ERROR_MESSAGES.CHECKOUT.MISSING_PUBLISHABLE_KEY,
         );
       }
@@ -174,16 +182,18 @@ export class PaymentsService {
       ) {
         const sessionUserId = checkoutSession.metadata?.userId ?? userId;
         if (sessionUserId === userId) {
-          subscription = await this.subscriptionsService.syncFromStripeCheckout({
-            userId,
-            providerCode: PaymentProviderCode.STRIPE,
-            providerCustomerId: checkoutSession.providerCustomerId || '',
-            providerSubscriptionId: checkoutSession.providerSubscriptionId,
-            priceId: checkoutSession.metadata?.priceId,
-            email: checkoutSession.customerEmail ?? undefined,
-            name: checkoutSession.customerName,
-            metadata: checkoutSession.metadata,
-          });
+          subscription = await this.subscriptionsService.syncFromStripeCheckout(
+            {
+              userId,
+              providerCode: PaymentProviderCode.STRIPE,
+              providerCustomerId: checkoutSession.providerCustomerId || '',
+              providerSubscriptionId: checkoutSession.providerSubscriptionId,
+              priceId: checkoutSession.metadata?.priceId,
+              email: checkoutSession.customerEmail ?? undefined,
+              name: checkoutSession.customerName,
+              metadata: checkoutSession.metadata,
+            },
+          );
         }
       }
 

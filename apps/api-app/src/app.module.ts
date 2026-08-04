@@ -57,7 +57,8 @@ import { PaymentsModule } from './modules/payments/payments.module';
           secretKey: configService.get<string>('STRIPE_SECRET_KEY') ?? '',
           publishableKey:
             configService.get<string>('STRIPE_PUBLISHABLE_KEY') ?? '',
-          webhookSecret: configService.get<string>('STRIPE_WEBHOOK_SECRET') ?? '',
+          webhookSecret:
+            configService.get<string>('STRIPE_WEBHOOK_SECRET') ?? '',
           successUrl:
             configService.get<string>('STRIPE_CHECKOUT_SUCCESS_URL') ??
             'http://localhost:5173/billing/success',

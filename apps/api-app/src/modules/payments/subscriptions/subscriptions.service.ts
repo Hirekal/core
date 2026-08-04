@@ -1,7 +1,12 @@
 /**
  * @fileoverview Subscription persistence and provider synchronization service.
  */
-import { BadRequestException, ForbiddenException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Subscription } from './entities/subscription.entity';
@@ -311,7 +316,9 @@ export class SubscriptionsService {
       const provider = await this.paymentProvidersService.findById(
         subscription.paymentProviderId,
       );
-      const paymentProvider = this.paymentProviderRegistry.resolve(provider.code);
+      const paymentProvider = this.paymentProviderRegistry.resolve(
+        provider.code,
+      );
 
       if (isImmediatePlanChange(comparison)) {
         await paymentProvider.validateCustomerPaymentMethod(
@@ -352,7 +359,10 @@ export class SubscriptionsService {
           : SUCCESS_MESSAGES.SUBSCRIPTION.DOWNGRADED,
       };
     } catch (error) {
-      this.logger.error(LOG_MESSAGES.SUBSCRIPTION.CHANGE_PLAN_FAILED(id), error);
+      this.logger.error(
+        LOG_MESSAGES.SUBSCRIPTION.CHANGE_PLAN_FAILED(id),
+        error,
+      );
       throw error;
     }
   }
@@ -629,7 +639,9 @@ export class SubscriptionsService {
       const provider = await this.paymentProvidersService.findById(
         subscription.paymentProviderId,
       );
-      const paymentProvider = this.paymentProviderRegistry.resolve(provider.code);
+      const paymentProvider = this.paymentProviderRegistry.resolve(
+        provider.code,
+      );
       const providerResult = await paymentProvider.retrieveSubscription(
         subscription.providerSubscriptionId,
       );
@@ -692,10 +704,11 @@ export class SubscriptionsService {
         return existingSubscription;
       }
 
-      let customer = await this.paymentCustomersService.findByProviderCustomerId(
-        input.providerCustomerId,
-        input.providerCode,
-      );
+      let customer =
+        await this.paymentCustomersService.findByProviderCustomerId(
+          input.providerCustomerId,
+          input.providerCode,
+        );
 
       if (!customer) {
         if (!input.providerCustomerId) {
@@ -867,21 +880,23 @@ export class SubscriptionsService {
       const createdSubscription = await BaseRepository.createAndSave(
         this.subscriptionsRepository,
         {
-        userId: input.userId,
-        customerId: input.customerId,
-        priceId: input.priceId,
-        paymentProviderId: input.paymentProviderId,
-        providerSubscriptionId: input.providerResult.providerSubscriptionId,
-        subscriptionStatus: input.providerResult.subscriptionStatus,
-        currentPeriodStart: input.providerResult.currentPeriodStart,
-        currentPeriodEnd: input.providerResult.currentPeriodEnd,
-        cancelAtPeriodEnd: input.providerResult.cancelAtPeriodEnd,
-        canceledAt: input.providerResult.canceledAt,
-        trialStart: input.providerResult.trialStart,
-        trialEnd: input.providerResult.trialEnd,
-        status: this.resolveRecordStatus(input.providerResult.subscriptionStatus),
-        metadata: input.metadata ?? {},
-      },
+          userId: input.userId,
+          customerId: input.customerId,
+          priceId: input.priceId,
+          paymentProviderId: input.paymentProviderId,
+          providerSubscriptionId: input.providerResult.providerSubscriptionId,
+          subscriptionStatus: input.providerResult.subscriptionStatus,
+          currentPeriodStart: input.providerResult.currentPeriodStart,
+          currentPeriodEnd: input.providerResult.currentPeriodEnd,
+          cancelAtPeriodEnd: input.providerResult.cancelAtPeriodEnd,
+          canceledAt: input.providerResult.canceledAt,
+          trialStart: input.providerResult.trialStart,
+          trialEnd: input.providerResult.trialEnd,
+          status: this.resolveRecordStatus(
+            input.providerResult.subscriptionStatus,
+          ),
+          metadata: input.metadata ?? {},
+        },
       );
 
       return this.findOne(createdSubscription.id);

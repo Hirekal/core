@@ -1,7 +1,7 @@
 /**
  * @fileoverview Stripe SDK import helpers for CommonJS / ESM interop.
  */
-import StripeImport = require('stripe');
+import StripeImport from 'stripe';
 
 type StripeConstructor = typeof StripeImport;
 type StripeInstance = InstanceType<StripeConstructor>;

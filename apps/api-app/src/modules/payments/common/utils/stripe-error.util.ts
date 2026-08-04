@@ -1,7 +1,10 @@
 /**
  * @fileoverview Maps Stripe errors into application HTTP exceptions.
  */
-import { BadRequestException, InternalServerErrorException } from '@nestjs/common';
+import {
+  BadRequestException,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { ERROR_MESSAGES } from '../messages/payment.messages';
 import { getStripeErrorsNamespace } from './stripe-sdk.util';
 
@@ -38,7 +41,10 @@ export function rethrowStripeError(error: unknown): never {
 
   const stripeErrors = getStripeErrorsNamespace();
 
-  if (stripeErrors?.StripeCardError && error instanceof stripeErrors.StripeCardError) {
+  if (
+    stripeErrors?.StripeCardError &&
+    error instanceof stripeErrors.StripeCardError
+  ) {
     throw new BadRequestException(ERROR_MESSAGES.STRIPE.PAYMENT_FAILED);
   }
 

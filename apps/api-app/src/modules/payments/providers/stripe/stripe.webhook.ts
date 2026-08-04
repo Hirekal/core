@@ -127,16 +127,18 @@ export class StripeWebhookHandler {
       return;
     }
 
-    const subscription = await this.subscriptionsService.syncFromStripeCheckout({
-      userId,
-      providerCode: PaymentProviderCode.STRIPE,
-      providerCustomerId,
-      providerSubscriptionId,
-      priceId,
-      email: checkoutSession.customer_details?.email ?? undefined,
-      name: checkoutSession.customer_details?.name ?? null,
-      metadata: checkoutSession.metadata as Record<string, unknown>,
-    });
+    const subscription = await this.subscriptionsService.syncFromStripeCheckout(
+      {
+        userId,
+        providerCode: PaymentProviderCode.STRIPE,
+        providerCustomerId,
+        providerSubscriptionId,
+        priceId,
+        email: checkoutSession.customer_details?.email ?? undefined,
+        name: checkoutSession.customer_details?.name ?? null,
+        metadata: checkoutSession.metadata as Record<string, unknown>,
+      },
+    );
 
     if (!subscription) {
       this.logger.warn(
@@ -203,7 +205,7 @@ export class StripeWebhookHandler {
           providerCustomerId: resolveStripeResourceId(subscription.customer),
           providerSubscriptionId: subscription.id,
           priceId: subscription.metadata?.priceId,
-          metadata: subscription.metadata as Record<string, unknown>,
+          metadata: subscription.metadata,
         });
 
       if (!syncedSubscription) {

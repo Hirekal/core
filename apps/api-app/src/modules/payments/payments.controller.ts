@@ -76,9 +76,9 @@ export class PaymentsController {
    */
   @Get('checkout/config')
   @ApiOperation({ summary: 'Get embedded checkout config' })
-  async getCheckoutConfig() {
+  getCheckoutConfig() {
     try {
-      return await this.paymentsService.getCheckoutConfig();
+      return this.paymentsService.getCheckoutConfig();
     } catch (error) {
       this.logger.error('getCheckoutConfig failed', error);
       throw error;
@@ -113,7 +113,10 @@ export class PaymentsController {
     @Query('session_id') sessionId: string,
   ) {
     try {
-      return await this.paymentsService.getCheckoutSessionStatus(user.id, sessionId);
+      return await this.paymentsService.getCheckoutSessionStatus(
+        user.id,
+        sessionId,
+      );
     } catch (error) {
       this.logger.error(
         `getCheckoutSession failed for user ${user.id}, session ${sessionId}`,
@@ -133,9 +136,15 @@ export class PaymentsController {
     @Body() dto: CreateBillingPortalSessionDto,
   ) {
     try {
-      return await this.paymentsService.createBillingPortalSession(user.id, dto);
+      return await this.paymentsService.createBillingPortalSession(
+        user.id,
+        dto,
+      );
     } catch (error) {
-      this.logger.error(`createBillingPortal failed for user ${user.id}`, error);
+      this.logger.error(
+        `createBillingPortal failed for user ${user.id}`,
+        error,
+      );
       throw error;
     }
   }
@@ -152,7 +161,10 @@ export class PaymentsController {
     try {
       return await this.paymentsService.attachPaymentMethod(user.id, dto);
     } catch (error) {
-      this.logger.error(`attachPaymentMethod failed for user ${user.id}`, error);
+      this.logger.error(
+        `attachPaymentMethod failed for user ${user.id}`,
+        error,
+      );
       throw error;
     }
   }
@@ -168,7 +180,10 @@ export class PaymentsController {
     @Query('paymentProviderId', ParseUUIDPipe) paymentProviderId: string,
   ) {
     try {
-      return await this.paymentsService.listPaymentMethods(user.id, paymentProviderId);
+      return await this.paymentsService.listPaymentMethods(
+        user.id,
+        paymentProviderId,
+      );
     } catch (error) {
       this.logger.error(`listPaymentMethods failed for user ${user.id}`, error);
       throw error;
@@ -186,7 +201,10 @@ export class PaymentsController {
     @Query('paymentProviderId', ParseUUIDPipe) paymentProviderId: string,
   ) {
     try {
-      return await this.paymentsService.listInvoices(user.id, paymentProviderId);
+      return await this.paymentsService.listInvoices(
+        user.id,
+        paymentProviderId,
+      );
     } catch (error) {
       this.logger.error(`listInvoices failed for user ${user.id}`, error);
       throw error;
