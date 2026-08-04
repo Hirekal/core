@@ -2,10 +2,12 @@ import { Application } from './entities/application.entity';
 import { ApplicationAnswer } from './application-answers/entities/application-answer.entity';
 import { ApplicationNote } from './application-notes/entities/application-note.entity';
 import { ApplicationFieldValue } from './application-field-values/entities/application-field-value.entity';
+import { JobApplicationField } from '../job/job-application-fields/entities/job-application-field.entity';
 import { JobQuestion } from '../job/job-questions/entities/job-question.entity';
-import { QuestionType } from '../job/enums/job.enums';
+import { ApplicationFieldType, QuestionType } from '../job/enums/job.enums';
 import { TranscriptionJob } from './transcription-jobs/entities/transcription-job.entity';
 import { TranscriptionJobStatus } from './enums/application.enums';
+import { parseFieldFileValue } from './utils/application-field-file.util';
 
 /**
  * Checks if a question is a video question.
@@ -95,6 +97,7 @@ export function toApplicationDetail(
   application: Application,
   questions: JobQuestion[] = [],
   transcriptionByAnswerId: Map<string, TranscriptionJob> = new Map(),
+  applicationFields: JobApplicationField[] = [],
 ): Record<string, unknown> {
   const answersByQuestion = new Map<string, ApplicationAnswer>(
     (application.answers ?? []).map((a: ApplicationAnswer) => [
@@ -121,6 +124,17 @@ export function toApplicationDetail(
     };
   });
 
+  const valuesByFieldId = new Map(
+    (application.fieldValues ?? []).map((fv: ApplicationFieldValue) => [
+      fv.applicationFieldId,
+      fv,
+    ]),
+  );
+
+  const customFields = [...applicationFields]
+    .filter((field) => !field.builtIn)
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+
   return {
     ...toApplicationListItem(application),
     notes: (application.notes ?? []).map((note: ApplicationNote) => ({
@@ -130,12 +144,22 @@ export function toApplicationDetail(
       createdAt: note.createdAt,
     })),
     answers,
-    fieldValues: (application.fieldValues ?? []).map(
-      (fv: ApplicationFieldValue) => ({
-        applicationFieldId: fv.applicationFieldId,
-        value: fv.value,
-      }),
-    ),
+    fieldValues: customFields.map((field) => {
+      const fv = valuesByFieldId.get(field.id);
+      const isFile =
+        field.type === ApplicationFieldType.FILE ||
+        String(field.type || '').toUpperCase() === 'FILE';
+      const raw = fv?.value ?? null;
+      const parsedFile = isFile ? parseFieldFileValue(raw) : null;
+
+      return {
+        applicationFieldId: field.id,
+        label: field.label,
+        type: field.type,
+        required: Boolean(field.required),
+        value: parsedFile ?? raw,
+      };
+    }),
   };
 }
 

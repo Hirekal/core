@@ -17,6 +17,8 @@ export const ApplicationErrors = {
   FAILED_TO_SAVE_ANSWER: 'Failed to save answer',
   FAILED_TO_PRESIGN_VIDEO: 'Failed to prepare video upload',
   FAILED_TO_CONFIRM_VIDEO: 'Failed to confirm video upload',
+  FAILED_TO_PRESIGN_FIELD_FILE: 'Failed to prepare file upload',
+  FAILED_TO_CONFIRM_FIELD_FILE: 'Failed to confirm file upload',
   MISSING_REQUIRED_FIELDS: 'Required application fields are missing',
   MISSING_REQUIRED_ANSWERS: 'Required questions are not answered',
   MISSING_VIDEO_ANSWER: 'Video response is required',

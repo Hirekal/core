@@ -56,7 +56,14 @@ export default function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      <Route path="/jobs/:id/preview" element={<ApplicationPreviewPage />} />
+      <Route
+        path="/jobs/:id/preview"
+        element={
+          <ProtectedRoute>
+            <ApplicationPreviewPage />
+          </ProtectedRoute>
+        }
+      />
       <Route path="/j/:slug" element={<PublicApplyPage />} />
       <Route
         path="/jobs/:id/edit"

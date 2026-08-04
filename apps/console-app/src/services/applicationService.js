@@ -3,6 +3,7 @@ import { mediaToUploadFile } from '../utils/mediaHelpers';
 import { fieldToUi, questionToUi, toUiRetakes } from './jobMappers';
 import { defaultJobSettings } from '../data/dummyStages';
 import { DEFAULT_APPLY_BUTTON_LABEL } from '../components/jobs/jobFormUtils';
+import { clearApplyProgress } from '../utils/applyProgress';
 
 const APPLICATION_TOKEN_HEADER = 'x-application-token';
 const VIEWER_SESSION_KEY = 'hirekal_viewer_id';
@@ -29,19 +30,42 @@ export function getViewerSessionId() {
 
 export function readApplySession(slug) {
   try {
-    const raw = sessionStorage.getItem(sessionKey(slug));
-    return raw ? JSON.parse(raw) : null;
+    const key = sessionKey(slug);
+    const raw =
+      localStorage.getItem(key) || sessionStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    // Migrate older sessionStorage drafts into localStorage.
+    if (!localStorage.getItem(key) && sessionStorage.getItem(key)) {
+      localStorage.setItem(key, raw);
+      sessionStorage.removeItem(key);
+    }
+    return parsed;
   } catch {
     return null;
   }
 }
 
 export function writeApplySession(slug, session) {
+  const key = sessionKey(slug);
+  try {
+    sessionStorage.removeItem(key);
+  } catch {
+    // ignore
+  }
   if (!session) {
-    sessionStorage.removeItem(sessionKey(slug));
+    localStorage.removeItem(key);
     return;
   }
-  sessionStorage.setItem(sessionKey(slug), JSON.stringify(session));
+  localStorage.setItem(key, JSON.stringify(session));
+}
+
+/**
+ * Clears apply session + saved step progress after submit (or abandon).
+ */
+export function clearApplyDraft(slug) {
+  writeApplySession(slug, null);
+  clearApplyProgress(slug);
 }
 
 /**
@@ -100,6 +124,33 @@ export async function trackJobView(slug) {
   });
 }
 
+function isFileFieldType(type) {
+  return String(type || '').toLowerCase() === 'file';
+}
+
+function serializeCustomFieldValue(field, value) {
+  if (isFileFieldType(field.type)) {
+    if (typeof File !== 'undefined' && value instanceof File) {
+      return undefined;
+    }
+    if (value && typeof value === 'object' && value.url) {
+      return JSON.stringify({
+        url: value.url,
+        storageKey: value.storageKey || '',
+        fileName: value.fileName || '',
+        contentType: value.contentType || 'application/pdf',
+      });
+    }
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+    return undefined;
+  }
+
+  if (value == null) return '';
+  return typeof value === 'string' ? value : String(value);
+}
+
 function splitFieldValues(values, fields) {
   const payload = {
     firstName: undefined,
@@ -114,7 +165,10 @@ function splitFieldValues(values, fields) {
     if (field.builtIn && ['firstName', 'lastName', 'email', 'phone'].includes(field.id)) {
       payload[field.id] = value;
     } else if (!field.builtIn) {
-      payload.custom[field.apiId || field.id] = value;
+      const serialized = serializeCustomFieldValue(field, value);
+      if (serialized !== undefined) {
+        payload.custom[field.apiId || field.id] = serialized;
+      }
     }
   }
 
@@ -240,6 +294,54 @@ export async function uploadVideoAnswer(slug, questionId, media) {
   };
 }
 
+export async function uploadFieldFile(slug, fieldId, file) {
+  const session = readApplySession(slug);
+  if (!session?.id) {
+    throw new Error('Application session not found');
+  }
+  if (!(file instanceof File)) {
+    throw new Error('A PDF file is required');
+  }
+
+  const fileName = file.name || 'resume.pdf';
+  const contentType = file.type || 'application/pdf';
+
+  const presign = await apiRequest(
+    `/public/applications/${session.id}/fields/${fieldId}/file/upload-url`,
+    {
+      method: 'POST',
+      ...withApplicationToken(slug),
+      body: {
+        fileName,
+        contentType,
+        size: file.size,
+      },
+    },
+  );
+
+  await putToSignedUrl(presign.uploadUrl, file, contentType);
+
+  const confirmed = await apiRequest(
+    `/public/applications/${session.id}/fields/${fieldId}/file/confirm`,
+    {
+      method: 'POST',
+      ...withApplicationToken(slug),
+      body: {
+        storageKey: presign.storageKey,
+        fileName,
+        contentType,
+      },
+    },
+  );
+
+  return {
+    url: confirmed.url,
+    storageKey: confirmed.storageKey,
+    fileName: confirmed.fileName || fileName,
+    contentType: confirmed.contentType || contentType,
+  };
+}
+
 export async function submitApplication(slug) {
   const session = readApplySession(slug);
   if (!session?.id) {
@@ -251,7 +353,7 @@ export async function submitApplication(slug) {
     ...withApplicationToken(slug),
   });
 
-  writeApplySession(slug, null);
+  clearApplyDraft(slug);
   return result;
 }
 

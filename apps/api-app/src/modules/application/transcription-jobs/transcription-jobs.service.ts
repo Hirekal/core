@@ -1,14 +1,11 @@
-import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JobQuestion } from '../../job/job-questions/entities/job-question.entity';
 import { R2Service } from '../../cloud-storage/r2.service';
 import { ApplicationAnswerRepository } from '../application-answers/repositories/application-answer.repository';
 import { TranscriptionJobStatus } from '../enums/application.enums';
 import { WebhookDeliveryService } from '../webhook-delivery/webhook-delivery.service';
-import {
-  MediaWorkerCallbackDto,
-  MediaWorkerTranscribeResponse,
-} from './dto/media-worker.dto';
+import { MediaWorkerCallbackDto } from './dto/media-worker.dto';
 import { TranscriptionJob } from './entities/transcription-job.entity';
 import { TranscriptionJobRepository } from './repositories/transcription-job.repository';
 import { mapTranscriptionLanguage } from './utils/transcription-language.util';
@@ -108,14 +105,40 @@ export class TranscriptionJobsService {
   }
 
   /**
-   * Handles a media worker callback.
-   * @param payload - The payload of the callback.
-   * @returns The void.
+   * Handles a media worker callback (Path B — only way results are stored).
    */
   async handleWorkerCallback(
     payload: MediaWorkerCallbackDto,
   ): Promise<{ success: true }> {
-    await this.applyWorkerResult(payload.job_id, payload, { ...payload });
+    if (payload.status === 'failed') {
+      await this.applyWorkerFailure(
+        payload.job_id,
+        payload.error ?? 'Transcription failed',
+        { ...payload },
+      );
+      return { success: true };
+    }
+
+    if (
+      payload.language == null ||
+      payload.duration == null ||
+      payload.text == null ||
+      payload.segments == null
+    ) {
+      throw new BadRequestException(
+        'Invalid media worker success callback payload',
+      );    }
+
+    await this.applyWorkerResult(
+      payload.job_id,
+      {
+        language: payload.language,
+        duration: payload.duration,
+        text: payload.text,
+        segments: payload.segments,
+      },
+      { ...payload },
+    );
     return { success: true };
   }
 
@@ -174,19 +197,18 @@ export class TranscriptionJobsService {
     });
 
     try {
-      const response = await this.callMediaWorker(
+      // Path B only: wait for quick accept (202), not the transcript body.
+      // Result is stored only when the worker POSTs /media-worker-response.
+      await this.dispatchToMediaWorker(
         mediaWorkerUrl,
         transcriptionJob.id,
         videoUrl,
         language,
       );
-      await this.applyWorkerResult(transcriptionJob.id, response, {
-        ...response,
-      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.error(
-        `Transcription failed jobId=${transcriptionJob.id}: ${message}`,
+        `Transcription dispatch failed jobId=${transcriptionJob.id}: ${message}`,
       );
       await this.transcriptionJobRepository.update(transcriptionJob.id, {
         status: TranscriptionJobStatus.FAILED,
@@ -199,16 +221,14 @@ export class TranscriptionJobsService {
     }
   }
 
-  /**
-   * Applies a worker result to a transcription job.
-   * @param transcriptionJobId - The ID of the transcription job.
-   * @param result - The result of the worker.
-   * @param callbackPayload - The callback payload.
-   * @returns The void.
-   */
   private async applyWorkerResult(
     transcriptionJobId: string,
-    result: MediaWorkerTranscribeResponse | MediaWorkerCallbackDto,
+    result: {
+      language: string;
+      duration: number;
+      text: string;
+      segments: MediaWorkerCallbackDto['segments'];
+    },
     callbackPayload: Record<string, unknown>,
   ): Promise<void> {
     const existing =
@@ -220,7 +240,10 @@ export class TranscriptionJobsService {
       return;
     }
 
-    if (existing.status === TranscriptionJobStatus.COMPLETED) {
+    if (
+      existing.status === TranscriptionJobStatus.COMPLETED ||
+      existing.status === TranscriptionJobStatus.FAILED
+    ) {
       return;
     }
 
@@ -240,22 +263,53 @@ export class TranscriptionJobsService {
       existing.jobId,
     );
   }
+
+  private async applyWorkerFailure(
+    transcriptionJobId: string,
+    errorMessage: string,
+    callbackPayload: Record<string, unknown>,
+  ): Promise<void> {
+    const existing =
+      await this.transcriptionJobRepository.findById(transcriptionJobId);
+    if (!existing) {
+      this.logger.warn(
+        `Transcription failure callback for unknown job_id=${transcriptionJobId}`,
+      );
+      return;
+    }
+
+    if (
+      existing.status === TranscriptionJobStatus.COMPLETED ||
+      existing.status === TranscriptionJobStatus.FAILED
+    ) {
+      return;
+    }
+
+    await this.transcriptionJobRepository.update(transcriptionJobId, {
+      status: TranscriptionJobStatus.FAILED,
+      completedAt: new Date(),
+      errorMessage,
+      callbackPayload,
+    });
+
+    await this.webhookDeliveryService.markNewApplicationReadyIfSettled(
+      existing.applicationId,
+      existing.jobId,
+    );
+  }
+
   /**
-   * Calls the media worker.
-   * @param baseUrl - The base URL of the media worker.
-   * @param jobId - The ID of the job.
-   * @param videoUrl - The URL of the video.
-   * @param language - The language of the video.
-   * @returns The result of the media worker.
+   * Dispatches work to the media worker and waits only for accept (202).
+   * Does not wait for or apply the transcript — that comes via callback.
    */
-  private async callMediaWorker(
+  private async dispatchToMediaWorker(
     baseUrl: string,
     jobId: string,
     videoUrl: string,
     language: string,
-  ): Promise<MediaWorkerTranscribeResponse> {
+  ): Promise<void> {
     const url = `${baseUrl.replace(/\/$/, '')}/transcribe`;
-    const timeoutMs = this.getTranscriptionTimeoutMs();
+    const timeoutMs = this.getDispatchTimeoutMs();
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -276,7 +330,8 @@ export class TranscriptionJobsService {
       });
 
       const body = (await response.json().catch(() => null)) as
-        MediaWorkerTranscribeResponse | { detail?: string } | null;
+        | { job_id?: string; status?: string; detail?: string }
+        | null;
 
       if (!response.ok) {
         const detail =
@@ -286,11 +341,11 @@ export class TranscriptionJobsService {
         throw new Error(detail);
       }
 
-      if (!body || typeof body !== 'object' || !('job_id' in body)) {
-        throw new Error('Invalid media worker response');
+      if (response.status !== 202 && body?.status !== 'accepted') {
+        this.logger.warn(
+          `Media worker returned ${response.status} for jobId=${jobId}; expecting 202 accepted (Path B). Ignoring body.`,
+        );
       }
-
-      return body;
     } finally {
       clearTimeout(timeout);
     }
@@ -341,15 +396,13 @@ export class TranscriptionJobsService {
   }
 
   /**
-   * Gets the transcription timeout in milliseconds.
-   * @returns The transcription timeout in milliseconds.
+   * Timeout for the quick accept round-trip only (not full transcription).
    */
-  private getTranscriptionTimeoutMs(): number {
-    const minutes = Number(
-      this.configService.get<string>('MEDIA_WORKER_TIMEOUT_MINUTES') ?? '15',
+  private getDispatchTimeoutMs(): number {
+    const seconds = Number(
+      this.configService.get<string>('MEDIA_WORKER_DISPATCH_TIMEOUT_SECONDS') ??
+        '30',
     );
-    return Number.isFinite(minutes) && minutes > 0
-      ? minutes * 60_000
-      : 15 * 60_000;
+    return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 30_000;
   }
 }

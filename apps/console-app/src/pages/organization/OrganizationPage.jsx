@@ -134,7 +134,7 @@ export default function OrganizationPage() {
       key: 'role',
       label: 'Role',
       render: (row) => (
-        <span className="capitalize text-sm text-heading">{row.role}</span>
+        <span className="text-sm text-heading">{row.role}</span>
       ),
     },
     {
@@ -147,7 +147,7 @@ export default function OrganizationPage() {
       label: '',
       width: '80px',
       render: (row) =>
-        row.role === 'admin' || row.id === user?.id ? null : (
+        String(row.role || '').toLowerCase() === 'admin' || row.id === user?.id ? null : (
           <button
             type="button"
             onClick={(e) => {

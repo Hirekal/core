@@ -7,11 +7,13 @@ import EmptyState from '../../components/common/EmptyState';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { SelectDropdown } from '../../components/common/Dropdown';
 import { useFilterStore } from '../../store/filterStore';
+import { useToast } from '../../context/ToastContext';
 import * as candidateService from '../../services/candidateService';
 import * as jobService from '../../services/jobService';
 
 export default function CandidateListPage() {
   const { candidateSearch, candidateSortBy, setCandidateSearch, setCandidateSortBy } = useFilterStore();
+  const { showError, showSuccess } = useToast();
   const [candidates, setCandidates] = useState([]);
   const [stages, setStages] = useState([]);
   const [jobs, setJobs] = useState([]);
@@ -38,10 +40,38 @@ export default function CandidateListPage() {
 
   const handleStageChange = async (stageId) => {
     if (!selectedCandidate) return;
-    await candidateService.updateCandidateStage(selectedCandidate.id, stageId);
-    const updated = await candidateService.getCandidateById(selectedCandidate.id);
-    setSelectedCandidate(updated);
-    loadData();
+
+    const candidateId = selectedCandidate.id;
+    const previousStageId = selectedCandidate.stageId;
+
+    setSelectedCandidate((prev) => (prev ? { ...prev, stageId } : prev));
+    setCandidates((prev) =>
+      prev.map((c) => (c.id === candidateId ? { ...c, stageId } : c)),
+    );
+
+    try {
+      await candidateService.updateCandidateStage(candidateId, stageId);
+      const updated = await candidateService.getCandidateById(candidateId);
+      setSelectedCandidate(updated);
+      setCandidates((prev) =>
+        prev.map((c) =>
+          c.id === candidateId
+            ? { ...c, stageId: updated.stageId, rating: updated.rating }
+            : c,
+        ),
+      );
+      showSuccess('Stage updated');
+    } catch (err) {
+      setSelectedCandidate((prev) =>
+        prev ? { ...prev, stageId: previousStageId } : prev,
+      );
+      setCandidates((prev) =>
+        prev.map((c) =>
+          c.id === candidateId ? { ...c, stageId: previousStageId } : c,
+        ),
+      );
+      showError(err, 'Failed to update stage');
+    }
   };
 
   const handleRatingChange = async (rating) => {
@@ -53,9 +83,16 @@ export default function CandidateListPage() {
 
   const handleAddNote = async (text) => {
     if (!selectedCandidate) return;
-    await candidateService.addCandidateNote(selectedCandidate.id, { text, author: 'Sarah Chen' });
-    const updated = await candidateService.getCandidateById(selectedCandidate.id);
-    setSelectedCandidate(updated);
+    try {
+      await candidateService.addCandidateNote(selectedCandidate.id, { text });
+      const updated = await candidateService.getCandidateById(selectedCandidate.id);
+      setSelectedCandidate(updated);
+      showSuccess('Note added');
+      return updated;
+    } catch (err) {
+      showError(err, 'Failed to add note');
+      return null;
+    }
   };
 
   const handleDelete = async (candidateId) => {

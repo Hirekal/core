@@ -148,6 +148,7 @@ export class AuthService {
           organizationId: null,
         });
       }
+      void adminRole;
 
       const user = await this.usersService.create(
         {
@@ -156,11 +157,10 @@ export class AuthService {
           password: dto.password,
           emailVerified: false,
           metadata: dto.metadata,
+          role: SYSTEM_ROLES.ADMIN,
         },
         organization.id,
       );
-
-      await this.userRolesService.assign(user.id, adminRole.id);
 
       const code = await this.issueAndSendVerificationEmail(user);
 

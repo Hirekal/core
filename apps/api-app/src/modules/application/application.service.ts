@@ -10,6 +10,10 @@ import { JobRepository } from '../job/repositories/job.repository';
 import { JobPipelineStageRepository } from '../job/job-pipeline-stages/repositories/job-pipeline-stage.repository';
 import { JobQuestion } from '../job/job-questions/entities/job-question.entity';
 import { JobApplicationField } from '../job/job-application-fields/entities/job-application-field.entity';
+import { ApplicationFieldType } from '../job/enums/job.enums';
+import { ConfirmUploadDto } from '../cloud-storage/dto/confirm-upload.dto';
+import { PresignUploadDto } from '../cloud-storage/dto/presign-upload.dto';
+import { R2Service } from '../cloud-storage/r2.service';
 import { ApplicationPublicAccessService } from './application-public-access.service';
 import { ApplicationErrors } from './constants/application-errors';
 import {
@@ -37,6 +41,16 @@ import { ApplicationStageHistoryRepository } from './application-stage-history/r
 import { JobAnalyticsEventRepository } from './job-analytics-events/repositories/job-analytics-event.repository';
 import { ApplicationRepository } from './repositories/application.repository';
 import { generateApplicationToken } from './utils/application-token.util';
+import {
+  serializeFieldFileValue,
+  hasFieldFileValue,
+  parseFieldFileValue,
+} from './utils/application-field-file.util';
+import {
+  assertApplicationFieldFileKeyScope,
+  buildApplicationFieldFileKey,
+  validateApplicationFieldPdf,
+} from './utils/application-media.util';
 import { TranscriptionJobsService } from './transcription-jobs/transcription-jobs.service';
 import { WebhookDeliveryService } from './webhook-delivery/webhook-delivery.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -56,6 +70,7 @@ export class ApplicationService {
     private readonly transcriptionJobsService: TranscriptionJobsService,
     private readonly webhookDeliveryService: WebhookDeliveryService,
     private readonly notificationsService: NotificationsService,
+    private readonly r2Service: R2Service,
   ) {}
 
   /**
@@ -379,6 +394,7 @@ export class ApplicationService {
         application,
         job?.questions ?? [],
         transcriptionByAnswerId,
+        job?.applicationFields ?? [],
       );
     } catch (error) {
       if (error instanceof HttpException) throw error;
@@ -542,6 +558,123 @@ export class ApplicationService {
   }
 
   /**
+   * Presigns a PDF upload for a FILE application field.
+   */
+  async presignFieldFile(
+    id: string,
+    token: string,
+    fieldId: string,
+    dto: PresignUploadDto,
+  ): Promise<{ uploadUrl: string; storageKey: string; publicUrl: string }> {
+    try {
+      const application = await this.publicAccessService.assertPublicAccess(
+        id,
+        token,
+      );
+      const field = this.findCustomFileField(
+        application.job.applicationFields ?? [],
+        fieldId,
+      );
+
+      validateApplicationFieldPdf(dto.contentType, dto.size);
+      const storageKey = buildApplicationFieldFileKey(
+        application.organizationId,
+        application.jobId,
+        id,
+        field.id,
+        dto.fileName,
+      );
+      const uploadUrl = await this.r2Service.getPresignedUploadUrl(
+        storageKey,
+        dto.contentType,
+      );
+
+      return {
+        uploadUrl,
+        storageKey,
+        publicUrl: this.r2Service.getPublicUrl(storageKey),
+      };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      this.logger.error(
+        `presignFieldFile failed id=${id}: ${(error as Error).message}`,
+      );
+      throw new InternalServerErrorException(
+        ApplicationErrors.FAILED_TO_PRESIGN_FIELD_FILE,
+      );
+    }
+  }
+
+  /**
+   * Confirms a PDF upload and stores metadata on the field value.
+   */
+  async confirmFieldFile(
+    id: string,
+    token: string,
+    fieldId: string,
+    dto: ConfirmUploadDto,
+  ): Promise<Record<string, unknown>> {
+    try {
+      const application = await this.publicAccessService.assertPublicAccess(
+        id,
+        token,
+      );
+      const field = this.findCustomFileField(
+        application.job.applicationFields ?? [],
+        fieldId,
+      );
+
+      assertApplicationFieldFileKeyScope(
+        dto.storageKey,
+        application.organizationId,
+        application.jobId,
+        id,
+        field.id,
+      );
+      validateApplicationFieldPdf(dto.contentType, 1);
+
+      const url = this.r2Service.getPublicUrl(dto.storageKey);
+      const meta = serializeFieldFileValue({
+        url,
+        storageKey: dto.storageKey,
+        fileName: dto.fileName,
+        contentType: dto.contentType,
+      });
+
+      const existing = application.fieldValues?.find(
+        (fv) => fv.applicationFieldId === field.id,
+      );
+      const previous = parseFieldFileValue(existing?.value);
+
+      await this.fieldValueRepository.upsert(id, field.id, meta);
+
+      if (previous?.storageKey && previous.storageKey !== dto.storageKey) {
+        await this.r2Service.delete(previous.storageKey);
+      }
+
+      await this.applicationRepository.update(id, {
+        lastActivityAt: new Date(),
+      });
+
+      return {
+        fieldId: field.id,
+        url,
+        storageKey: dto.storageKey,
+        fileName: dto.fileName,
+        contentType: dto.contentType,
+      };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      this.logger.error(
+        `confirmFieldFile failed id=${id}: ${(error as Error).message}`,
+      );
+      throw new InternalServerErrorException(
+        ApplicationErrors.FAILED_TO_CONFIRM_FIELD_FILE,
+      );
+    }
+  }
+
+  /**
    * Assesses job access for a given job and organization.
    * @param jobId - The ID of the job.
    * @param organizationId - The ID of the organization.
@@ -574,6 +707,20 @@ export class ApplicationService {
       if (!field || field.builtIn) {
         throw new BadRequestException(ApplicationErrors.INVALID_FIELD);
       }
+
+      if (this.isFileField(field)) {
+        const trimmed = rawValue?.trim() ?? '';
+        if (!trimmed) {
+          await this.fieldValueRepository.upsert(applicationId, fieldId, null);
+          continue;
+        }
+        if (!parseFieldFileValue(trimmed)) {
+          throw new BadRequestException(ApplicationErrors.INVALID_FIELD);
+        }
+        await this.fieldValueRepository.upsert(applicationId, fieldId, trimmed);
+        continue;
+      }
+
       await this.fieldValueRepository.upsert(
         applicationId,
         fieldId,
@@ -612,6 +759,16 @@ export class ApplicationService {
       const stored = application.fieldValues?.find(
         (fv) => fv.applicationFieldId === field.id,
       );
+
+      if (this.isFileField(field)) {
+        if (!hasFieldFileValue(stored?.value)) {
+          throw new BadRequestException(
+            ApplicationErrors.MISSING_REQUIRED_FIELDS,
+          );
+        }
+        continue;
+      }
+
       if (!stored?.value?.trim()) {
         throw new BadRequestException(
           ApplicationErrors.MISSING_REQUIRED_FIELDS,
@@ -637,6 +794,24 @@ export class ApplicationService {
         );
       }
     }
+  }
+
+  private isFileField(field: JobApplicationField): boolean {
+    return (
+      field.type === ApplicationFieldType.FILE ||
+      String(field.type).toUpperCase() === 'FILE'
+    );
+  }
+
+  private findCustomFileField(
+    fields: JobApplicationField[],
+    fieldId: string,
+  ): JobApplicationField {
+    const field = fields.find((f) => f.id === fieldId);
+    if (!field || field.builtIn || !this.isFileField(field)) {
+      throw new BadRequestException(ApplicationErrors.INVALID_FIELD);
+    }
+    return field;
   }
 
   /**

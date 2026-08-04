@@ -17,6 +17,10 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const successMessage = location.state?.message || '';
+  const returnTo =
+    typeof location.state?.from === 'string' && location.state.from.startsWith('/')
+      ? location.state.from
+      : '/jobs';
 
   const clearFieldError = (field) => {
     if (fieldErrors[field]) {
@@ -38,7 +42,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(email.trim(), password);
-      navigate('/jobs');
+      navigate(returnTo, { replace: true });
     } catch (err) {
       const message = toUserErrorMessage(err, 'Sign in failed');
       setError(message);

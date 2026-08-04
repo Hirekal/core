@@ -5,9 +5,11 @@ import {
   Param,
   ParseUUIDPipe,
   Patch,
+  Query,
 } from '@nestjs/common';
 import { CurrentUser } from '../auth/common/decorators/current-user.decorator';
 import { toErrorMessage } from '../../common/utils/error.util';
+import { ListNotificationsQueryDto } from './dto/list-notifications-query.dto';
 import { NotificationsService } from './notifications.service';
 
 @Controller('notifications')
@@ -17,20 +19,19 @@ export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
   /**
-   * Lists notifications for a user.
-   * @param userId - The ID of the user.
-   * @param organizationId - The ID of the organization.
-   * @returns The notifications for the user.
+   * Lists notifications for the current user (paginated, default 25).
    */
   @Get()
   async list(
     @CurrentUser('id') userId: string,
     @CurrentUser('organizationId') organizationId: string,
+    @Query() query: ListNotificationsQueryDto,
   ) {
     try {
       return await this.notificationsService.listForUser(
         userId,
         organizationId,
+        query,
       );
     } catch (error) {
       this.logger.error(`List notifications failed: ${toErrorMessage(error)}`);
@@ -39,10 +40,28 @@ export class NotificationsController {
   }
 
   /**
+   * Unread count for the navbar bell badge.
+   */
+  @Get('unread-count')
+  async unreadCount(
+    @CurrentUser('id') userId: string,
+    @CurrentUser('organizationId') organizationId: string,
+  ) {
+    try {
+      return await this.notificationsService.unreadCount(
+        userId,
+        organizationId,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Unread notifications count failed: ${toErrorMessage(error)}`,
+      );
+      throw error;
+    }
+  }
+
+  /**
    * Marks all notifications as read.
-   * @param userId - The ID of the user.
-   * @param organizationId - The ID of the organization.
-   * @returns The void.
    */
   @Patch('read-all')
   async markAllRead(
@@ -64,10 +83,6 @@ export class NotificationsController {
 
   /**
    * Marks a notification as read.
-   * @param id - The ID of the notification.
-   * @param userId - The ID of the user.
-   * @param organizationId - The ID of the organization.
-   * @returns The notification.
    */
   @Patch(':id/read')
   async markRead(

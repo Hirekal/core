@@ -4,7 +4,7 @@ import { ApplicationFieldValue } from '../application-field-values/entities/appl
 import { JobApplicationField } from '../../job/job-application-fields/entities/job-application-field.entity';
 import { JobPipelineStage } from '../../job/job-pipeline-stages/entities/job-pipeline-stage.entity';
 import { JobQuestion } from '../../job/job-questions/entities/job-question.entity';
-import { QuestionType } from '../../job/enums/job.enums';
+import { QuestionType, ApplicationFieldType } from '../../job/enums/job.enums';
 import { WebhookSettings } from '../../job/job-settings/entities/job-settings.entity';
 import { TranscriptionJob } from '../transcription-jobs/entities/transcription-job.entity';
 import {
@@ -12,6 +12,7 @@ import {
   WebhookEvent,
 } from '../enums/application.enums';
 import { WebhookDeliveryLog } from '../webhook-delivery-logs/entities/webhook-delivery-log.entity';
+import { parseFieldFileValue } from '../utils/application-field-file.util';
 
 const MAX_RESPONSE_BODY_LENGTH = 2000;
 
@@ -113,12 +114,20 @@ function mapFieldValues(
 
   return fields
     .filter((field) => !field.builtIn)
-    .map((field) => ({
-      fieldId: field.id,
-      label: field.label,
-      type: field.type,
-      value: valuesByFieldId.get(field.id)?.value ?? null,
-    }));
+    .map((field) => {
+      const raw = valuesByFieldId.get(field.id)?.value ?? null;
+      const isFile =
+        field.type === ApplicationFieldType.FILE ||
+        String(field.type).toUpperCase() === 'FILE';
+      const value = isFile ? (parseFieldFileValue(raw) ?? raw) : raw;
+
+      return {
+        fieldId: field.id,
+        label: field.label,
+        type: field.type,
+        value,
+      };
+    });
 }
 
 /**
