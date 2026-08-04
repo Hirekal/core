@@ -10,6 +10,7 @@ import Card from '../common/Card';
 import { formatDate, formatDateTime } from '../../utils/formatDate';
 import { lockBodyScroll, unlockBodyScroll } from '../../utils/bodyScrollLock';
 import LoadingSpinner from '../common/LoadingSpinner';
+import { useAuth } from '../../context/AuthContext';
 import * as candidateService from '../../services/candidateService';
 
 const NOTE_MAX_WORDS = 200;
@@ -180,6 +181,7 @@ export default function CandidateDrawer({
     onAddNote,
     onDelete,
 }) {
+    const { user } = useAuth();
     const [noteText, setNoteText] = useState('');
     const [activeTab, setActiveTab] = useState('info');
     const [candidate, setCandidate] = useState(null);
@@ -240,7 +242,6 @@ export default function CandidateDrawer({
     if (!selectedCandidate) return null;
 
     const currentStage = stages.find((s) => s.id === (candidate || selectedCandidate).stageId);
-    const defaultStages = stages.filter((s) => s.isDefault);
     const displayCandidate = candidate || selectedCandidate;
     const answers = displayCandidate.answers || [];
 
@@ -254,7 +255,7 @@ export default function CandidateDrawer({
         const optimisticNote = {
             id: `temp-${Date.now()}`,
             text,
-            author: 'You',
+            author: user?.name || 'You',
             createdAt: new Date().toISOString(),
         };
 
@@ -466,7 +467,7 @@ export default function CandidateDrawer({
                                             onStageChange?.(stageId);
                                         }}
                                         placeholder="Select stage"
-                                        options={defaultStages.map((s) => ({ value: s.id, label: s.name }))}
+                                        options={(stages || []).map((s) => ({ value: s.id, label: s.name }))}
                                     />
                                 </Card>
                             </div>

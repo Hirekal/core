@@ -240,6 +240,38 @@ export class UsersService {
   }
 
   /**
+   * Resolves display names for a set of user ids.
+   *
+   * @param ids - User identifiers
+   * @returns Map of user id → name
+   */
+  async findNamesByIds(ids: string[]): Promise<Map<string, string>> {
+    const uniqueIds = [...new Set(ids.filter(Boolean))];
+    const names = new Map<string, string>();
+    if (uniqueIds.length === 0) {
+      return names;
+    }
+
+    try {
+      const users = await this.usersRepository
+        .createQueryBuilder('user')
+        .select(['user.id', 'user.name'])
+        .where('user.id IN (:...ids)', { ids: uniqueIds })
+        .getMany();
+
+      for (const user of users) {
+        if (user.name) {
+          names.set(user.id, user.name);
+        }
+      }
+      return names;
+    } catch (error) {
+      this.logger.error(LOG_MESSAGES.USER.LIST_FAILED, error);
+      throw error;
+    }
+  }
+
+  /**
    * Removes the password field from a user entity before returning it.
    *
    * @param user - User entity that may contain a password hash

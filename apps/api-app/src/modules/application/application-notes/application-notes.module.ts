@@ -1,5 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { UsersModule } from '../../auth/users/users.module';
 import { ApplicationModule } from '../application.module';
 import { ApplicationNote } from './entities/application-note.entity';
 import { ApplicationNotesController } from './application-notes.controller';
@@ -9,6 +10,7 @@ import { ApplicationNoteRepository } from './repositories/application-note.repos
 @Module({
   imports: [
     TypeOrmModule.forFeature([ApplicationNote]),
+    UsersModule,
     forwardRef(() => ApplicationModule),
   ],
   controllers: [ApplicationNotesController],

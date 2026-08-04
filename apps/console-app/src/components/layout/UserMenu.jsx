@@ -2,6 +2,7 @@ import { useRef, useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChevronDown, User, Building2, ExternalLink, LogOut } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { SUPPORT_MAILTO } from '../../constants/support';
 
 export default function UserMenu() {
   const { user, logout } = useAuth();
@@ -45,10 +46,9 @@ export default function UserMenu() {
     },
     {
       label: 'Support',
-      description: 'Help & documentation',
+      description: 'Email our support team',
       icon: ExternalLink,
-      href: '#',
-      onClick: (e) => e.preventDefault(),
+      href: SUPPORT_MAILTO,
     },
   ];
 
