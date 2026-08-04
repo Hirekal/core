@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
-    X, Star, Trash2, Play, Mail, Phone, Clock, Video, Plus, StickyNote,
+    X, Star, Trash2, Play, Mail, Phone, Clock, Video, Plus, StickyNote, FileText, FormInput,
 } from 'lucide-react';
 import Button from '../common/Button';
 import Badge from '../common/Badge';
@@ -11,6 +11,24 @@ import { formatDate, formatDateTime } from '../../utils/formatDate';
 import { lockBodyScroll, unlockBodyScroll } from '../../utils/bodyScrollLock';
 import LoadingSpinner from '../common/LoadingSpinner';
 import * as candidateService from '../../services/candidateService';
+
+const NOTE_MAX_WORDS = 200;
+
+function countWords(text) {
+    const trimmed = String(text || '').trim();
+    if (!trimmed) return 0;
+    return trimmed.split(/\s+/).filter(Boolean).length;
+}
+
+/** Keep at most `max` words while typing / pasting. */
+function clampToMaxWords(text, max) {
+    const value = String(text ?? '');
+    const trimmedEnd = value.replace(/\s+$/, '');
+    const trailingSpace = value.length > trimmedEnd.length ? value.slice(trimmedEnd.length) : '';
+    const words = trimmedEnd.trim() ? trimmedEnd.trim().split(/\s+/).filter(Boolean) : [];
+    if (words.length <= max) return value;
+    return `${words.slice(0, max).join(' ')}${trailingSpace ? ' ' : ''}`;
+}
 
 /**
  * Resolves a video URL from a source object.
@@ -81,18 +99,6 @@ function TranscriptBlock({ transcript }) {
             </p>
         </div>
     );
-}
-
-/**
- * Checks if a candidate has recorded responses.
- * @param answers - The answers to check.
- * @returns True if the candidate has recorded responses, false otherwise.
- */
-function hasRecordedResponses(answers = []) {
-    return answers.some((answer) => {
-        if (answer.type === 'video') return Boolean(resolveVideoUrl(answer));
-        return Boolean(answer.answer?.trim());
-    });
 }
 
 /**
@@ -207,9 +213,22 @@ export default function CandidateDrawer({
 
     useEffect(() => {
         if (!selectedCandidate?.id) return;
-        if (Array.isArray(selectedCandidate.answers) && selectedCandidate.answers.length > 0) {
-            setCandidate(selectedCandidate);
-        }
+        setCandidate((prev) => {
+            if (!prev || prev.id !== selectedCandidate.id) {
+                return Array.isArray(selectedCandidate.answers) &&
+                    selectedCandidate.answers.length > 0
+                    ? selectedCandidate
+                    : prev;
+            }
+            return {
+                ...prev,
+                ...selectedCandidate,
+                notes: selectedCandidate.notes ?? prev.notes,
+                answers: selectedCandidate.answers?.length
+                    ? selectedCandidate.answers
+                    : prev.answers,
+            };
+        });
     }, [selectedCandidate]);
 
     useEffect(() => {
@@ -226,14 +245,55 @@ export default function CandidateDrawer({
     const answers = displayCandidate.answers || [];
 
     const handleAddNote = () => {
-        if (!noteText.trim()) return;
-        onAddNote?.(noteText);
+        const text = noteText.trim();
+        if (!text) return;
+        if (countWords(text) > NOTE_MAX_WORDS) return;
+
         setNoteText('');
+
+        const optimisticNote = {
+            id: `temp-${Date.now()}`,
+            text,
+            author: 'You',
+            createdAt: new Date().toISOString(),
+        };
+
+        setCandidate((prev) => {
+            const base = prev || selectedCandidate;
+            if (!base) return prev;
+            return {
+                ...base,
+                notes: [optimisticNote, ...(base.notes || [])],
+            };
+        });
+
+        // Fire-and-forget: UI already updated; sync when API finishes.
+        void Promise.resolve(onAddNote?.(text)).then((updated) => {
+            if (updated && typeof updated === 'object') {
+                setCandidate(updated);
+            }
+        });
     };
+
+    const noteWordCount = countWords(noteText);
+    const noteWordsLeft = Math.max(0, NOTE_MAX_WORDS - noteWordCount);
+    const noteOverLimit = noteWordCount > NOTE_MAX_WORDS;
 
     const mainVideoAnswer = answers.find((a) => a.type === 'video');
     const mainVideoThumbnail = displayCandidate.videoThumbnail || mainVideoAnswer?.videoThumbnail;
     const mainVideoUrl = displayCandidate.videoUrl || resolveVideoUrl(mainVideoAnswer);
+    const fieldValues = Array.isArray(displayCandidate.fieldValues)
+        ? displayCandidate.fieldValues
+        : [];
+
+    const formatFieldDisplayValue = (fv) => {
+        if (fv.value == null || fv.value === '') return '—';
+        if (typeof fv.value === 'string') return fv.value;
+        if (typeof fv.value === 'object' && fv.value.url) {
+            return fv.value.fileName || 'View file';
+        }
+        return '—';
+    };
 
     return (
         <>
@@ -302,6 +362,70 @@ export default function CandidateDrawer({
                                 </div>
                             </Card>
 
+                            {fieldValues.length > 0 && (
+                                <Card className="!p-5">
+                                    <h3 className="mb-4 text-sm font-semibold text-heading">
+                                        Application Fields
+                                    </h3>
+                                    <div className="grid gap-4 sm:grid-cols-2">
+                                        {fieldValues.map((fv) => {
+                                            const type = String(fv.type || '').toUpperCase();
+                                            const isFile =
+                                                type === 'FILE'
+                                                || (fv.value && typeof fv.value === 'object' && fv.value.url);
+                                            const fileMeta =
+                                                isFile && fv.value && typeof fv.value === 'object'
+                                                    ? fv.value
+                                                    : null;
+
+                                            if (isFile) {
+                                                return (
+                                                    <div
+                                                        key={fv.applicationFieldId}
+                                                        className="flex items-start gap-3 sm:col-span-2"
+                                                    >
+                                                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent">
+                                                            <FileText size={16} />
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <p className="text-xs font-medium uppercase tracking-wide text-muted">
+                                                                {fv.label || 'Resume'}
+                                                                {fv.required ? ' *' : ''}
+                                                            </p>
+                                                            {fileMeta?.url ? (
+                                                                <a
+                                                                    href={fileMeta.url}
+                                                                    target="_blank"
+                                                                    rel="noreferrer"
+                                                                    className="mt-0.5 inline-flex text-sm font-medium text-accent hover:underline"
+                                                                >
+                                                                    {fileMeta.fileName || 'View PDF'}
+                                                                </a>
+                                                            ) : (
+                                                                <p className="mt-0.5 text-sm font-medium text-heading">—</p>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            }
+
+                                            return (
+                                                <ContactItem
+                                                    key={fv.applicationFieldId}
+                                                    icon={FormInput}
+                                                    label={
+                                                        fv.required
+                                                            ? `${fv.label || 'Field'} *`
+                                                            : fv.label || 'Field'
+                                                    }
+                                                    value={formatFieldDisplayValue(fv)}
+                                                />
+                                            );
+                                        })}
+                                    </div>
+                                </Card>
+                            )}
+
                             <div className="grid gap-6 lg:grid-cols-2">
                                 <Card className="!p-5">
                                     <h3 className="mb-3 text-sm font-semibold text-heading">Rating</h3>
@@ -335,7 +459,12 @@ export default function CandidateDrawer({
                                     <h3 className="mb-3 text-sm font-semibold text-heading">Current Stage</h3>
                                     <SelectDropdown
                                         value={displayCandidate.stageId}
-                                        onChange={onStageChange}
+                                        onChange={(stageId) => {
+                                            setCandidate((prev) =>
+                                                prev ? { ...prev, stageId } : prev,
+                                            );
+                                            onStageChange?.(stageId);
+                                        }}
                                         placeholder="Select stage"
                                         options={defaultStages.map((s) => ({ value: s.id, label: s.name }))}
                                     />
@@ -402,22 +531,31 @@ export default function CandidateDrawer({
                                         <textarea
                                             id="candidate-note"
                                             value={noteText}
-                                            onChange={(e) => setNoteText(e.target.value)}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleAddNote();
-                                            }}
+                                            onChange={(e) =>
+                                                setNoteText(clampToMaxWords(e.target.value, NOTE_MAX_WORDS))
+                                            }
                                             placeholder="Write a note about this candidate..."
                                             rows={3}
                                             className="w-full resize-none rounded-lg border border-border/70 bg-input px-4 py-3 text-sm text-heading placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
                                         />
                                         <div className="mt-3 flex items-center justify-between gap-3">
-                                            <p className="text-xs text-muted">
-                                                {noteText.trim() ? `${noteText.trim().length} characters` : 'Press ⌘/Ctrl + Enter to save'}
+                                            <p
+                                                className={`text-xs ${
+                                                    noteWordsLeft <= 20
+                                                        ? noteOverLimit || noteWordsLeft === 0
+                                                            ? 'font-medium text-amber-600'
+                                                            : 'text-muted'
+                                                        : 'text-muted'
+                                                }`}
+                                            >
+                                                {noteText.trim()
+                                                    ? `${noteWordsLeft} word${noteWordsLeft === 1 ? '' : 's'} left`
+                                                    : `${NOTE_MAX_WORDS} words max · Notes save when you click Add note`}
                                             </p>
                                             <Button
                                                 size="sm"
                                                 onClick={handleAddNote}
-                                                disabled={!noteText.trim()}
+                                                disabled={!noteText.trim() || noteOverLimit}
                                                 className="rounded-lg px-4 shadow-sm"
                                             >
                                                 <Plus size={15} strokeWidth={2.5} /> Add note
@@ -435,36 +573,43 @@ export default function CandidateDrawer({
 
                                 {loading ? (
                                     <p className="text-sm text-muted">Loading responses...</p>
-                                ) : !hasRecordedResponses(answers) ? (
+                                ) : answers.length === 0 ? (
                                     <p className="text-sm text-muted">No responses recorded yet.</p>
                                 ) : (
                                     <div className="space-y-5">
                                         {answers.map((answer) => {
                                             const videoUrl = resolveVideoUrl(answer);
                                             const answerKey = answer.questionId || answer.question;
+                                            const isVideo = answer.type === 'video';
 
                                             return (
                                                 <div key={answerKey} className="overflow-hidden rounded-xl border border-border">
                                                     <div className="border-b border-border bg-hover/40 px-4 py-3">
-                                                        <p className="text-sm font-medium text-heading">{answer.question}</p>
+                                                        <p className="text-sm font-medium text-heading">
+                                                            {answer.question || 'Untitled question'}
+                                                        </p>
                                                         <span className="mt-1 inline-flex items-center gap-1 text-xs capitalize text-muted">
-                                                            {answer.type === 'video' && <Video size={12} />}
-                                                            {answer.type}
+                                                            {isVideo && <Video size={12} />}
+                                                            {isVideo ? 'video' : 'text'}
                                                             {answer.timestamp ? ` · ${formatDateTime(answer.timestamp)}` : ''}
                                                         </span>
                                                     </div>
                                                     <div className="p-4">
-                                                        {answer.type === 'video' ? (
-                                                            <>
-                                                                <VideoPreview
-                                                                    thumbnail={answer.videoThumbnail || mainVideoThumbnail}
-                                                                    videoUrl={videoUrl || mainVideoUrl}
-                                                                    label="Play video response"
-                                                                />
-                                                                <TranscriptBlock transcript={answer.transcript} />
-                                                            </>
+                                                        {isVideo ? (
+                                                            videoUrl || mainVideoUrl ? (
+                                                                <>
+                                                                    <VideoPreview
+                                                                        thumbnail={answer.videoThumbnail || mainVideoThumbnail}
+                                                                        videoUrl={videoUrl || mainVideoUrl}
+                                                                        label="Play video response"
+                                                                    />
+                                                                    <TranscriptBlock transcript={answer.transcript} />
+                                                                </>
+                                                            ) : (
+                                                                <p className="text-sm text-muted">No video recorded</p>
+                                                            )
                                                         ) : (
-                                                            <p className="text-sm leading-relaxed text-muted">
+                                                            <p className="text-sm leading-relaxed text-heading whitespace-pre-wrap">
                                                                 {answer.answer?.trim() || 'No answer provided'}
                                                             </p>
                                                         )}

@@ -1,11 +1,15 @@
 import { Type } from 'class-transformer';
 import {
   IsArray,
+  IsEnum,
   IsNumber,
+  IsOptional,
   IsString,
   Min,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
+import { MediaWorkerPayloadStatus } from '../../enums/application.enums';
 
 export class MediaWorkerTranscriptSegmentDto {
   @IsNumber()
@@ -20,30 +24,55 @@ export class MediaWorkerTranscriptSegmentDto {
   text!: string;
 }
 
+/**
+ * Path B callback payload from the media worker.
+ * Success: job_id + language/duration/text/segments (optional status=completed)
+ * Failure: job_id + status=failed + error
+ */
 export class MediaWorkerCallbackDto {
   @IsString()
   job_id!: string;
 
-  @IsString()
-  language!: string;
+  @IsOptional()
+  @IsEnum(MediaWorkerPayloadStatus)
+  status?: MediaWorkerPayloadStatus;
 
+  @ValidateIf(
+    (o: MediaWorkerCallbackDto) => o.status === MediaWorkerPayloadStatus.FAILED,
+  )
+  @IsString()
+  error?: string;
+
+  @ValidateIf(
+    (o: MediaWorkerCallbackDto) => o.status !== MediaWorkerPayloadStatus.FAILED,
+  )
+  @IsString()
+  language?: string;
+
+  @ValidateIf(
+    (o: MediaWorkerCallbackDto) => o.status !== MediaWorkerPayloadStatus.FAILED,
+  )
   @IsNumber()
   @Min(0)
-  duration!: number;
+  duration?: number;
 
+  @ValidateIf(
+    (o: MediaWorkerCallbackDto) => o.status !== MediaWorkerPayloadStatus.FAILED,
+  )
   @IsString()
-  text!: string;
+  text?: string;
 
+  @ValidateIf(
+    (o: MediaWorkerCallbackDto) => o.status !== MediaWorkerPayloadStatus.FAILED,
+  )
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => MediaWorkerTranscriptSegmentDto)
-  segments!: MediaWorkerTranscriptSegmentDto[];
+  segments?: MediaWorkerTranscriptSegmentDto[];
 }
 
-export interface MediaWorkerTranscribeResponse {
+/** Immediate ack from POST /transcribe (Path B-only; no transcript body). */
+export interface MediaWorkerAcceptResponse {
   job_id: string;
-  language: string;
-  duration: number;
-  text: string;
-  segments: MediaWorkerTranscriptSegmentDto[];
+  status: MediaWorkerPayloadStatus.ACCEPTED;
 }

@@ -10,7 +10,12 @@ import {
   CheckCircle2,
   AlertCircle,
   Inbox,
+  Eye,
+  EyeOff,
+  Copy,
+  Check,
 } from 'lucide-react';
+import { useState } from 'react';
 import Button from '../common/Button';
 import Input from '../common/Input';
 import Badge from '../common/Badge';
@@ -86,6 +91,8 @@ export default function WebhookForm({
 }) {
   const webhook = settings.webhook || {};
   const hasUrl = Boolean(webhook.url?.trim());
+  const [showSecret, setShowSecret] = useState(false);
+  const [secretCopied, setSecretCopied] = useState(false);
   const activeTriggers = [
     webhook.triggers?.newApplication,
     webhook.triggers?.stageChange,
@@ -100,6 +107,18 @@ export default function WebhookForm({
       ...settings,
       webhook: { ...webhook, triggers: { ...webhook.triggers, [field]: value } },
     });
+  };
+
+  const handleCopySecret = async () => {
+    const secret = webhook.secret?.trim();
+    if (!secret) return;
+    try {
+      await navigator.clipboard.writeText(secret);
+      setSecretCopied(true);
+      window.setTimeout(() => setSecretCopied(false), 2000);
+    } catch {
+      setSecretCopied(false);
+    }
   };
 
   const logColumns = [
@@ -168,23 +187,38 @@ export default function WebhookForm({
                 </code>{' '}
                 so your server can verify the payload.
               </p>
-              <Input
-                type="password"
-                autoComplete="new-password"
-                value={webhook.secret || ''}
-                onChange={(e) => update('secret', e.target.value)}
-                placeholder="e.g. whsec_hirekal_demo_3f8a2c9b1e7d4a06"
-                containerClassName="mb-0"
-              />
-              <button
-                type="button"
-                className="mt-2 text-xs font-medium text-accent hover:underline"
-                onClick={() =>
-                  update('secret', 'whsec_hirekal_demo_3f8a2c9b1e7d4a06')
-                }
-              >
-                Use demo secret
-              </button>
+              <div className="relative">
+                <Input
+                  type={showSecret ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  value={webhook.secret || ''}
+                  onChange={(e) => update('secret', e.target.value)}
+                  placeholder="Enter a shared secret"
+                  containerClassName="mb-0"
+                  className="pr-20"
+                />
+                <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setShowSecret((prev) => !prev)}
+                    className="rounded-md p-1.5 text-muted transition-colors hover:bg-hover hover:text-heading"
+                    aria-label={showSecret ? 'Hide webhook secret' : 'Show webhook secret'}
+                    title={showSecret ? 'Hide' : 'View'}
+                  >
+                    {showSecret ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCopySecret}
+                    disabled={!webhook.secret?.trim()}
+                    className="rounded-md p-1.5 text-muted transition-colors hover:bg-hover hover:text-heading disabled:cursor-not-allowed disabled:opacity-40"
+                    aria-label="Copy webhook secret"
+                    title="Copy"
+                  >
+                    {secretCopied ? <Check size={16} className="text-green-600" /> : <Copy size={16} />}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

@@ -1,3 +1,4 @@
+import { API_ENDPOINTS } from '../constants/apiEndpoints';
 import { apiRequest } from './apiClient';
 import {
     isApiId,
@@ -26,7 +27,7 @@ const MEDIA_UPLOAD_WARNING =
 async function syncIntroMedia(jobId, introMedia) {
     try {
         if (introMedia === null) {
-            await apiRequest(`/jobs/${jobId}/media/intro`, {
+            await apiRequest(API_ENDPOINTS.jobs.introMedia(jobId), {
                 method: 'DELETE',
                 auth: true,
             });
@@ -43,8 +44,8 @@ async function syncIntroMedia(jobId, introMedia) {
         }
 
         await uploadFileViaPresignedUrl(
-            `/jobs/${jobId}/media/intro/upload-url`,
-            `/jobs/${jobId}/media/intro/confirm`,
+            API_ENDPOINTS.jobs.introUploadUrl(jobId),
+            API_ENDPOINTS.jobs.introConfirm(jobId),
             file,
         );
         return {};
@@ -75,8 +76,8 @@ async function syncThankYouMedia(jobId, thankYouPage) {
     if (!file) return thankYouPage;
 
     const confirmed = await uploadFileViaPresignedUrl(
-        `/jobs/${jobId}/settings/thank-you/media/upload-url`,
-        `/jobs/${jobId}/settings/thank-you/media/confirm`,
+        API_ENDPOINTS.jobs.thankYouMediaUploadUrl(jobId),
+        API_ENDPOINTS.jobs.thankYouMediaConfirm(jobId),
         file,
     );
 
@@ -97,7 +98,7 @@ async function syncThankYouMedia(jobId, thankYouPage) {
  * @returns {Promise<Array>}
  */
 async function syncPipelineStages(jobId, customStages = []) {
-    const existing = await apiRequest(`/jobs/${jobId}/stages`, { auth: true });
+    const existing = await apiRequest(API_ENDPOINTS.jobs.stages(jobId), { auth: true });
     const existingList = Array.isArray(existing) ? existing : [];
     const existingById = new Map(existingList.map((stage) => [stage.id, stage]));
     const keepIds = [];
@@ -107,7 +108,7 @@ async function syncPipelineStages(jobId, customStages = []) {
         const sortOrder = stage.order ?? index + 1;
 
         if (isApiId(stage.id) && existingById.has(stage.id)) {
-            await apiRequest(`/jobs/${jobId}/stages/${stage.id}`, {
+            await apiRequest(API_ENDPOINTS.jobs.stageById(jobId, stage.id), {
                 method: 'PATCH',
                 auth: true,
                 body: {
@@ -118,7 +119,7 @@ async function syncPipelineStages(jobId, customStages = []) {
             });
             keepIds.push(stage.id);
         } else {
-            const created = await apiRequest(`/jobs/${jobId}/stages`, {
+            const created = await apiRequest(API_ENDPOINTS.jobs.stages(jobId), {
                 method: 'POST',
                 auth: true,
                 body: {
@@ -133,7 +134,7 @@ async function syncPipelineStages(jobId, customStages = []) {
 
     for (const stage of existingList) {
         if (!keepIds.includes(stage.id) && !stage.isDefault) {
-            await apiRequest(`/jobs/${jobId}/stages/${stage.id}`, {
+            await apiRequest(API_ENDPOINTS.jobs.stageById(jobId, stage.id), {
                 method: 'DELETE',
                 auth: true,
             });
@@ -141,14 +142,14 @@ async function syncPipelineStages(jobId, customStages = []) {
     }
 
     if (keepIds.length) {
-        await apiRequest(`/jobs/${jobId}/stages/reorder`, {
+        await apiRequest(API_ENDPOINTS.jobs.stagesReorder(jobId), {
             method: 'PATCH',
             auth: true,
             body: { stageIds: keepIds },
         });
     }
 
-    const refreshed = await apiRequest(`/jobs/${jobId}/stages`, { auth: true });
+    const refreshed = await apiRequest(API_ENDPOINTS.jobs.stages(jobId), { auth: true });
     return stagesToUi(Array.isArray(refreshed) ? refreshed : []);
 }
 
@@ -175,7 +176,7 @@ export async function cacheJobForPreview(job) {
  */
 export async function getJobForPreview(id) {
     try {
-        const data = await apiRequest(`/jobs/${id}/preview`, { auth: true });
+        const data = await apiRequest(API_ENDPOINTS.jobs.preview(id), { auth: true });
         const job = jobToUi({ ...data, status: data.status || 'ACTIVE' });
         await cacheJobForPreview(job);
         return job;
@@ -210,7 +211,7 @@ export async function getJobs(filters = {}) {
     params.set('page', String(filters.page || 1));
     params.set('limit', String(filters.limit || 100));
 
-    const data = await apiRequest(`/jobs?${params.toString()}`, { auth: true });
+    const data = await apiRequest(API_ENDPOINTS.jobs.list(params.toString()), { auth: true });
     const items = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
     return items.map(jobToUi);
 }
@@ -222,7 +223,7 @@ export async function getJobs(filters = {}) {
  * @returns {Promise<object|null>}
  */
 export async function getJobById(id) {
-    const data = await apiRequest(`/jobs/${id}`, { auth: true });
+    const data = await apiRequest(API_ENDPOINTS.jobs.byId(id), { auth: true });
     return jobToUi(data);
 }
 
@@ -281,7 +282,7 @@ function toFriendlyWebhookLogError(error) {
  */
 export async function getWebhookLogs(jobId) {
     try {
-        const data = await apiRequest(`/jobs/${jobId}/settings`, { auth: true });
+        const data = await apiRequest(API_ENDPOINTS.jobs.settings(jobId), { auth: true });
         const logs = data?.webhookLogs;
         return Array.isArray(logs) ? logs.map(webhookLogToUi) : [];
     } catch (error) {
@@ -299,7 +300,7 @@ export async function getWebhookLogs(jobId) {
  */
 export async function createJob(jobData) {
     const body = jobFormToApi(jobData, { includeNested: true });
-    const created = await apiRequest('/jobs', {
+    const created = await apiRequest(API_ENDPOINTS.jobs.create, {
         method: 'POST',
         auth: true,
         body,
@@ -324,7 +325,7 @@ export async function createJob(jobData) {
  */
 export async function updateJob(id, jobData) {
     const body = jobFormToApi(jobData, { includeNested: true });
-    await apiRequest(`/jobs/${id}`, {
+    await apiRequest(API_ENDPOINTS.jobs.byId(id), {
         method: 'PATCH',
         auth: true,
         body,
@@ -347,7 +348,7 @@ export async function updateJob(id, jobData) {
  * @returns {Promise<object|null>}
  */
 export async function duplicateJob(id) {
-    const data = await apiRequest(`/jobs/${id}/duplicate`, {
+    const data = await apiRequest(API_ENDPOINTS.jobs.duplicate(id), {
         method: 'POST',
         auth: true,
     });
@@ -375,7 +376,7 @@ export async function updateJobSettings(id, settings) {
 
     let mediaWarning;
 
-    await apiRequest(`/jobs/${id}`, {
+    await apiRequest(API_ENDPOINTS.jobs.byId(id), {
         method: 'PATCH',
         auth: true,
         body: jobFormToApi(
@@ -409,7 +410,7 @@ export async function updateJobSettings(id, settings) {
             description,
             autoRedirectUrl,
         } = resolvedThankYou;
-        await apiRequest(`/jobs/${id}/settings/thank-you`, {
+        await apiRequest(API_ENDPOINTS.jobs.thankYouSettings(id), {
             method: 'PATCH',
             auth: true,
             body: {
@@ -424,7 +425,7 @@ export async function updateJobSettings(id, settings) {
     }
 
     if (emailAutomation) {
-        await apiRequest(`/jobs/${id}/settings/email-automation`, {
+        await apiRequest(API_ENDPOINTS.jobs.emailAutomationSettings(id), {
             method: 'PATCH',
             auth: true,
             body: emailAutomation,
@@ -441,7 +442,7 @@ export async function updateJobSettings(id, settings) {
             includeVideoUrls,
             includeAiTranscripts,
         } = webhook;
-        await apiRequest(`/jobs/${id}/settings/webhook`, {
+        await apiRequest(API_ENDPOINTS.jobs.webhookSettings(id), {
             method: 'PATCH',
             auth: true,
             body: {
@@ -481,7 +482,7 @@ export async function exportApplicationsCsv(jobId) {
  * @returns {Promise<{ success: boolean }>}
  */
 export async function deleteJob(id) {
-    await apiRequest(`/jobs/${id}`, {
+    await apiRequest(API_ENDPOINTS.jobs.byId(id), {
         method: 'DELETE',
         auth: true,
     });
@@ -498,7 +499,7 @@ export async function deleteJob(id) {
  * @returns {Promise<object|null>}
  */
 export async function pauseJob(id) {
-    const data = await apiRequest(`/jobs/${id}/pause`, {
+    const data = await apiRequest(API_ENDPOINTS.jobs.pause(id), {
         method: 'POST',
         auth: true,
     });
@@ -510,7 +511,7 @@ export async function pauseJob(id) {
  * @returns {Promise<object|null>}
  */
 export async function resumeJob(id) {
-    const data = await apiRequest(`/jobs/${id}/resume`, {
+    const data = await apiRequest(API_ENDPOINTS.jobs.resume(id), {
         method: 'POST',
         auth: true,
     });
@@ -522,7 +523,7 @@ export async function resumeJob(id) {
  * @returns {Promise<object|null>}
  */
 export async function archiveJob(id) {
-    const data = await apiRequest(`/jobs/${id}/archive`, {
+    const data = await apiRequest(API_ENDPOINTS.jobs.archive(id), {
         method: 'POST',
         auth: true,
     });
@@ -534,7 +535,7 @@ export async function archiveJob(id) {
  * @returns {Promise<object|null>}
  */
 export async function restoreJob(id) {
-    const data = await apiRequest(`/jobs/${id}/restore`, {
+    const data = await apiRequest(API_ENDPOINTS.jobs.restore(id), {
         method: 'POST',
         auth: true,
     });

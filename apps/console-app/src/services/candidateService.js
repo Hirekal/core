@@ -83,11 +83,38 @@ function normalizeAnswer(answer) {
     };
 }
 
+function normalizeFieldValue(fieldValue) {
+    if (!fieldValue) return null;
+
+    const type = String(fieldValue.type || '').toUpperCase();
+    let value = fieldValue.value;
+
+    if (type === 'FILE' && typeof value === 'string' && value.trim()) {
+        try {
+            const parsed = JSON.parse(value);
+            if (parsed?.url) value = parsed;
+        } catch {
+            // keep raw string
+        }
+    }
+
+    return {
+        applicationFieldId: fieldValue.applicationFieldId,
+        label: fieldValue.label || 'Field',
+        type: fieldValue.type || 'TEXT',
+        required: Boolean(fieldValue.required),
+        value: value ?? null,
+    };
+}
+
 function mapApplicationToCandidate(application) {
     if (!application) return null;
 
     const answers = (application.answers || []).map(normalizeAnswer);
     const videoAnswer = answers.find((a) => a.type === 'video' && a.videoUrl);
+    const fieldValues = (application.fieldValues || [])
+        .map(normalizeFieldValue)
+        .filter(Boolean);
 
     return {
         id: application.id,
@@ -108,6 +135,7 @@ function mapApplicationToCandidate(application) {
             author: note.authorId ? 'Team member' : 'Team member',
             createdAt: note.createdAt,
         })),
+        fieldValues,
         answers,
     };
 }

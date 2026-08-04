@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import {
   CheckCircle2,
   ChevronLeft,
@@ -10,12 +10,18 @@ import {
   Calendar,
   Hash,
   Type,
+  FileText,
 } from 'lucide-react';
 import Button from '../common/Button';
 import VideoRecorderPanel from '../common/VideoRecorderPanel';
 import { isVideoMedia } from '../../utils/mediaHelpers';
 import * as applicationService from '../../services/applicationService';
 import { toUserErrorMessage } from '../../utils/errorMessage';
+import {
+  readApplyProgress,
+  writeApplyProgress,
+  serializeApplicationValuesForStorage,
+} from '../../utils/applyProgress';
 import {
   normalizeApplicationFields,
   normalizeQuestions,
@@ -83,9 +89,63 @@ const TYPE_ICONS = {
   date: Calendar,
   number: Hash,
   text: Type,
+  file: FileText,
 };
 
+const MAX_RESUME_BYTES = 10 * 1024 * 1024;
+
+function getFileFieldDisplayName(value) {
+  if (typeof File !== 'undefined' && value instanceof File) {
+    return value.name;
+  }
+  if (value && typeof value === 'object' && value.fileName) {
+    return value.fileName;
+  }
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      if (parsed?.fileName) return parsed.fileName;
+      if (parsed?.url) return 'Resume uploaded';
+    } catch {
+      return 'Resume uploaded';
+    }
+  }
+  return '';
+}
+
+function hasFileFieldValue(value) {
+  if (typeof File !== 'undefined' && value instanceof File) return true;
+  if (value && typeof value === 'object' && value.url) return true;
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      return Boolean(parsed?.url);
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
 function validateApplicationField(field, value) {
+  if (field.type === 'file') {
+    if (field.required && !hasFileFieldValue(value)) {
+      return `Please upload your ${field.label.toLowerCase()}`;
+    }
+    if (typeof File !== 'undefined' && value instanceof File) {
+      if (value.type && value.type !== 'application/pdf') {
+        return 'Please upload a PDF file';
+      }
+      if (!value.name?.toLowerCase().endsWith('.pdf') && value.type !== 'application/pdf') {
+        return 'Please upload a PDF file';
+      }
+      if (value.size > MAX_RESUME_BYTES) {
+        return 'File must be 10MB or smaller';
+      }
+    }
+    return null;
+  }
+
   const trimmed = String(value ?? '').trim();
 
   if (field.required && !trimmed) {
@@ -121,14 +181,15 @@ function validateStandardQuestion(question, value) {
 }
 
 export function PublicCareersHeader({ company }) {
-  const initial = (company || 'C').charAt(0).toUpperCase();
+  const name = (company || '').trim() || 'Careers';
+  const initial = name.charAt(0).toUpperCase();
 
   return (
     <div className="flex items-center gap-2.5">
       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent text-sm font-bold text-white shadow-sm">
         {initial}
       </div>
-      <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Careers</span>
+      <span className="text-sm font-semibold tracking-wide text-heading">{name}</span>
     </div>
   );
 }
@@ -220,6 +281,50 @@ function PreviewField({
   className = '',
 }) {
   const Icon = getFieldIcon(field || { id: '', type });
+
+  if (type === 'file') {
+    const displayName = getFileFieldDisplayName(value);
+    return (
+      <div className={`group ${className}`}>
+        <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">
+          {label}
+          {required && <span className="text-accent normal-case tracking-normal"> *</span>}
+        </label>
+        <div
+          className={`rounded-xl border-2 bg-input px-3.5 py-3 transition-all ${
+            error
+              ? 'border-red-400 bg-red-50/20 dark:bg-red-950/20'
+              : 'border-border hover:border-accent/35 focus-within:border-accent focus-within:ring-4 focus-within:ring-accent/10'
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent">
+              <Icon size={17} strokeWidth={2} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm text-heading">
+                {displayName || 'PDF only · max 10MB'}
+              </p>
+              <p className="text-xs text-muted">
+                {displayName ? 'Click to replace file' : 'Choose a resume PDF'}
+              </p>
+            </div>
+            <label className="shrink-0 cursor-pointer rounded-lg bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent/15">
+              Browse
+              <input
+                type="file"
+                accept="application/pdf,.pdf"
+                className="sr-only"
+                onChange={(e) => onChange(e.target.files?.[0] || null)}
+              />
+            </label>
+          </div>
+        </div>
+        {error && <p className="mt-1.5 text-xs font-medium text-red-500">{error}</p>}
+      </div>
+    );
+  }
+
   const inputType =
     type === 'phone' ? 'tel' : type === 'email' ? 'email' : type === 'number' ? 'number' : type === 'date' ? 'date' : 'text';
 
@@ -255,6 +360,50 @@ function getFieldGridClass(field) {
   return '';
 }
 
+function buildInitialFlowState(fields, slug, live) {
+  const defaults = {
+    phase: 'intro',
+    applicationValues: Object.fromEntries(fields.map((f) => [f.id, ''])),
+    questionIndex: 0,
+    questionAnswers: {},
+    videoRetakeCount: 0,
+  };
+
+  if (!live || !slug) return defaults;
+
+  const progress = readApplyProgress(slug);
+  if (!progress) return defaults;
+
+  const applicationValues = {
+    ...defaults.applicationValues,
+    ...(progress.applicationValues || {}),
+  };
+
+  const session = applicationService.readApplySession(slug);
+  const canResumeSteps =
+    Boolean(session?.id) &&
+    progress.phase &&
+    progress.phase !== 'intro' &&
+    progress.phase !== 'done';
+
+  if (!canResumeSteps) {
+    return { ...defaults, applicationValues };
+  }
+
+  return {
+    phase: progress.phase,
+    applicationValues,
+    questionIndex:
+      typeof progress.questionIndex === 'number' ? progress.questionIndex : 0,
+    questionAnswers:
+      progress.questionAnswers && typeof progress.questionAnswers === 'object'
+        ? progress.questionAnswers
+        : {},
+    videoRetakeCount:
+      typeof progress.videoRetakeCount === 'number' ? progress.videoRetakeCount : 0,
+  };
+}
+
 export default function ApplicationPreviewFlow({ job, slug, live = false }) {
   const fields = useMemo(() => normalizeApplicationFields(job.applicationFields), [job.applicationFields]);
   const questions = useMemo(() => {
@@ -273,21 +422,75 @@ export default function ApplicationPreviewFlow({ job, slug, live = false }) {
   const hasInstructions = Boolean(instructions);
   const applicationTitle = job.applicationSectionTitle || DEFAULT_APPLICATION_SECTION_TITLE;
   const applyButtonLabel = job.applyButtonLabel?.trim() || DEFAULT_APPLY_BUTTON_LABEL;
-  const questionRetakes = job.settings?.questionRetakes ?? 'unlimited';
+  const questionRetakes = job.settings?.questionRetakes ?? '1';
 
-  const [phase, setPhase] = useState('intro');
-  const [applicationValues, setApplicationValues] = useState(() =>
-    Object.fromEntries(fields.map((f) => [f.id, '']))
+  const initialStateRef = useRef(null);
+  if (initialStateRef.current === null) {
+    initialStateRef.current = buildInitialFlowState(fields, slug, live);
+  }
+  const initialState = initialStateRef.current;
+
+  const [phase, setPhase] = useState(initialState.phase);
+  const [applicationValues, setApplicationValues] = useState(
+    () => initialState.applicationValues,
   );
   const [applicationErrors, setApplicationErrors] = useState({});
-  const [questionIndex, setQuestionIndex] = useState(0);
-  const [questionAnswers, setQuestionAnswers] = useState({});
+  const [questionIndex, setQuestionIndex] = useState(initialState.questionIndex);
+  const [questionAnswers, setQuestionAnswers] = useState(
+    () => initialState.questionAnswers,
+  );
   const [questionError, setQuestionError] = useState('');
   const [videoRecording, setVideoRecording] = useState(null);
-  const [videoRetakeCount, setVideoRetakeCount] = useState(0);
+  const [videoRetakeCount, setVideoRetakeCount] = useState(
+    initialState.videoRetakeCount,
+  );
   const [videoError, setVideoError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [flowError, setFlowError] = useState('');
+
+  useEffect(() => {
+    if (!live || !slug || phase === 'done') return;
+    writeApplyProgress(slug, {
+      phase,
+      questionIndex,
+      applicationValues: serializeApplicationValuesForStorage(applicationValues),
+      questionAnswers,
+      videoRetakeCount,
+      updatedAt: Date.now(),
+    });
+  }, [
+    live,
+    slug,
+    phase,
+    questionIndex,
+    applicationValues,
+    questionAnswers,
+    videoRetakeCount,
+  ]);
+
+  useEffect(() => {
+    if (standardQuestions.length === 0) return;
+    if (questionIndex > standardQuestions.length - 1) {
+      setQuestionIndex(standardQuestions.length - 1);
+    }
+  }, [questionIndex, standardQuestions.length]);
+
+  useEffect(() => {
+    if (!live || phase === 'intro' || phase === 'done') return;
+    const missingRequiredFile = fields.some(
+      (field) =>
+        field.type === 'file' &&
+        field.required &&
+        !hasFileFieldValue(applicationValues[field.id]),
+    );
+    if (missingRequiredFile) {
+      setFlowError(
+        'Please re-attach your resume/PDF — file uploads are not kept after a refresh.',
+      );
+    }
+    // Intentionally run once after restore.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const currentQuestion = standardQuestions[questionIndex];
   const hasVideoRecording = Boolean(videoRecording?.url);
@@ -332,6 +535,7 @@ export default function ApplicationPreviewFlow({ job, slug, live = false }) {
       setSubmitting(true);
       setFlowError('');
       try {
+        // Text fields + session only. Resume PDF and video upload on Submit.
         const existingSession = applicationService.readApplySession(slug);
         if (existingSession?.id) {
           await applicationService.updateApplication(slug, applicationValues, fields);
@@ -411,33 +615,11 @@ export default function ApplicationPreviewFlow({ job, slug, live = false }) {
       URL.revokeObjectURL(videoRecording.url);
     }
 
-    if (live && slug && mediaQuestion) {
-      setSubmitting(true);
-      setVideoError('');
-      try {
-        setVideoRecording(media);
-        const uploaded = await applicationService.uploadVideoAnswer(
-          slug,
-          mediaQuestion.id,
-          media,
-        );
-        if (media.url?.startsWith('blob:')) {
-          URL.revokeObjectURL(media.url);
-        }
-        setVideoRecording(uploaded);
-        setVideoRetakeCount(uploaded.retakeCount ?? 0);
-      } catch (err) {
-        setVideoError(toUserErrorMessage(err, 'Failed to upload video'));
-      } finally {
-        setSubmitting(false);
-      }
-      return;
-    }
-
-    setVideoRecording(media);
+    // Keep recording locally until Submit — then upload to R2 with the resume.
     if (videoRecording?.url) {
       setVideoRetakeCount((count) => count + 1);
     }
+    setVideoRecording(media);
     setVideoError('');
   };
 
@@ -447,10 +629,50 @@ export default function ApplicationPreviewFlow({ job, slug, live = false }) {
       return;
     }
 
+    const fileErrors = {};
+    fields.forEach((field) => {
+      if (field.type !== 'file') return;
+      const error = validateApplicationField(field, applicationValues[field.id]);
+      if (error) fileErrors[field.id] = error;
+    });
+    if (Object.keys(fileErrors).length > 0) {
+      setApplicationErrors(fileErrors);
+      setFlowError('Please go back and upload any required resume/PDF files.');
+      setPhase('intro');
+      return;
+    }
+
     if (live && slug) {
       setSubmitting(true);
       setFlowError('');
+      setVideoError('');
       try {
+        let nextValues = { ...applicationValues };
+        for (const field of fields) {
+          if (field.builtIn || field.type !== 'file') continue;
+          const current = nextValues[field.id];
+          if (!(typeof File !== 'undefined' && current instanceof File)) continue;
+          const uploaded = await applicationService.uploadFieldFile(
+            slug,
+            field.apiId || field.id,
+            current,
+          );
+          nextValues = { ...nextValues, [field.id]: uploaded };
+        }
+        setApplicationValues(nextValues);
+
+        if (mediaQuestion) {
+          const uploadedVideo = await applicationService.uploadVideoAnswer(
+            slug,
+            mediaQuestion.id,
+            videoRecording,
+          );
+          if (videoRecording.url?.startsWith('blob:')) {
+            URL.revokeObjectURL(videoRecording.url);
+          }
+          setVideoRecording(uploadedVideo);
+        }
+
         await applicationService.submitApplication(slug);
         setPhase('done');
       } catch (err) {
@@ -598,12 +820,20 @@ export default function ApplicationPreviewFlow({ job, slug, live = false }) {
               </div>
             </div>
           ) : (
-            <VideoRecorderPanel
-              onRecorded={handleVideoRecorded}
-              onError={setVideoError}
-              disabled={submitting}
-              uploading={submitting}
-            />
+            <>
+              {live && (
+                <p className="mb-3 rounded-lg bg-accent/5 px-3 py-2 text-center text-xs text-muted">
+                  If you refreshed the page, record your video again here. Camera permission
+                  only needs to be allowed once — no reload required.
+                </p>
+              )}
+              <VideoRecorderPanel
+                onRecorded={handleVideoRecorded}
+                onError={setVideoError}
+                disabled={submitting}
+                uploading={submitting}
+              />
+            </>
           )}
 
           {videoError && <p className="mt-3 text-center text-sm font-medium text-red-500">{videoError}</p>}
@@ -627,7 +857,7 @@ export default function ApplicationPreviewFlow({ job, slug, live = false }) {
               onClick={handleSubmit}
               disabled={submitting}
             >
-              {submitting ? 'Submitting...' : 'Submit application'}
+              {submitting ? 'Uploading & submitting...' : 'Submit application'}
             </Button>
           </div>
         </StepCard>

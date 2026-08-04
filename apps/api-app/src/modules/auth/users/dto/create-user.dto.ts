@@ -6,6 +6,7 @@
 import {
   IsBoolean,
   IsEmail,
+  IsIn,
   IsNotEmpty,
   IsObject,
   IsOptional,
@@ -14,6 +15,9 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
+import { SYSTEM_ROLES } from '../../common/constants/auth.constants';
+
+const ASSIGNABLE_ROLES = [SYSTEM_ROLES.ADMIN, SYSTEM_ROLES.RECRUITER] as const;
 
 /**
  * Payload for creating a new user record.
@@ -48,4 +52,10 @@ export class CreateUserDto {
   @IsOptional()
   @IsObject()
   metadata?: Record<string, unknown>;
+
+  /** System role to assign (Admin or Recruiter). Defaults to Recruiter. */
+  @IsOptional()
+  @IsString()
+  @IsIn(ASSIGNABLE_ROLES)
+  role?: (typeof ASSIGNABLE_ROLES)[number];
 }

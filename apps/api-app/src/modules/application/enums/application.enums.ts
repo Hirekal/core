@@ -43,6 +43,13 @@ export enum TranscriptionJobStatus {
   FAILED = 'FAILED',
 }
 
+/** Status values returned by the media worker (accept + callback payloads). */
+export enum MediaWorkerPayloadStatus {
+  ACCEPTED = 'accepted',
+  COMPLETED = 'completed',
+  FAILED = 'failed',
+}
+
 export const BUILT_IN_FIELD_KEYS = [
   'firstName',
   'lastName',

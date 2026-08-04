@@ -111,6 +111,7 @@ export default function ResetPasswordPage() {
         <Input
           label="New Password"
           type="password"
+          showPasswordToggle
           autoComplete="new-password"
           value={password}
           onChange={(e) => {
@@ -124,6 +125,7 @@ export default function ResetPasswordPage() {
         <Input
           label="Confirm Password"
           type="password"
+          showPasswordToggle
           autoComplete="new-password"
           value={confirmPassword}
           onChange={(e) => {

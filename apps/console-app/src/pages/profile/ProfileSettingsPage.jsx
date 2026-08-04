@@ -144,6 +144,7 @@ export default function ProfileSettingsPage() {
                 <Input
                   label="Current Password"
                   type="password"
+                  showPasswordToggle
                   autoComplete="current-password"
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
@@ -151,6 +152,7 @@ export default function ProfileSettingsPage() {
                 <Input
                   label="New Password"
                   type="password"
+                  showPasswordToggle
                   autoComplete="new-password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}

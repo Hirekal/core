@@ -16,6 +16,18 @@ import {
 } from '../../utils/videoRecordingUtils';
 
 /**
+ * Ask for camera/mic once via getUserMedia, then mount the webcam preview.
+ * Avoids needing a full page reload after the user grants permission.
+ */
+async function requestMediaAccess() {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: VIDEO_CONSTRAINTS,
+    audio: true,
+  });
+  stream.getTracks().forEach((track) => track.stop());
+}
+
+/**
  * Inline camera recorder for the public apply flow — live preview, 3-2-1 countdown, record/stop.
  */
 export default function VideoRecorderPanel({
@@ -30,12 +42,15 @@ export default function VideoRecorderPanel({
   const chunksRef = useRef([]);
   const countdownTimerRef = useRef(null);
 
+  const [permissionState, setPermissionState] = useState('unknown'); // unknown | granted | prompt | denied
+  const [requestingPermission, setRequestingPermission] = useState(false);
   const [recording, setRecording] = useState(false);
   const [countdown, setCountdown] = useState(null);
   const [error, setError] = useState(null);
   const [cameraReady, setCameraReady] = useState(false);
   const [hasAudio, setHasAudio] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  const [webcamKey, setWebcamKey] = useState(0);
 
   const stopRecordingPipeline = useCallback(() => {
     recordingPipelineRef.current?.stop?.();
@@ -52,6 +67,52 @@ export default function VideoRecorderPanel({
       clearInterval(countdownTimerRef.current);
       countdownTimerRef.current = null;
     }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function checkExistingPermission() {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        if (!cancelled) {
+          setPermissionState('denied');
+          setError('Video recording is not supported in this browser.');
+        }
+        return;
+      }
+
+      try {
+        if (navigator.permissions?.query) {
+          const [camera, microphone] = await Promise.all([
+            navigator.permissions.query({ name: 'camera' }).catch(() => null),
+            navigator.permissions
+              .query({ name: 'microphone' })
+              .catch(() => null),
+          ]);
+          if (cancelled) return;
+          if (
+            camera?.state === 'granted' &&
+            (!microphone || microphone.state === 'granted')
+          ) {
+            setPermissionState('granted');
+            return;
+          }
+          if (camera?.state === 'denied' || microphone?.state === 'denied') {
+            setPermissionState('denied');
+            return;
+          }
+        }
+      } catch {
+        // Permissions API unsupported — fall through to prompt UI.
+      }
+
+      if (!cancelled) setPermissionState('prompt');
+    }
+
+    checkExistingPermission();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -79,7 +140,24 @@ export default function VideoRecorderPanel({
     setHasAudio(false);
     const message = getMediaErrorMessage(err);
     setError(message);
+    setPermissionState('denied');
     onError?.(message);
+  };
+
+  const handleAllowMedia = async () => {
+    if (requestingPermission) return;
+    setRequestingPermission(true);
+    setError(null);
+    try {
+      await requestMediaAccess();
+      setPermissionState('granted');
+      setWebcamKey((key) => key + 1);
+      setCameraReady(false);
+    } catch (err) {
+      handleUserMediaError(err);
+    } finally {
+      setRequestingPermission(false);
+    }
   };
 
   const beginRecording = useCallback(() => {
@@ -186,6 +264,53 @@ export default function VideoRecorderPanel({
     }
   };
 
+  if (permissionState === 'unknown') {
+    return (
+      <div className="flex min-h-[14rem] items-center justify-center rounded-xl border border-border bg-hover/40 text-sm text-muted">
+        Checking camera permissions…
+      </div>
+    );
+  }
+
+  if (permissionState !== 'granted') {
+    return (
+      <div className="space-y-4">
+        {error ? (
+          <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
+            <AlertCircle size={18} className="mt-0.5 shrink-0" />
+            <div>
+              <p className="font-medium">Permission or device error</p>
+              <p className="mt-1">{error}</p>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="flex flex-col items-center justify-center gap-4 rounded-xl border border-border bg-hover/30 px-6 py-10 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent/10 text-accent">
+            <Video size={28} />
+          </div>
+          <div className="max-w-sm space-y-1.5">
+            <p className="text-base font-semibold text-heading">
+              Allow camera & microphone
+            </p>
+            <p className="text-sm text-muted">
+              Your browser will ask for permission. After you allow access, recording
+              starts here — no page reload needed.
+            </p>
+          </div>
+          <Button
+            type="button"
+            className="rounded-full px-6 shadow-md shadow-accent/20"
+            onClick={handleAllowMedia}
+            disabled={disabled || uploading || requestingPermission}
+          >
+            {requestingPermission ? 'Waiting for permission…' : 'Allow & continue'}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   const busy = disabled || uploading || recording || countdown !== null;
   const statusMessage = (() => {
     if (error) return null;
@@ -198,16 +323,24 @@ export default function VideoRecorderPanel({
     <div className="space-y-4">
       {error ? (
         <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
-          <AlertCircle size={18} className="shrink-0 mt-0.5" />
+          <AlertCircle size={18} className="mt-0.5 shrink-0" />
           <div>
             <p className="font-medium">Permission or device error</p>
             <p className="mt-1">{error}</p>
+            <button
+              type="button"
+              className="mt-2 text-xs font-semibold underline"
+              onClick={handleAllowMedia}
+            >
+              Try again
+            </button>
           </div>
         </div>
       ) : null}
 
-      <div className="relative overflow-hidden rounded-xl border border-border bg-black aspect-video shadow-inner">
+      <div className="relative aspect-video overflow-hidden rounded-xl border border-border bg-black shadow-inner">
         <Webcam
+          key={webcamKey}
           ref={webcamRef}
           audio
           muted
@@ -239,11 +372,11 @@ export default function VideoRecorderPanel({
 
         {recording && (
           <>
-            <div className="absolute top-3 left-3 flex items-center gap-2 rounded-full bg-black/75 px-3 py-1.5 text-xs font-semibold text-white shadow-lg">
-              <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+            <div className="absolute left-3 top-3 flex items-center gap-2 rounded-full bg-black/75 px-3 py-1.5 text-xs font-semibold text-white shadow-lg">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
               REC {formatRecordingTime(elapsed)}
             </div>
-            <div className="absolute inset-x-0 bottom-0 h-1 bg-red-500/80 animate-pulse" />
+            <div className="absolute inset-x-0 bottom-0 h-1 animate-pulse bg-red-500/80" />
           </>
         )}
       </div>
@@ -266,7 +399,7 @@ export default function VideoRecorderPanel({
         {recording ? (
           <Button
             type="button"
-            className="w-full sm:w-auto sm:min-w-[200px] rounded-full"
+            className="w-full rounded-full sm:w-auto sm:min-w-[200px]"
             onClick={stopRecording}
             disabled={uploading}
           >
@@ -277,7 +410,7 @@ export default function VideoRecorderPanel({
           <Button
             type="button"
             variant="secondary"
-            className="w-full sm:w-auto sm:min-w-[200px] rounded-full"
+            className="w-full rounded-full sm:w-auto sm:min-w-[200px]"
             onClick={cancelCountdown}
           >
             Cancel countdown
@@ -285,7 +418,7 @@ export default function VideoRecorderPanel({
         ) : (
           <Button
             type="button"
-            className="w-full sm:w-auto sm:min-w-[200px] rounded-full shadow-md shadow-accent/20"
+            className="w-full rounded-full shadow-md shadow-accent/20 sm:w-auto sm:min-w-[200px]"
             onClick={startCountdown}
             disabled={!cameraReady || Boolean(error) || busy}
           >
