@@ -22,6 +22,8 @@ import {
 } from '../common/enums/payment.enums';
 import { ProviderInvoiceResult } from '../providers/payment-provider.interface';
 import { toMajorAmount } from '../common/utils/currency-amount.util';
+import { PricesService } from '../prices/prices.service';
+import { formatPlanDisplayName } from '../common/utils/plan-display.util';
 
 export interface InvoiceResponse {
   id: string;
@@ -55,6 +57,7 @@ export class InvoicesService {
     private readonly subscriptionsService: SubscriptionsService,
     private readonly paymentsRecordService: PaymentsRecordService,
     private readonly paymentProviderRegistry: PaymentProviderRegistry,
+    private readonly pricesService: PricesService,
   ) {}
 
   /*
@@ -101,19 +104,14 @@ export class InvoicesService {
         ),
       );
 
-      return (
-        await this.invoicesRepository.find({
-          where: { userId: customer.userId },
-          relations: {
-            subscription: {
-              price: {
-                product: true,
-              },
-            },
-          },
-          order: { createdAt: 'DESC' },
-        })
-      ).map((invoice) => this.formatInvoiceForApi(invoice));
+      return Promise.all(
+        (
+          await this.invoicesRepository.find({
+            where: { userId: customer.userId },
+            order: { createdAt: 'DESC' },
+          })
+        ).map((invoice) => this.formatInvoiceForApi(invoice, provider.code)),
+      );
     } catch (error) {
       this.logger.error(LOG_MESSAGES.INVOICE.LIST_FAILED(customerId), error);
       throw error;
@@ -131,6 +129,15 @@ export class InvoicesService {
     try {
       const provider =
         await this.paymentProvidersService.findById(paymentProviderId);
+
+      const resolvedPlanName = await this.resolvePlanName(
+        provider.code,
+        providerResult,
+      );
+      const syncedProviderResult: ProviderInvoiceResult = {
+        ...providerResult,
+        planName: resolvedPlanName ?? providerResult.planName ?? null,
+      };
 
       let subscriptionId: string | null = null;
       if (providerResult.providerSubscriptionId) {
@@ -194,7 +201,7 @@ export class InvoicesService {
           status: RecordStatus.ACTIVE,
           metadata: this.buildInvoiceMetadata(
             existingInvoice.metadata,
-            providerResult,
+            syncedProviderResult,
           ),
         });
         return this.invoicesRepository.save(existingInvoice);
@@ -214,7 +221,7 @@ export class InvoicesService {
         invoicePdf: providerResult.invoicePdf,
         paidAt: providerResult.paidAt,
         status: RecordStatus.ACTIVE,
-        metadata: this.buildInvoiceMetadata(null, providerResult),
+        metadata: this.buildInvoiceMetadata(null, syncedProviderResult),
       });
     } catch (error) {
       this.logger.error(
@@ -228,14 +235,17 @@ export class InvoicesService {
   /*
    * Converts stored minor-unit invoice amounts to major units for API clients.
    */
-  private formatInvoiceForApi(invoice: Invoice): InvoiceResponse {
+  private async formatInvoiceForApi(
+    invoice: Invoice,
+    providerCode: string,
+  ): Promise<InvoiceResponse> {
     const metadata = invoice.metadata ?? {};
-    const planName =
-      (typeof metadata.planName === 'string' && metadata.planName.length > 0
-        ? metadata.planName
-        : null) ??
-      invoice.subscription?.price?.product?.name ??
-      null;
+    const planName = await this.resolveStoredPlanName(
+      metadata,
+      providerCode,
+      invoice.amountPaid > 0 ? invoice.amountPaid : invoice.amountDue,
+      invoice.currency,
+    );
 
     return {
       id: invoice.id,
@@ -274,6 +284,9 @@ export class InvoicesService {
     if (providerResult.planName) {
       metadata.planName = providerResult.planName;
     }
+    if (providerResult.providerPriceId) {
+      metadata.providerPriceId = providerResult.providerPriceId;
+    }
     if (providerResult.receiptUrl) {
       metadata.receiptUrl = providerResult.receiptUrl;
     }
@@ -303,5 +316,125 @@ export class InvoicesService {
     }
 
     return invoice.invoiceUrl ?? invoice.invoicePdf ?? null;
+  }
+
+  /*
+   * Resolves the plan label from synced metadata or the catalog price record.
+   */
+  private async resolvePlanName(
+    providerCode: string,
+    providerResult: ProviderInvoiceResult,
+  ): Promise<string | null> {
+    const fromPriceId = await this.resolvePlanNameFromPriceId(
+      providerCode,
+      providerResult.providerPriceId,
+    );
+    if (fromPriceId) {
+      return fromPriceId;
+    }
+
+    const invoiceAmount =
+      providerResult.amountPaid > 0
+        ? providerResult.amountPaid
+        : providerResult.amountDue;
+    const fromAmount = await this.resolvePlanNameFromAmount(
+      providerCode,
+      invoiceAmount,
+      providerResult.currency,
+    );
+    if (fromAmount) {
+      return fromAmount;
+    }
+
+    return providerResult.planName ?? null;
+  }
+
+  /*
+   * Reads a stored plan label, falling back to catalog lookup when needed.
+   */
+  private async resolveStoredPlanName(
+    metadata: Record<string, unknown>,
+    providerCode: string,
+    amountMinor: number,
+    currency: string,
+  ): Promise<string | null> {
+    const fromPriceId = await this.resolvePlanNameFromPriceId(
+      providerCode,
+      typeof metadata.providerPriceId === 'string'
+        ? metadata.providerPriceId
+        : null,
+    );
+    if (fromPriceId) {
+      return fromPriceId;
+    }
+
+    const fromAmount = await this.resolvePlanNameFromAmount(
+      providerCode,
+      amountMinor,
+      currency,
+    );
+    if (fromAmount) {
+      return fromAmount;
+    }
+
+    if (typeof metadata.planName === 'string' && metadata.planName.length > 0) {
+      return metadata.planName;
+    }
+
+    return null;
+  }
+
+  /*
+   * Resolves a plan label from a provider price ID in the local catalog.
+   */
+  private async resolvePlanNameFromPriceId(
+    providerCode: string,
+    providerPriceId: string | null | undefined,
+  ): Promise<string | null> {
+    if (!providerPriceId) {
+      return null;
+    }
+
+    const price = await this.pricesService.findByProviderPriceId(
+      providerPriceId,
+      providerCode,
+    );
+    if (!price?.product) {
+      return null;
+    }
+
+    return formatPlanDisplayName(
+      price.product.name,
+      price.interval,
+      price.intervalCount ?? 1,
+    );
+  }
+
+  /*
+   * Resolves a plan label by matching the invoice amount to a catalog price.
+   */
+  private async resolvePlanNameFromAmount(
+    providerCode: string,
+    amountMinor: number,
+    currency: string,
+  ): Promise<string | null> {
+    if (amountMinor <= 0) {
+      return null;
+    }
+
+    const price = await this.pricesService.findByProviderAmount(
+      amountMinor,
+      currency,
+      providerCode,
+    );
+    if (!price?.product) {
+      return null;
+    }
+
+    return formatPlanDisplayName(
+      price.product.name,
+      price.interval,
+      price.intervalCount ?? 1,
+    );
   }
 }

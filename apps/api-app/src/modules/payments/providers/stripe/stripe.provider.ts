@@ -854,7 +854,10 @@ export class StripeProvider implements PaymentProvider {
       const invoices = await this.stripeService.getClient().invoices.list({
         customer: providerCustomerId,
         limit: 100,
-        expand: ['data.lines.data.price'],
+        expand: [
+          'data.lines.data.price',
+          'data.lines.data.pricing.price_details.price',
+        ],
       });
 
       return invoices.data.map((invoice: Stripe.Invoice) =>
@@ -937,6 +940,7 @@ export class StripeProvider implements PaymentProvider {
       null;
     const providerSubscriptionId =
       resolveStripeResourceId(subscriptionRef) || null;
+    const subscriptionLine = this.resolveInvoiceSubscriptionLine(invoice);
 
     return {
       providerInvoiceId: invoice.id,
@@ -949,24 +953,198 @@ export class StripeProvider implements PaymentProvider {
       invoiceUrl: invoice.hosted_invoice_url ?? null,
       invoicePdf: invoice.invoice_pdf ?? null,
       paidAt: toDateFromUnix(invoice.status_transitions.paid_at),
-      planName: this.resolveInvoicePlanName(invoice),
+      providerPriceId: subscriptionLine?.priceId ?? null,
+      planName: subscriptionLine
+        ? this.formatStripePlanLabel(
+            subscriptionLine.productName,
+            subscriptionLine.price,
+          )
+        : this.resolveInvoicePlanNameFallback(invoice),
       receiptUrl: this.resolveInvoiceReceiptUrl(invoice),
       invoiceNumber: invoice.number ?? null,
     };
   }
 
   /*
-   * Resolves a customer-facing plan label from invoice line items.
+   * Picks the primary subscription charge line, skipping proration credits.
    */
-  private resolveInvoicePlanName(invoice: Stripe.Invoice): string | null {
+  private resolveInvoiceSubscriptionLine(
+    invoice: Stripe.Invoice,
+  ): {
+    productName: string | null;
+    price: Stripe.Price | null;
+    priceId: string;
+  } | null {
+    type Candidate = {
+      productName: string | null;
+      price: Stripe.Price | null;
+      priceId: string;
+      amount: number;
+    };
+
+    const candidates: Candidate[] = [];
+
     for (const line of invoice.lines?.data ?? []) {
       const lineItem = line as Stripe.InvoiceLineItem & {
         price?: Stripe.Price | string | null;
+        pricing?: {
+          type?: string;
+          price_details?: {
+            price?: Stripe.Price | string | null;
+          } | null;
+        } | null;
       };
-      const price =
-        lineItem.price && typeof lineItem.price === 'object'
-          ? lineItem.price
+
+      const isProration = Boolean(
+        lineItem.parent?.invoice_item_details?.proration ||
+          lineItem.parent?.subscription_item_details?.proration,
+      );
+      if (isProration) {
+        continue;
+      }
+
+      const price = this.resolveInvoiceLinePrice(lineItem);
+      const priceId = this.resolveInvoiceLinePriceId(lineItem);
+      if (!priceId) {
+        continue;
+      }
+      if (price && !price.recurring) {
+        continue;
+      }
+
+      const product =
+        price?.product && typeof price.product === 'object'
+          ? price.product
           : null;
+      let productName =
+        product &&
+        'name' in product &&
+        typeof product.name === 'string' &&
+        product.name.length > 0
+          ? product.name
+          : null;
+
+      if (!productName && line.description?.trim()) {
+        productName =
+          line.description.replace(/^\d+\s×\s/, '').split('(')[0]?.trim() ||
+          line.description;
+      }
+
+      candidates.push({
+        productName,
+        price,
+        priceId,
+        amount: line.amount ?? 0,
+      });
+    }
+
+    if (candidates.length === 0) {
+      return null;
+    }
+
+    candidates.sort((left, right) => right.amount - left.amount);
+    return candidates[0];
+  }
+
+  /*
+   * Reads an expanded Stripe Price object from legacy or pricing-based line items.
+   */
+  private resolveInvoiceLinePrice(
+    line: Stripe.InvoiceLineItem & {
+      price?: Stripe.Price | string | null;
+      pricing?: {
+        price_details?: {
+          price?: Stripe.Price | string | null;
+        } | null;
+      } | null;
+    },
+  ): Stripe.Price | null {
+    if (line.price && typeof line.price === 'object') {
+      return line.price;
+    }
+
+    const pricingPrice = line.pricing?.price_details?.price;
+    if (pricingPrice && typeof pricingPrice === 'object') {
+      return pricingPrice;
+    }
+
+    return null;
+  }
+
+  /*
+   * Reads a Stripe price ID from legacy or pricing-based line items.
+   */
+  private resolveInvoiceLinePriceId(
+    line: Stripe.InvoiceLineItem & {
+      price?: Stripe.Price | string | null;
+      pricing?: {
+        price_details?: {
+          price?: Stripe.Price | string | null;
+        } | null;
+      } | null;
+    },
+  ): string | null {
+    const price = this.resolveInvoiceLinePrice(line);
+    if (price?.id) {
+      return price.id;
+    }
+
+    const pricingPrice = line.pricing?.price_details?.price;
+    if (typeof pricingPrice === 'string' && pricingPrice.length > 0) {
+      return pricingPrice;
+    }
+
+    if (typeof line.price === 'string' && line.price.length > 0) {
+      return line.price;
+    }
+
+    return null;
+  }
+
+  /*
+   * Formats a Stripe recurring price into a customer-facing plan label.
+   */
+  private formatStripePlanLabel(
+    productName: string | null,
+    price: Stripe.Price | null,
+  ): string | null {
+    const name = productName?.trim();
+    if (!name || !price?.recurring) {
+      return null;
+    }
+
+    const interval = price.recurring.interval;
+    const intervalCount = price.recurring.interval_count ?? 1;
+
+    if (interval === 'month' && intervalCount === 3) {
+      return `${name} · Quarterly`;
+    }
+    if (interval === 'month' && intervalCount === 1) {
+      return `${name} · Monthly`;
+    }
+    if (interval === 'year' && intervalCount === 1) {
+      return `${name} · Yearly`;
+    }
+
+    return name;
+  }
+
+  /*
+   * Fallback plan label resolver when no subscription line item is found.
+   */
+  private resolveInvoicePlanNameFallback(
+    invoice: Stripe.Invoice,
+  ): string | null {
+    for (const line of invoice.lines?.data ?? []) {
+      const lineItem = line as Stripe.InvoiceLineItem & {
+        price?: Stripe.Price | string | null;
+        pricing?: {
+          price_details?: {
+            price?: Stripe.Price | string | null;
+          } | null;
+        } | null;
+      };
+      const price = this.resolveInvoiceLinePrice(lineItem);
       const product =
         price?.product && typeof price.product === 'object'
           ? price.product

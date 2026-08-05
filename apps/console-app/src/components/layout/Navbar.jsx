@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { Briefcase, CreditCard, LifeBuoy, Menu, Wallet, X } from 'lucide-react';
+import { Briefcase, Building2, CreditCard, LifeBuoy, Menu, Wallet, X } from 'lucide-react';
 import { useState } from 'react';
 import UserMenu from './UserMenu';
 import NotificationBell from './NotificationBell';
@@ -59,6 +59,20 @@ export default function Navbar() {
         {/* Right: notifications + user menu */}
         <div className="flex items-center gap-2">
           <NotificationBell />
+          <NavLink
+            to="/organization"
+            className={({ isActive }) =>
+              `flex h-10 items-center gap-2 rounded-lg px-2.5 transition-colors sm:px-3 ${
+                isActive
+                  ? 'bg-accent/10 text-accent'
+                  : 'text-muted hover:bg-hover hover:text-heading'
+              }`
+            }
+            aria-label="Organization"
+          >
+            <Building2 size={20} />
+            <span className="hidden sm:inline text-sm font-medium">Organization</span>
+          </NavLink>
           <UserMenu />
 
           <button

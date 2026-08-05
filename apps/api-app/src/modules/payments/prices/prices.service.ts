@@ -20,6 +20,7 @@ import {
   PAYMENT_CONSTANTS,
 } from '../common/constants/payment.constants';
 import { CatalogCacheService } from '../catalog/catalog-cache.service';
+import { toProviderMinorAmount } from '../common/utils/currency-amount.util';
 
 @Injectable()
 export class PricesService {
@@ -165,6 +166,43 @@ export class PricesService {
     } catch (error) {
       this.logger.error(
         LOG_MESSAGES.PRICE.FIND_FAILED(`${providerCode}:${providerPriceId}`),
+        error,
+      );
+      throw error;
+    }
+  }
+
+  /*
+   * Finds a catalog price whose provider minor amount matches an invoice total.
+   */
+  async findByProviderAmount(
+    amountMinor: number,
+    currency: string,
+    providerCode: string,
+  ): Promise<Price | null> {
+    try {
+      const provider =
+        await this.paymentProvidersService.findByCode(providerCode);
+      const prices = await this.pricesRepository.find({
+        where: {
+          paymentProviderId: provider.id,
+          currency: currency.toUpperCase(),
+          status: RecordStatus.ACTIVE,
+        },
+        relations: { product: true, paymentProvider: true },
+      });
+
+      return (
+        prices.find(
+          (price) =>
+            toProviderMinorAmount(price.amount, price.currency) === amountMinor,
+        ) ?? null
+      );
+    } catch (error) {
+      this.logger.error(
+        LOG_MESSAGES.PRICE.FIND_FAILED(
+          `${providerCode}:${currency}:${amountMinor}`,
+        ),
         error,
       );
       throw error;

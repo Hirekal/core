@@ -4,15 +4,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import PageHeader from '../../components/layout/PageHeader';
-import LoadingSpinner from '../../components/common/LoadingSpinner';
-import Button from '../../components/common/Button';
 import PlanCard from '../../components/billing/PlanCard';
 import BillingSkeleton from '../../components/billing/BillingSkeleton';
 import BillingErrorState from '../../components/billing/BillingErrorState';
 import ConfirmationModal from '../../components/billing/ConfirmationModal';
 import BillingPeriodToggle from '../../components/billing/BillingPeriodToggle';
 import BillingSummaryCard from '../../components/billing/BillingSummaryCard';
-import SubscriptionStatusBadge from '../../components/billing/SubscriptionStatusBadge';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import * as billingService from '../../services/billingService';
@@ -56,7 +53,12 @@ export default function PricingPlansPage() {
   const [upgradePreview, setUpgradePreview] = useState<PlanChangePreview | null>(null);
   const [upgradePreviewLoading, setUpgradePreviewLoading] = useState(false);
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly');
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [resumeOpen, setResumeOpen] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [showChangePlans, setShowChangePlans] = useState(false);
   const subscriptionPeriodSyncedRef = useRef(false);
+  const plansSectionRef = useRef<HTMLDivElement>(null);
 
   /*
    * Loads catalog plans, subscription state, and default payment method.
@@ -328,6 +330,50 @@ export default function PricingPlansPage() {
     return `You're upgrading from ${currentPlan.product.name} to ${confirmUpgradePlan.product.name}. ${chargeText} You'll enter your card details on the next step to complete the upgrade.`;
   }, [confirmUpgradePlan, currentPlan, upgradePreview]);
 
+  const handleCancel = async () => {
+    if (!subscription) return;
+    setProcessing(true);
+    try {
+      const updated = await billingService.cancelSubscription(subscription.id, true);
+      setSubscription(updated);
+      setCancelOpen(false);
+      showSuccess('Subscription will cancel at the end of the billing period');
+    } catch (err) {
+      showError(err, 'Failed to cancel subscription');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleResume = async () => {
+    if (!subscription) return;
+    setProcessing(true);
+    try {
+      const updated = await billingService.resumeSubscription(subscription.id);
+      setSubscription(updated);
+      setResumeOpen(false);
+      showSuccess('Subscription resumed successfully');
+    } catch (err) {
+      showError(err, 'Failed to resume subscription');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleCancelScheduledChange = async () => {
+    if (!subscription) return;
+    setProcessing(true);
+    try {
+      const updated = await billingService.cancelScheduledPlanChange(subscription.id);
+      setSubscription(updated);
+      showSuccess('Scheduled plan change cancelled');
+    } catch (err) {
+      showError(err, 'Failed to cancel scheduled change');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   const scheduledPlanPriceId = getScheduledPlanPriceId(subscription);
   const scheduledPlanChangeAt = getScheduledPlanChangeAt(subscription);
   const scheduledPlan = useMemo(() => {
@@ -339,6 +385,20 @@ export default function PricingPlansPage() {
     if (!subscription) return 'Choose a plan that fits your hiring needs';
     return 'Compare plans and change your subscription';
   }, [subscription]);
+
+  const planName =
+    subscriptionForDisplay?.price?.product?.name ??
+    scheduledPlan?.product.name ??
+    'your current plan';
+
+  const shouldShowPlans = !subscription || showChangePlans;
+
+  const handleChangePlan = () => {
+    setShowChangePlans(true);
+    window.requestAnimationFrame(() => {
+      plansSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
+    });
+  };
 
   if (loading) {
     return (
@@ -360,49 +420,32 @@ export default function PricingPlansPage() {
           { to: '/billing/plans', label: 'Billing' },
           { label: 'Plans' },
         ]}
-        actions={
-          subscription ? (
-            <SubscriptionStatusBadge
-              status={subscription.subscriptionStatus}
-              cancelAtPeriodEnd={subscription.cancelAtPeriodEnd}
-            />
-          ) : null
-        }
       />
 
       {error && <BillingErrorState message={error} onRetry={() => loadData()} />}
 
       {subscription && (
-        <section className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold text-heading">Your subscription</h2>
-              <p className="mt-1 text-sm text-muted">
-                Review billing details and manage your current plan
-              </p>
-            </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => navigate('/billing/subscription')}
-            >
-              Manage subscription
-            </Button>
-          </div>
-          <BillingSummaryCard
-            subscription={subscriptionForDisplay}
-            paymentMethod={paymentMethod}
-            scheduledPlan={scheduledPlan}
-            scheduledPlanChangeAt={scheduledPlan ? scheduledPlanChangeAt : null}
-          />
-        </section>
+        <BillingSummaryCard
+          subscription={subscriptionForDisplay}
+          paymentMethod={paymentMethod}
+          scheduledPlan={scheduledPlan}
+          scheduledPlanChangeAt={scheduledPlan ? scheduledPlanChangeAt : null}
+          manageable
+          processing={processing}
+          onChangePlan={handleChangePlan}
+          onCancel={() => setCancelOpen(true)}
+          onResume={() => setResumeOpen(true)}
+          onCancelScheduledChange={handleCancelScheduledChange}
+        />
       )}
 
       {plans.length === 0 && !error ? (
         <BillingErrorState message="No pricing plans are available yet." />
-      ) : (
+      ) : shouldShowPlans ? (
         <>
-          <BillingPeriodToggle value={billingPeriod} onChange={setBillingPeriod} />
+          <div ref={plansSectionRef}>
+            <BillingPeriodToggle value={billingPeriod} onChange={setBillingPeriod} />
+          </div>
 
           {visiblePlans.length === 0 ? (
             <BillingErrorState message={`No ${getBillingPeriodLabel(billingPeriod).toLowerCase()} plans are available yet.`} />
@@ -441,7 +484,7 @@ export default function PricingPlansPage() {
             </div>
           )}
         </>
-      )}
+      ) : null}
 
       {!subscription && !loading && plans.length > 0 && (
         <p className="text-center text-sm text-muted">
@@ -476,6 +519,27 @@ export default function PricingPlansPage() {
         loading={Boolean(actionPriceId)}
         onConfirm={handleConfirmDowngrade}
         onClose={() => setConfirmDowngradePlan(null)}
+      />
+
+      <ConfirmationModal
+        isOpen={cancelOpen}
+        title="Cancel subscription"
+        message={`Your ${planName} subscription will remain active until ${formatDate(subscription?.currentPeriodEnd ?? '')}. After that date, you will lose access to paid features. You can resume anytime before then.`}
+        confirmLabel="Cancel at period end"
+        loading={processing}
+        onConfirm={handleCancel}
+        onClose={() => setCancelOpen(false)}
+      />
+
+      <ConfirmationModal
+        isOpen={resumeOpen}
+        title="Resume subscription"
+        message={`Your ${planName} subscription will stay active and renew on ${formatDate(subscription?.currentPeriodEnd ?? '')}. The scheduled cancellation will be removed and your saved payment method will be charged on the next billing date.`}
+        confirmLabel="Resume subscription"
+        confirmVariant="primary"
+        loading={processing}
+        onConfirm={handleResume}
+        onClose={() => setResumeOpen(false)}
       />
     </div>
   );

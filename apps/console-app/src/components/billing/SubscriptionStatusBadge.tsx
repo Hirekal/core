@@ -16,6 +16,10 @@ export default function SubscriptionStatusBadge({
   status,
   cancelAtPeriodEnd = false,
 }: SubscriptionStatusBadgeProps) {
-  const label = cancelAtPeriodEnd ? `${status} · Cancels at period end` : status.replace(/_/g, ' ');
-  return <Badge status={subscriptionBadgeStatus(status)}>{label}</Badge>;
+  const label = cancelAtPeriodEnd
+    ? 'Cancels at period end'
+    : status.replace(/_/g, ' ');
+  const badgeStatus = cancelAtPeriodEnd ? 'warning' : subscriptionBadgeStatus(status);
+
+  return <Badge status={badgeStatus}>{label}</Badge>;
 }

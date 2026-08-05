@@ -150,6 +150,7 @@ export interface ProviderInvoiceResult {
   invoicePdf: string | null;
   paidAt: Date | null;
   planName?: string | null;
+  providerPriceId?: string | null;
   receiptUrl?: string | null;
   invoiceNumber?: string | null;
 }

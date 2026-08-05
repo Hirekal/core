@@ -1,10 +1,9 @@
 /**
  * @fileoverview Reusable current subscription summary card.
  */
-import { CalendarDays, CreditCard } from 'lucide-react';
+import Button from '../common/Button';
 import Card from '../common/Card';
 import SubscriptionStatusBadge from './SubscriptionStatusBadge';
-import PaymentMethodCard from './PaymentMethodCard';
 import {
   formatIntervalShort,
   formatMoney,
@@ -17,6 +16,12 @@ interface BillingSummaryCardProps {
   paymentMethod: PaymentMethod | null;
   scheduledPlan?: BillingPlan | null;
   scheduledPlanChangeAt?: string | null;
+  manageable?: boolean;
+  processing?: boolean;
+  onChangePlan?: () => void;
+  onCancel?: () => void;
+  onResume?: () => void;
+  onCancelScheduledChange?: () => void;
 }
 
 /**
@@ -27,6 +32,12 @@ export default function BillingSummaryCard({
   paymentMethod,
   scheduledPlan = null,
   scheduledPlanChangeAt = null,
+  manageable = false,
+  processing = false,
+  onChangePlan,
+  onCancel,
+  onResume,
+  onCancelScheduledChange,
 }: BillingSummaryCardProps) {
   if (!subscription?.price?.product) {
     return (
@@ -38,15 +49,17 @@ export default function BillingSummaryCard({
 
   const product = subscription.price.product;
   const price = subscription.price;
-  const nextCharge = scheduledPlan?.price ?? price;
+  const hasScheduledDowngrade = Boolean(subscription.metadata?.pendingDowngradePriceId);
+  const paymentMethodLabel = paymentMethod
+    ? `${paymentMethod.brand?.toUpperCase() ?? 'CARD'} ···· ${paymentMethod.last4 ?? '****'}`
+    : 'No payment method';
 
   return (
-    <Card className="space-y-5">
+    <Card className="p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-muted">Current plan</p>
-          <p className="mt-1 text-xl font-semibold text-heading">{product.name}</p>
-          <p className="mt-1 text-sm text-muted">
+        <div className="min-w-0">
+          <p className="text-base font-semibold text-heading">{product.name}</p>
+          <p className="mt-0.5 text-sm text-muted">
             {formatMoney(price.amount, price.currency)} ·{' '}
             {formatIntervalShort(price.interval, price.intervalCount ?? 1)}
           </p>
@@ -57,47 +70,65 @@ export default function BillingSummaryCard({
         />
       </div>
 
-      {scheduledPlan && scheduledPlanChangeAt && (
-        <div className="rounded-xl border border-border bg-surface px-4 py-3 text-sm">
-          <p className="font-medium text-heading">Scheduled plan change</p>
-          <p className="mt-1 text-muted">
-            Switching to {scheduledPlan.product.name} (
-            {formatMoney(scheduledPlan.price.amount, scheduledPlan.price.currency)}{' '}
-            {formatIntervalShort(scheduledPlan.price.interval, scheduledPlan.price.intervalCount ?? 1).toLowerCase()}) on{' '}
-            {formatDate(scheduledPlanChangeAt)}.
-          </p>
+      <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+        <div>
+          <dt className="text-xs text-muted">Next billing date</dt>
+          <dd className="mt-0.5 font-medium text-heading">
+            {formatDate(subscription.currentPeriodEnd)}
+          </dd>
         </div>
+        <div>
+          <dt className="text-xs text-muted">Payment method</dt>
+          <dd className="mt-0.5 font-medium text-heading">{paymentMethodLabel}</dd>
+        </div>
+      </dl>
+
+      {scheduledPlan && scheduledPlanChangeAt && (
+        <p className="mt-3 text-sm text-muted">
+          Switching to {scheduledPlan.product.name} on {formatDate(scheduledPlanChangeAt)}.
+        </p>
       )}
 
       {subscription.cancelAtPeriodEnd && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
-          Subscription ends on {formatDate(subscription.currentPeriodEnd)}. No further
-          charges after that date.
-        </div>
+        <p className="mt-3 text-sm text-amber-800 dark:text-amber-200">
+          Cancels on {formatDate(subscription.currentPeriodEnd)}.
+        </p>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="flex items-start gap-3 rounded-xl bg-surface p-3">
-          <CalendarDays size={18} className="mt-0.5 text-accent" />
-          <div>
-            <p className="text-xs text-muted">Next billing date</p>
-            <p className="text-sm font-medium text-heading">
-              {formatDate(subscription.currentPeriodEnd)}
-            </p>
+      {manageable && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+          <div className="flex flex-wrap gap-2">
+            {onChangePlan && (
+              <Button variant="secondary" size="sm" disabled={processing} onClick={onChangePlan}>
+                Change plan
+              </Button>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {hasScheduledDowngrade && onCancelScheduledChange && (
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={processing}
+                onClick={onCancelScheduledChange}
+              >
+                Cancel schedule
+              </Button>
+            )}
+            {subscription.cancelAtPeriodEnd
+              ? onResume && (
+                  <Button size="sm" disabled={processing} onClick={onResume}>
+                    Resume subscription
+                  </Button>
+                )
+              : onCancel && (
+                  <Button variant="danger" size="sm" disabled={processing} onClick={onCancel}>
+                    Cancel subscription
+                  </Button>
+                )}
           </div>
         </div>
-        <div className="flex items-start gap-3 rounded-xl bg-surface p-3">
-          <CreditCard size={18} className="mt-0.5 text-accent" />
-          <div>
-            <p className="text-xs text-muted">Next charge</p>
-            <p className="text-sm font-medium text-heading">
-              {formatMoney(nextCharge.amount, nextCharge.currency)}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <PaymentMethodCard method={paymentMethod} />
+      )}
     </Card>
   );
 }
