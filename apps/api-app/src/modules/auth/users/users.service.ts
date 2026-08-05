@@ -2,17 +2,24 @@
  * @fileoverview User persistence and lookup service.
  * Handles CRUD operations, email lookup, and password sanitization for user entities.
  */
-import { Injectable, ConflictException, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { UserStatus } from '../common/constants/auth.constants';
+import { SYSTEM_ROLES, UserStatus } from '../common/constants/auth.constants';
 import { hashPassword } from '../common/utils/hash.util';
 import { BaseRepository } from '../common/repositories/base.repository';
 import { ERROR_MESSAGES, LOG_MESSAGES } from '../common/constants/messages';
 import { toDate } from '../common/utils/date.util';
+import { RolesService } from '../roles/roles.service';
+import { UserRolesService } from './user-roles/user-roles.service';
 
 /**
  * Manages user records including creation, lookup, updates, and soft deletion.
@@ -25,14 +32,18 @@ export class UsersService {
    * Creates the users service with an injected TypeORM repository.
    *
    * @param usersRepository - TypeORM repository for user entities
+   * @param rolesService - Role lookup service
+   * @param userRolesService - User-role assignment service
    */
   constructor(
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
+    private readonly rolesService: RolesService,
+    private readonly userRolesService: UserRolesService,
   ) {}
 
   /**
-   * Creates a new user within an organization.
+   * Creates a new user within an organization and assigns a system role.
    *
    * @param dto - User creation payload
    * @param organizationId - Owning organization identifier
@@ -54,6 +65,12 @@ export class UsersService {
         );
       }
 
+      const roleName = dto.role ?? SYSTEM_ROLES.RECRUITER;
+      const role = await this.rolesService.findByName(roleName, null);
+      if (!role) {
+        throw new BadRequestException(ERROR_MESSAGES.ROLE.NOT_FOUND);
+      }
+
       const saved = await BaseRepository.createAndSave(this.usersRepository, {
         organizationId,
         name: dto.name,
@@ -65,7 +82,13 @@ export class UsersService {
         metadata: dto.metadata ?? {},
       });
 
-      return this.sanitize(saved);
+      await this.userRolesService.assign(
+        saved.id,
+        role.id,
+        createdBy ?? dto.createdBy,
+      );
+
+      return this.findOne(saved.id);
     } catch (error) {
       this.logger.error(LOG_MESSAGES.USER.CREATE_FAILED(dto.email), error);
       throw error;
@@ -212,6 +235,38 @@ export class UsersService {
       await this.usersRepository.update(id, { lastLoginAt: toDate() });
     } catch (error) {
       this.logger.error(LOG_MESSAGES.USER.UPDATE_LAST_LOGIN_FAILED(id), error);
+      throw error;
+    }
+  }
+
+  /**
+   * Resolves display names for a set of user ids.
+   *
+   * @param ids - User identifiers
+   * @returns Map of user id → name
+   */
+  async findNamesByIds(ids: string[]): Promise<Map<string, string>> {
+    const uniqueIds = [...new Set(ids.filter(Boolean))];
+    const names = new Map<string, string>();
+    if (uniqueIds.length === 0) {
+      return names;
+    }
+
+    try {
+      const users = await this.usersRepository
+        .createQueryBuilder('user')
+        .select(['user.id', 'user.name'])
+        .where('user.id IN (:...ids)', { ids: uniqueIds })
+        .getMany();
+
+      for (const user of users) {
+        if (user.name) {
+          names.set(user.id, user.name);
+        }
+      }
+      return names;
+    } catch (error) {
+      this.logger.error(LOG_MESSAGES.USER.LIST_FAILED, error);
       throw error;
     }
   }

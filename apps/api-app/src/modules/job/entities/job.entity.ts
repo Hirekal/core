@@ -86,7 +86,7 @@ export class Job extends BaseEntity {
   @Column({
     type: 'varchar',
     length: 50,
-    default: QuestionRetakes.UNLIMITED,
+    default: QuestionRetakes.ONE,
   })
   questionRetakes!: QuestionRetakes;
 

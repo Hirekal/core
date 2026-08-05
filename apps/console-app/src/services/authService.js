@@ -1,8 +1,9 @@
+import { API_ENDPOINTS } from '../constants/apiEndpoints';
 import { apiRequest, readSession, writeSession } from './apiClient';
 
 export const CODE_TYPES = {
-    EMAIL_VERIFICATION: 'EMAIL_VERIFICATION',
-    PASSWORD_RESET: 'PASSWORD_RESET',
+  EMAIL_VERIFICATION: 'EMAIL_VERIFICATION',
+  PASSWORD_RESET: 'PASSWORD_RESET',
 };
 
 /**
@@ -12,13 +13,13 @@ export const CODE_TYPES = {
  * @returns {object} Session stored in localStorage
  */
 function toSession(data) {
-    return {
-        user: data.user,
-        accessToken: data.accessToken,
-        refreshToken: data.refreshToken,
-        accessTokenExpiresAt: data.accessTokenExpiresAt,
-        refreshTokenExpiresAt: data.refreshTokenExpiresAt,
-    };
+  return {
+    user: data.user,
+    accessToken: data.accessToken,
+    refreshToken: data.refreshToken,
+    accessTokenExpiresAt: data.accessTokenExpiresAt,
+    refreshTokenExpiresAt: data.refreshTokenExpiresAt,
+  };
 }
 
 /**
@@ -29,18 +30,18 @@ function toSession(data) {
  * @returns {Promise<object>} Session with user and tokens
  */
 export async function login(email, password) {
-    const data = await apiRequest('/auth/signin', {
-        method: 'POST',
-        body: { email, password },
-    });
+  const data = await apiRequest(API_ENDPOINTS.auth.signIn, {
+    method: 'POST',
+    body: { email, password },
+  });
 
-    if (!data?.accessToken || !data?.refreshToken) {
-        throw new Error('Sign in failed: server did not return auth tokens');
-    }
+  if (!data?.accessToken || !data?.refreshToken) {
+    throw new Error('Sign in failed: server did not return auth tokens');
+  }
 
-    const session = toSession(data);
-    writeSession(session);
-    return session;
+  const session = toSession(data);
+  writeSession(session);
+  return session;
 }
 
 /**
@@ -53,10 +54,10 @@ export async function login(email, password) {
  * @returns {Promise<object>} Signup response from the API
  */
 export async function signUp(name, email, password) {
-    return apiRequest('/auth/signup', {
-        method: 'POST',
-        body: { name, email, password },
-    });
+  return apiRequest(API_ENDPOINTS.auth.signUp, {
+    method: 'POST',
+    body: { name, email, password },
+  });
 }
 
 /**
@@ -68,10 +69,10 @@ export async function signUp(name, email, password) {
  * @returns {Promise<object>}
  */
 export async function verifyCode(email, code, type) {
-    return apiRequest('/auth/verify-code', {
-        method: 'POST',
-        body: { email, code, ...(type ? { type } : {}) },
-    });
+  return apiRequest(API_ENDPOINTS.auth.verifyCode, {
+    method: 'POST',
+    body: { email, code, ...(type ? { type } : {}) },
+  });
 }
 
 /**
@@ -81,10 +82,10 @@ export async function verifyCode(email, code, type) {
  * @returns {Promise<object>}
  */
 export async function resendVerification(email) {
-    return apiRequest('/auth/resend-verification', {
-        method: 'POST',
-        body: { email },
-    });
+  return apiRequest(API_ENDPOINTS.auth.resendVerification, {
+    method: 'POST',
+    body: { email },
+  });
 }
 
 /**
@@ -94,10 +95,10 @@ export async function resendVerification(email) {
  * @returns {Promise<object>}
  */
 export async function requestPasswordReset(email) {
-    return apiRequest('/auth/forgot-password', {
-        method: 'POST',
-        body: { email },
-    });
+  return apiRequest(API_ENDPOINTS.auth.forgotPassword, {
+    method: 'POST',
+    body: { email },
+  });
 }
 
 /**
@@ -109,10 +110,10 @@ export async function requestPasswordReset(email) {
  * @returns {Promise<object>}
  */
 export async function resetPassword(email, code, newPassword) {
-    return apiRequest('/auth/reset-password', {
-        method: 'POST',
-        body: { email, code, newPassword },
-    });
+  return apiRequest(API_ENDPOINTS.auth.resetPassword, {
+    method: 'POST',
+    body: { email, code, newPassword },
+  });
 }
 
 /**
@@ -121,7 +122,7 @@ export async function resetPassword(email, code, newPassword) {
  * @returns {Promise<object|null>}
  */
 export async function getCurrentUser() {
-    return readSession();
+  return readSession();
 }
 
 /**
@@ -130,21 +131,21 @@ export async function getCurrentUser() {
  * @returns {Promise<void>}
  */
 export async function logout() {
-    const session = readSession();
-    try {
-        if (session?.accessToken) {
-            await apiRequest('/auth/logout', {
-                method: 'POST',
-                body: { refreshToken: session.refreshToken },
-                auth: true,
-                retry: false,
-            });
-        }
-    } catch {
-        // Clear local session even if the API call fails.
-    } finally {
-        writeSession(null);
+  const session = readSession();
+  try {
+    if (session?.accessToken) {
+      await apiRequest(API_ENDPOINTS.auth.logout, {
+        method: 'POST',
+        body: { refreshToken: session.refreshToken },
+        auth: true,
+        retry: false,
+      });
     }
+  } catch {
+    // Clear local session even if the API call fails.
+  } finally {
+    writeSession(null);
+  }
 }
 
 /**
@@ -153,7 +154,7 @@ export async function logout() {
  * @returns {Promise<object>} Sanitized user profile
  */
 export async function getProfile() {
-    return apiRequest('/auth/profile', { auth: true });
+  return apiRequest(API_ENDPOINTS.auth.profile, { auth: true });
 }
 
 /**
@@ -164,21 +165,21 @@ export async function getProfile() {
  * @returns {Promise<object>} Updated user
  */
 export async function updateProfile(_userId, data) {
-    const payload = {};
-    if (data.name !== undefined) payload.name = data.name;
-    if (data.metadata !== undefined) payload.metadata = data.metadata;
+  const payload = {};
+  if (data.name !== undefined) payload.name = data.name;
+  if (data.metadata !== undefined) payload.metadata = data.metadata;
 
-    const user = await apiRequest('/auth/profile', {
-        method: 'PATCH',
-        body: payload,
-        auth: true,
-    });
+  const user = await apiRequest(API_ENDPOINTS.auth.profile, {
+    method: 'PATCH',
+    body: payload,
+    auth: true,
+  });
 
-    const session = readSession();
-    if (session) {
-        writeSession({ ...session, user });
-    }
-    return user;
+  const session = readSession();
+  if (session) {
+    writeSession({ ...session, user });
+  }
+  return user;
 }
 
 /**
@@ -190,9 +191,9 @@ export async function updateProfile(_userId, data) {
  * @returns {Promise<object>}
  */
 export async function changePassword(currentPassword, newPassword) {
-    return apiRequest('/auth/change-password', {
-        method: 'POST',
-        body: { currentPassword, newPassword },
-        auth: true,
-    });
+  return apiRequest(API_ENDPOINTS.auth.changePassword, {
+    method: 'POST',
+    body: { currentPassword, newPassword },
+    auth: true,
+  });
 }

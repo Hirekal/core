@@ -1,8 +1,10 @@
+import { API_ENDPOINTS } from '../constants/apiEndpoints';
 import { apiRequest, putToSignedUrl } from './apiClient';
 import { mediaToUploadFile } from '../utils/mediaHelpers';
 import { fieldToUi, questionToUi, toUiRetakes } from './jobMappers';
 import { defaultJobSettings } from '../data/dummyStages';
 import { DEFAULT_APPLY_BUTTON_LABEL } from '../components/jobs/jobFormUtils';
+import { clearApplyProgress } from '../utils/applyProgress';
 
 const APPLICATION_TOKEN_HEADER = 'x-application-token';
 const VIEWER_SESSION_KEY = 'hirekal_viewer_id';
@@ -29,19 +31,42 @@ export function getViewerSessionId() {
 
 export function readApplySession(slug) {
   try {
-    const raw = sessionStorage.getItem(sessionKey(slug));
-    return raw ? JSON.parse(raw) : null;
+    const key = sessionKey(slug);
+    const raw =
+      localStorage.getItem(key) || sessionStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    // Migrate older sessionStorage drafts into localStorage.
+    if (!localStorage.getItem(key) && sessionStorage.getItem(key)) {
+      localStorage.setItem(key, raw);
+      sessionStorage.removeItem(key);
+    }
+    return parsed;
   } catch {
     return null;
   }
 }
 
 export function writeApplySession(slug, session) {
+  const key = sessionKey(slug);
+  try {
+    sessionStorage.removeItem(key);
+  } catch {
+    // ignore
+  }
   if (!session) {
-    sessionStorage.removeItem(sessionKey(slug));
+    localStorage.removeItem(key);
     return;
   }
-  sessionStorage.setItem(sessionKey(slug), JSON.stringify(session));
+  localStorage.setItem(key, JSON.stringify(session));
+}
+
+/**
+ * Clears apply session + saved step progress after submit (or abandon).
+ */
+export function clearApplyDraft(slug) {
+  writeApplySession(slug, null);
+  clearApplyProgress(slug);
 }
 
 /**
@@ -88,16 +113,43 @@ export function publicJobToApplyUi(job) {
 }
 
 export async function getPublicJob(slug) {
-  const job = await apiRequest(`/public/jobs/${encodeURIComponent(slug)}`);
+  const job = await apiRequest(API_ENDPOINTS.public.jobBySlug(slug));
   return publicJobToApplyUi(job);
 }
 
 /** Fire-and-forget page view analytics for visitor / viewer KPIs. */
 export async function trackJobView(slug) {
-  return apiRequest(`/public/jobs/${encodeURIComponent(slug)}/view`, {
+  return apiRequest(API_ENDPOINTS.public.jobView(slug), {
     method: 'POST',
     body: { sessionId: getViewerSessionId() },
   });
+}
+
+function isFileFieldType(type) {
+  return String(type || '').toLowerCase() === 'file';
+}
+
+function serializeCustomFieldValue(field, value) {
+  if (isFileFieldType(field.type)) {
+    if (typeof File !== 'undefined' && value instanceof File) {
+      return undefined;
+    }
+    if (value && typeof value === 'object' && value.url) {
+      return JSON.stringify({
+        url: value.url,
+        storageKey: value.storageKey || '',
+        fileName: value.fileName || '',
+        contentType: value.contentType || 'application/pdf',
+      });
+    }
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+    return undefined;
+  }
+
+  if (value == null) return '';
+  return typeof value === 'string' ? value : String(value);
 }
 
 function splitFieldValues(values, fields) {
@@ -114,7 +166,10 @@ function splitFieldValues(values, fields) {
     if (field.builtIn && ['firstName', 'lastName', 'email', 'phone'].includes(field.id)) {
       payload[field.id] = value;
     } else if (!field.builtIn) {
-      payload.custom[field.apiId || field.id] = value;
+      const serialized = serializeCustomFieldValue(field, value);
+      if (serialized !== undefined) {
+        payload.custom[field.apiId || field.id] = serialized;
+      }
     }
   }
 
@@ -126,7 +181,7 @@ export async function startApplication(slug, values, fields) {
   const { custom, ...builtIn } = fieldsPayload;
 
   const result = await apiRequest(
-    `/public/jobs/${encodeURIComponent(slug)}/applications/start`,
+    API_ENDPOINTS.public.startApplication(slug),
     {
       method: 'POST',
       body: {
@@ -167,7 +222,7 @@ export async function updateApplication(slug, values, fields) {
   const fieldsPayload = splitFieldValues(values, fields);
   const { custom, ...builtIn } = fieldsPayload;
 
-  return apiRequest(`/public/applications/${session.id}`, {
+  return apiRequest(API_ENDPOINTS.public.applicationById(session.id), {
     method: 'PATCH',
     ...withApplicationToken(slug),
     body: { ...builtIn, custom },
@@ -181,7 +236,7 @@ export async function saveTextAnswer(slug, questionId, answerText) {
   }
 
   return apiRequest(
-    `/public/applications/${session.id}/answers/${questionId}`,
+    API_ENDPOINTS.public.answer(session.id, questionId),
     {
       method: 'PATCH',
       ...withApplicationToken(slug),
@@ -204,7 +259,7 @@ export async function uploadVideoAnswer(slug, questionId, media) {
   const contentType = file.type || 'video/webm';
 
   const presign = await apiRequest(
-    `/public/applications/${session.id}/answers/${questionId}/video/upload-url`,
+    API_ENDPOINTS.public.videoUploadUrl(session.id, questionId),
     {
       method: 'POST',
       ...withApplicationToken(slug),
@@ -219,7 +274,7 @@ export async function uploadVideoAnswer(slug, questionId, media) {
   await putToSignedUrl(presign.uploadUrl, file, contentType);
 
   const confirmed = await apiRequest(
-    `/public/applications/${session.id}/answers/${questionId}/video/confirm`,
+    API_ENDPOINTS.public.videoConfirm(session.id, questionId),
     {
       method: 'POST',
       ...withApplicationToken(slug),
@@ -240,18 +295,69 @@ export async function uploadVideoAnswer(slug, questionId, media) {
   };
 }
 
+export async function uploadFieldFile(slug, fieldId, file) {
+  const session = readApplySession(slug);
+  if (!session?.id) {
+    throw new Error('Application session not found');
+  }
+  if (!(file instanceof File)) {
+    throw new Error('A PDF file is required');
+  }
+
+  const fileName = file.name || 'resume.pdf';
+  const contentType = file.type || 'application/pdf';
+
+  const presign = await apiRequest(
+    API_ENDPOINTS.public.fieldFileUploadUrl(session.id, fieldId),
+    {
+      method: 'POST',
+      ...withApplicationToken(slug),
+      body: {
+        fileName,
+        contentType,
+        size: file.size,
+      },
+    },
+  );
+
+  await putToSignedUrl(presign.uploadUrl, file, contentType);
+
+  const confirmed = await apiRequest(
+    API_ENDPOINTS.public.fieldFileConfirm(session.id, fieldId),
+    {
+      method: 'POST',
+      ...withApplicationToken(slug),
+      body: {
+        storageKey: presign.storageKey,
+        fileName,
+        contentType,
+      },
+    },
+  );
+
+  return {
+    url: confirmed.url,
+    storageKey: confirmed.storageKey,
+    fileName: confirmed.fileName || fileName,
+    contentType: confirmed.contentType || contentType,
+  };
+}
+
 export async function submitApplication(slug) {
   const session = readApplySession(slug);
   if (!session?.id) {
     throw new Error('Application session not found');
   }
 
-  const result = await apiRequest(`/public/applications/${session.id}/submit`, {
-    method: 'POST',
-    ...withApplicationToken(slug),
-  });
+  const result = await apiRequest(
+    API_ENDPOINTS.public.submitApplication(session.id),
+    {
+      method: 'POST',
+      ...withApplicationToken(slug),
+    },
+  );
 
-  writeApplySession(slug, null);
+  clearApplyDraft(slug);
   return result;
 }
 
@@ -262,17 +368,17 @@ export async function getJobApplications(jobId, filters = {}) {
   if (filters.sortBy) params.set('sortBy', filters.sortBy);
 
   const query = params.toString();
-  const path = `/jobs/${jobId}/applications${query ? `?${query}` : ''}`;
+  const path = API_ENDPOINTS.applications.listForJob(jobId, query);
 
   return apiRequest(path, { auth: true });
 }
 
 export async function getApplicationById(id) {
-  return apiRequest(`/applications/${id}`, { auth: true });
+  return apiRequest(API_ENDPOINTS.applications.byId(id), { auth: true });
 }
 
 export async function updateApplicationStage(id, stageId) {
-  return apiRequest(`/applications/${id}/stage`, {
+  return apiRequest(API_ENDPOINTS.applications.stage(id), {
     method: 'PATCH',
     auth: true,
     body: { stageId },
@@ -280,7 +386,7 @@ export async function updateApplicationStage(id, stageId) {
 }
 
 export async function updateApplicationRating(id, rating) {
-  return apiRequest(`/applications/${id}/rating`, {
+  return apiRequest(API_ENDPOINTS.applications.rating(id), {
     method: 'PATCH',
     auth: true,
     body: { rating },
@@ -288,7 +394,7 @@ export async function updateApplicationRating(id, rating) {
 }
 
 export async function addApplicationNote(id, text) {
-  return apiRequest(`/applications/${id}/notes`, {
+  return apiRequest(API_ENDPOINTS.applications.notes(id), {
     method: 'POST',
     auth: true,
     body: { text },
@@ -296,7 +402,7 @@ export async function addApplicationNote(id, text) {
 }
 
 export async function deleteApplication(id) {
-  return apiRequest(`/applications/${id}`, {
+  return apiRequest(API_ENDPOINTS.applications.byId(id), {
     method: 'DELETE',
     auth: true,
   });

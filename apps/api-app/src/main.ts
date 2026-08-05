@@ -3,9 +3,10 @@ import type { RawBodyRequest } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { Request, Response, NextFunction } from 'express';
-import { json, raw } from 'express';
+import { json, raw, urlencoded } from 'express';
 import { AppModule } from './app.module';
 import { HTTP_HEADERS } from './modules/auth/common/constants/app.constants';
+import { CronService } from './modules/cron/cron.service';
 
 const PAYMENTS_WEBHOOK_PATH = '/api/v1/payments/webhooks';
 
@@ -20,6 +21,7 @@ async function bootstrap() {
     }
 
     return json({
+      limit: '5mb',
       verify: (request: RawBodyRequest<Request>, _response, buffer) => {
         if (Buffer.isBuffer(buffer)) {
           request.rawBody = buffer;
@@ -27,6 +29,7 @@ async function bootstrap() {
       },
     })(req, res, next);
   });
+  app.use(urlencoded({ extended: true, limit: '5mb' }));
 
   app.setGlobalPrefix('api/v1');
   app.useGlobalPipes(
@@ -51,6 +54,11 @@ async function bootstrap() {
       HTTP_HEADERS.REFRESH_TOKEN_EXPIRES_AT,
     ],
   });
+
+  // Cron jobs are registered during init; gate them before listen (no setTimeout).
+  await app.init();
+  app.get(CronService).applyCronServerGate();
+
   await app.listen(process.env.PORT ?? 3000);
 }
 void bootstrap();

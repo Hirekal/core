@@ -55,6 +55,7 @@ export enum ApplicationFieldType {
   NUMBER = 'NUMBER',
   DATE = 'DATE',
   URL = 'URL',
+  FILE = 'FILE',
 }
 
 export enum JobListStatusFilter {

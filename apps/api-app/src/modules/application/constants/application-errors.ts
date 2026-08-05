@@ -17,6 +17,8 @@ export const ApplicationErrors = {
   FAILED_TO_SAVE_ANSWER: 'Failed to save answer',
   FAILED_TO_PRESIGN_VIDEO: 'Failed to prepare video upload',
   FAILED_TO_CONFIRM_VIDEO: 'Failed to confirm video upload',
+  FAILED_TO_PRESIGN_FIELD_FILE: 'Failed to prepare file upload',
+  FAILED_TO_CONFIRM_FIELD_FILE: 'Failed to confirm file upload',
   MISSING_REQUIRED_FIELDS: 'Required application fields are missing',
   MISSING_REQUIRED_ANSWERS: 'Required questions are not answered',
   MISSING_VIDEO_ANSWER: 'Video response is required',
@@ -25,4 +27,16 @@ export const ApplicationErrors = {
   INVALID_STAGE: 'Invalid pipeline stage for this job',
   INVALID_RATING: 'Rating must be between 1 and 5',
   RETAKE_LIMIT_REACHED: 'Retake limit reached for this question',
+  UNSUPPORTED_MEDIA_TYPE: (mimetype: string) =>
+    `Unsupported media type: ${mimetype}`,
+  VIDEO_TOO_LARGE: 'Video exceeds maximum size of 100MB',
+  PDF_ONLY_FIELD: 'Only PDF files are supported for this field',
+  FIELD_FILE_TOO_LARGE: 'File exceeds maximum size of 10MB',
+  INVALID_MEDIA_WORKER_CALLBACK:
+    'Invalid media worker success callback payload',
+  TRANSCRIPTION_FAILED: 'Transcription failed',
+  NO_VIDEO_URL_FOR_TRANSCRIPTION: 'No accessible video URL for transcription',
+  MEDIA_WORKER_RETURNED: (status: number) => `Media worker returned ${status}`,
+  MEDIA_WORKER_UNAVAILABLE:
+    'Transcription is temporarily unavailable. Please try again later.',
 } as const;

@@ -76,6 +76,7 @@ export default function SignUpPage() {
         <Input
           label="Password"
           type="password"
+          showPasswordToggle
           autoComplete="new-password"
           value={password}
           onChange={(e) => {

@@ -5,6 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { UsersService } from '../../auth/users/users.service';
 import { ApplicationErrors } from '../constants/application-errors';
 import { AddApplicationNoteDto } from '../dto/application.dto';
 import { ApplicationRepository } from '../repositories/application.repository';
@@ -17,6 +18,7 @@ export class ApplicationNotesService {
   constructor(
     private readonly applicationRepository: ApplicationRepository,
     private readonly noteRepository: ApplicationNoteRepository,
+    private readonly usersService: UsersService,
   ) {}
 
   /**
@@ -48,10 +50,14 @@ export class ApplicationNotesService {
         text: dto.text.trim(),
       });
 
+      const names = await this.usersService.findNamesByIds([userId]);
+      const author = names.get(userId) || 'Team member';
+
       return {
         id: note.id,
         text: note.text,
         authorId: note.authorId,
+        author,
         createdAt: note.createdAt,
       };
     } catch (error) {

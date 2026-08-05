@@ -1,3 +1,5 @@
+import { API_ENDPOINTS } from '../constants/apiEndpoints';
+
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL;
 
@@ -345,7 +347,7 @@ async function performRefreshSession() {
   }
 
   try {
-    const data = await apiRequest('/auth/refresh', {
+    const data = await apiRequest(API_ENDPOINTS.auth.refresh, {
       method: 'POST',
       body: { refreshToken: session.refreshToken },
       auth: false,

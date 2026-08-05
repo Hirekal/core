@@ -7,6 +7,7 @@ import Button from '../../components/common/Button';
 import Card from '../../components/common/Card';
 import ThemeSelector from '../../components/profile/ThemeSelector';
 import { useAuth } from '../../context/AuthContext';
+import { SUPPORT_MAILTO } from '../../constants/support';
 import * as authService from '../../services/authService';
 import { toUserErrorMessage } from '../../utils/errorMessage';
 
@@ -144,6 +145,7 @@ export default function ProfileSettingsPage() {
                 <Input
                   label="Current Password"
                   type="password"
+                  showPasswordToggle
                   autoComplete="current-password"
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
@@ -151,6 +153,7 @@ export default function ProfileSettingsPage() {
                 <Input
                   label="New Password"
                   type="password"
+                  showPasswordToggle
                   autoComplete="new-password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
@@ -183,12 +186,11 @@ export default function ProfileSettingsPage() {
             description="Get help when you need it"
           >
             <a
-              href="#"
-              onClick={(e) => e.preventDefault()}
+              href={SUPPORT_MAILTO}
               className="mt-auto inline-flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-input px-4 py-2.5 text-sm font-medium text-heading transition-colors hover:border-accent/40 hover:bg-hover"
             >
               <ExternalLink size={16} className="text-accent" />
-              Visit Support Center
+              Email Support
             </a>
           </SettingsCard>
 
