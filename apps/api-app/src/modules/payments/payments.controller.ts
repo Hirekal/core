@@ -117,7 +117,7 @@ export class PaymentsController {
     try {
       return await this.paymentsService.syncCheckoutSubscription(
         user.id,
-        dto.providerSubscriptionId,
+        dto,
       );
     } catch (error) {
       this.logger.error(`syncCheckoutSubscription failed for user ${user.id}`, error);

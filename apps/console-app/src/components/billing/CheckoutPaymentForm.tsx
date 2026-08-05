@@ -111,6 +111,7 @@ export default function CheckoutPaymentForm({
 
       const subscription = await billingService.syncCheckoutSubscription(
         providerSubscriptionId,
+        confirmation.paymentIntent?.id,
       );
 
       if (!isBillableSubscription(subscription)) {

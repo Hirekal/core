@@ -930,22 +930,13 @@ export class StripeProvider implements PaymentProvider {
    * Maps a Stripe invoice object into provider-neutral invoice result.
    */
   mapInvoice(invoice: Stripe.Invoice): ProviderInvoiceResult {
-    const subscriptionRef =
-      invoice.parent?.subscription_details?.subscription ??
-      (
-        invoice as Stripe.Invoice & {
-          subscription?: string | Stripe.Subscription | null;
-        }
-      ).subscription ??
-      null;
-    const providerSubscriptionId =
-      resolveStripeResourceId(subscriptionRef) || null;
+    const providerSubscriptionId = this.resolveInvoiceProviderSubscriptionId(invoice);
     const subscriptionLine = this.resolveInvoiceSubscriptionLine(invoice);
 
     return {
       providerInvoiceId: invoice.id,
       providerSubscriptionId,
-      providerPaymentId: null,
+      providerPaymentId: this.resolveInvoicePaymentId(invoice),
       amountDue: invoice.amount_due,
       amountPaid: invoice.amount_paid,
       currency: invoice.currency.toUpperCase(),
@@ -963,6 +954,139 @@ export class StripeProvider implements PaymentProvider {
       receiptUrl: this.resolveInvoiceReceiptUrl(invoice),
       invoiceNumber: invoice.number ?? null,
     };
+  }
+
+  /*
+   * Resolves the Stripe payment intent ID linked to an invoice.
+   */
+  private resolveInvoicePaymentId(invoice: Stripe.Invoice): string | null {
+    const invoiceWithLegacy = invoice as Stripe.Invoice & {
+      payment_intent?: string | Stripe.PaymentIntent | null;
+    };
+
+    const fromLegacy = resolveStripeResourceId(invoiceWithLegacy.payment_intent);
+    if (fromLegacy) {
+      return fromLegacy;
+    }
+
+    const payments = (
+      invoice as Stripe.Invoice & {
+        payments?: {
+          data?: Array<{
+            payment?: {
+              payment_intent?: string | Stripe.PaymentIntent | null;
+            } | null;
+          }>;
+        } | null;
+      }
+    ).payments?.data;
+
+    for (const entry of payments ?? []) {
+      const paymentIntentId = resolveStripeResourceId(
+        entry.payment?.payment_intent,
+      );
+      if (paymentIntentId) {
+        return paymentIntentId;
+      }
+    }
+
+    const invoiceWithCharge = invoice as Stripe.Invoice & {
+      latest_charge?: string | Stripe.Charge | null;
+    };
+    const charge = invoiceWithCharge.latest_charge;
+    if (charge && typeof charge === 'object') {
+      const fromCharge = resolveStripeResourceId(charge.payment_intent);
+      if (fromCharge) {
+        return fromCharge;
+      }
+    }
+
+    return null;
+  }
+
+  /*
+   * Retrieves an invoice from Stripe and resolves its payment intent ID.
+   */
+  async retrieveInvoicePaymentIntentId(
+    providerInvoiceId: string,
+  ): Promise<string | null> {
+    try {
+      const invoice = await this.stripeService.getClient().invoices.retrieve(
+        providerInvoiceId,
+        {
+          expand: ['payments.data.payment.payment_intent', 'latest_charge'],
+        },
+      );
+      return this.resolveInvoicePaymentId(invoice);
+    } catch {
+      return null;
+    }
+  }
+
+  /*
+   * Retrieves a fully expanded Stripe invoice for webhook and sync flows.
+   */
+  async retrieveInvoiceForSync(
+    providerInvoiceId: string,
+  ): Promise<ProviderInvoiceResult> {
+    const invoice = await this.stripeService.getClient().invoices.retrieve(
+      providerInvoiceId,
+      {
+        expand: [
+          'lines.data.price',
+          'lines.data.pricing.price_details.price',
+          'payments.data.payment.payment_intent',
+          'latest_charge',
+        ],
+      },
+    );
+    return this.mapInvoice(invoice);
+  }
+
+  /*
+   * Resolves the Stripe subscription ID from invoice-level and line-item fields.
+   */
+  private resolveInvoiceProviderSubscriptionId(
+    invoice: Stripe.Invoice,
+  ): string | null {
+    const invoiceWithLegacy = invoice as Stripe.Invoice & {
+      subscription?: string | Stripe.Subscription | null;
+    };
+
+    const fromParent = resolveStripeResourceId(
+      invoice.parent?.subscription_details?.subscription,
+    );
+    if (fromParent) {
+      return fromParent;
+    }
+
+    const fromLegacy = resolveStripeResourceId(invoiceWithLegacy.subscription);
+    if (fromLegacy) {
+      return fromLegacy;
+    }
+
+    for (const line of invoice.lines?.data ?? []) {
+      const lineItem = line as Stripe.InvoiceLineItem & {
+        parent?: {
+          subscription_item_details?: {
+            subscription?: string | Stripe.Subscription | null;
+          } | null;
+          invoice_item_details?: {
+            subscription?: string | Stripe.Subscription | null;
+          } | null;
+        } | null;
+      };
+
+      const fromLine = resolveStripeResourceId(
+        lineItem.parent?.subscription_item_details?.subscription ??
+          lineItem.parent?.invoice_item_details?.subscription,
+      );
+      if (fromLine) {
+        return fromLine;
+      }
+    }
+
+    return null;
   }
 
   /*
@@ -1196,6 +1320,34 @@ export class StripeProvider implements PaymentProvider {
   }
 
   /*
+   * Maps a payment intent webhook payload, fetching invoice data when needed.
+   */
+  async mapPaymentIntentFromWebhook(
+    paymentIntent: Stripe.PaymentIntent,
+  ): Promise<ProviderPaymentResult> {
+    const mapped = this.mapPaymentIntent(paymentIntent);
+    if (mapped.providerSubscriptionId) {
+      return mapped;
+    }
+
+    const invoiceRef = (
+      paymentIntent as Stripe.PaymentIntent & {
+        invoice?: string | Stripe.Invoice | null;
+      }
+    ).invoice;
+    const invoiceId = resolveStripeResourceId(invoiceRef);
+    if (!invoiceId) {
+      return mapped;
+    }
+
+    const invoiceResult = await this.retrieveInvoiceForSync(invoiceId);
+    return {
+      ...mapped,
+      providerSubscriptionId: invoiceResult.providerSubscriptionId,
+    };
+  }
+
+  /*
    * Maps a Stripe payment intent into provider-neutral payment result.
    */
   mapPaymentIntent(paymentIntent: Stripe.PaymentIntent): ProviderPaymentResult {
@@ -1205,7 +1357,8 @@ export class StripeProvider implements PaymentProvider {
         typeof paymentIntent.customer === 'string'
           ? paymentIntent.customer
           : (paymentIntent.customer?.id ?? ''),
-      providerSubscriptionId: null,
+      providerSubscriptionId:
+        this.resolvePaymentIntentSubscriptionId(paymentIntent),
       amount: paymentIntent.amount,
       currency: paymentIntent.currency.toUpperCase(),
       paymentMethod: paymentIntent.payment_method_types[0]
@@ -1214,6 +1367,35 @@ export class StripeProvider implements PaymentProvider {
       paymentStatus: mapStripePaymentStatus(paymentIntent.status),
       paidAt: paymentIntent.status === 'succeeded' ? toDate() : null,
     };
+  }
+
+  /*
+   * Resolves a subscription ID from a payment intent or its expanded invoice.
+   */
+  private resolvePaymentIntentSubscriptionId(
+    paymentIntent: Stripe.PaymentIntent,
+  ): string | null {
+    const paymentIntentWithInvoice = paymentIntent as Stripe.PaymentIntent & {
+      invoice?: string | Stripe.Invoice | null;
+    };
+
+    if (
+      paymentIntentWithInvoice.invoice &&
+      typeof paymentIntentWithInvoice.invoice === 'object'
+    ) {
+      return this.resolveInvoiceProviderSubscriptionId(
+        paymentIntentWithInvoice.invoice,
+      );
+    }
+
+    for (const key of ['subscriptionId', 'providerSubscriptionId'] as const) {
+      const value = paymentIntent.metadata?.[key];
+      if (typeof value === 'string' && value.startsWith('sub_')) {
+        return value;
+      }
+    }
+
+    return null;
   }
 
   /*

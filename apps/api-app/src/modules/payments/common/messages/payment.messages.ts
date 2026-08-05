@@ -61,6 +61,10 @@ export const ERROR_MESSAGES = {
   },
   PAYMENT: {
     NOT_FOUND: 'Payment not found',
+    SUBSCRIPTION_NOT_LINKED:
+      'Payment could not be linked to a subscription',
+    CHECKOUT_PAYMENT_INTENT_NOT_FOUND:
+      'Could not resolve payment intent for checkout subscription',
   },
   PAYMENT_METHOD: {
     NOT_FOUND: 'Payment method not found',

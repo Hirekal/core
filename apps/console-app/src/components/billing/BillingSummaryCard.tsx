@@ -18,6 +18,7 @@ interface BillingSummaryCardProps {
   scheduledPlanChangeAt?: string | null;
   manageable?: boolean;
   processing?: boolean;
+  changePlansVisible?: boolean;
   onChangePlan?: () => void;
   onCancel?: () => void;
   onResume?: () => void;
@@ -34,6 +35,7 @@ export default function BillingSummaryCard({
   scheduledPlanChangeAt = null,
   manageable = false,
   processing = false,
+  changePlansVisible = false,
   onChangePlan,
   onCancel,
   onResume,
@@ -100,7 +102,7 @@ export default function BillingSummaryCard({
           <div className="flex flex-wrap gap-2">
             {onChangePlan && (
               <Button variant="secondary" size="sm" disabled={processing} onClick={onChangePlan}>
-                Change plan
+                {changePlansVisible ? 'Hide plans' : 'Change plan'}
               </Button>
             )}
           </div>

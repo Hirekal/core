@@ -23,13 +23,17 @@ import { AttachPaymentMethodDto } from './common/dto/attach-payment-method.dto';
 import { PricesService } from './prices/prices.service';
 import { PaymentMethodsService } from './payment-methods/payment-methods.service';
 import { InvoicesService } from './invoices/invoices.service';
+import { PaymentsRecordService } from './payments-record/payments-record.service';
+import { StripeProvider } from './providers/stripe/stripe.provider';
 import {
   LOG_MESSAGES,
   ERROR_MESSAGES,
 } from './common/messages/payment.messages';
 import type { PaymentProvider } from './providers/payment-provider.interface';
-import { PaymentProviderCode } from './common/enums/payment.enums';
+import { PaymentProviderCode, PaymentStatus } from './common/enums/payment.enums';
 import { StripeService } from './providers/stripe/stripe.service';
+import type { Subscription } from './subscriptions/entities/subscription.entity';
+import { SyncCheckoutSubscriptionDto } from './common/dto/sync-checkout-subscription.dto';
 import { resolveStripeResourceId } from './common/utils/payment-mapper.util';
 
 @Injectable()
@@ -47,6 +51,8 @@ export class PaymentsService {
     private readonly paymentMethodsService: PaymentMethodsService,
     private readonly invoicesService: InvoicesService,
     private readonly stripeService: StripeService,
+    private readonly paymentsRecordService: PaymentsRecordService,
+    private readonly stripeProvider: StripeProvider,
   ) {}
 
   /*
@@ -158,8 +164,9 @@ export class PaymentsService {
    */
   async syncCheckoutSubscription(
     userId: string,
-    providerSubscriptionId: string,
+    dto: SyncCheckoutSubscriptionDto,
   ) {
+    const providerSubscriptionId = dto.providerSubscriptionId;
     try {
       const stripe = this.stripeService.getClient();
       let stripeSubscription = await stripe.subscriptions.retrieve(
@@ -217,6 +224,14 @@ export class PaymentsService {
           paymentMethodError,
         );
       }
+
+      await this.syncCheckoutPaymentRecord(
+        userId,
+        subscription,
+        providerCustomerId,
+        providerSubscriptionId,
+        dto.providerPaymentId,
+      );
 
       return subscription;
     } catch (error) {
@@ -457,5 +472,59 @@ export class PaymentsService {
       );
       throw error;
     }
+  }
+
+  /*
+   * Persists the checkout payment with a guaranteed subscription link.
+   */
+  private async syncCheckoutPaymentRecord(
+    userId: string,
+    subscription: Subscription,
+    providerCustomerId: string,
+    providerSubscriptionId: string,
+    providerPaymentId?: string,
+  ): Promise<void> {
+    const stripe = this.stripeService.getClient();
+    let resolvedPaymentId = providerPaymentId ?? null;
+
+    if (!resolvedPaymentId) {
+      const stripeSubscription = await stripe.subscriptions.retrieve(
+        providerSubscriptionId,
+        { expand: ['latest_invoice'] },
+      );
+      const latestInvoice = stripeSubscription.latest_invoice;
+      if (latestInvoice && typeof latestInvoice !== 'string') {
+        resolvedPaymentId =
+          await this.stripeProvider.retrieveInvoicePaymentIntentId(
+            latestInvoice.id,
+          );
+      }
+    }
+
+    if (!resolvedPaymentId) {
+      throw new Error(ERROR_MESSAGES.PAYMENT.CHECKOUT_PAYMENT_INTENT_NOT_FOUND);
+    }
+
+    const paymentIntent = await stripe.paymentIntents.retrieve(
+      resolvedPaymentId,
+    );
+
+    await this.paymentsRecordService.upsertAfterCheckout({
+      userId,
+      customerId: subscription.customerId,
+      subscriptionId: subscription.id,
+      paymentProviderId: subscription.paymentProviderId,
+      providerPaymentId: resolvedPaymentId,
+      providerCustomerId,
+      providerSubscriptionId,
+      amount: paymentIntent.amount,
+      currency: paymentIntent.currency.toUpperCase(),
+      paidAt:
+        paymentIntent.status === 'succeeded' ? new Date() : null,
+      paymentStatus:
+        paymentIntent.status === 'succeeded'
+          ? PaymentStatus.SUCCESS
+          : PaymentStatus.PENDING,
+    });
   }
 }

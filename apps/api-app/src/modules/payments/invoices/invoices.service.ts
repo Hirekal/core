@@ -19,11 +19,13 @@ import {
   RecordStatus,
   PaymentStatus,
   InvoiceStatus,
+  PaymentProviderCode,
 } from '../common/enums/payment.enums';
 import { ProviderInvoiceResult } from '../providers/payment-provider.interface';
 import { toMajorAmount } from '../common/utils/currency-amount.util';
 import { PricesService } from '../prices/prices.service';
 import { formatPlanDisplayName } from '../common/utils/plan-display.util';
+import { StripeProvider } from '../providers/stripe/stripe.provider';
 
 export interface InvoiceResponse {
   id: string;
@@ -58,6 +60,7 @@ export class InvoicesService {
     private readonly paymentsRecordService: PaymentsRecordService,
     private readonly paymentProviderRegistry: PaymentProviderRegistry,
     private readonly pricesService: PricesService,
+    private readonly stripeProvider: StripeProvider,
   ) {}
 
   /*
@@ -104,6 +107,8 @@ export class InvoicesService {
         ),
       );
 
+      await this.backfillPaymentSubscriptions(customer.userId);
+
       return Promise.all(
         (
           await this.invoicesRepository.find({
@@ -134,23 +139,29 @@ export class InvoicesService {
         provider.code,
         providerResult,
       );
-      const syncedProviderResult: ProviderInvoiceResult = {
-        ...providerResult,
-        planName: resolvedPlanName ?? providerResult.planName ?? null,
-      };
 
       let subscriptionId: string | null = null;
       if (providerResult.providerSubscriptionId) {
-        const subscription =
-          await this.subscriptionsService.findByProviderSubscriptionId(
-            providerResult.providerSubscriptionId,
-            provider.code,
-          );
-        subscriptionId = subscription?.id ?? null;
+        subscriptionId = await this.resolveSubscriptionId(
+          userId,
+          paymentProviderId,
+          provider.code,
+          providerResult.providerSubscriptionId,
+        );
       }
 
+      const providerPaymentId = await this.resolveProviderPaymentId(
+        provider.code,
+        providerResult,
+      );
+      const syncedProviderResult: ProviderInvoiceResult = {
+        ...providerResult,
+        planName: resolvedPlanName ?? providerResult.planName ?? null,
+        providerPaymentId,
+      };
+
       let paymentId: string | null = null;
-      if (providerResult.providerPaymentId && providerResult.amountPaid > 0) {
+      if (providerPaymentId && providerResult.amountPaid > 0) {
         const customer =
           await this.paymentCustomersService.findByUserAndPaymentProviderId(
             userId,
@@ -161,7 +172,7 @@ export class InvoicesService {
             .syncFromProviderResult(
               provider.code,
               {
-                providerPaymentId: providerResult.providerPaymentId,
+                providerPaymentId,
                 providerCustomerId: customer.providerCustomerId,
                 providerSubscriptionId: providerResult.providerSubscriptionId,
                 amount: providerResult.amountPaid,
@@ -174,10 +185,28 @@ export class InvoicesService {
                 paidAt: providerResult.paidAt,
               },
               userId,
+              subscriptionId,
             )
-            .catch(() => null);
+            .catch((error) => {
+              this.logger.warn(
+                `Payment sync skipped for invoice ${providerResult.providerInvoiceId}`,
+                error,
+              );
+              return null;
+            });
           paymentId = payment?.id ?? null;
         }
+      }
+
+      if (subscriptionId) {
+        await this.paymentsRecordService.linkSubscription({
+          userId,
+          paymentProviderId: provider.id,
+          subscriptionId,
+          providerPaymentId,
+          amount: providerResult.amountPaid,
+          currency: providerResult.currency,
+        });
       }
 
       const existingInvoice = await this.invoicesRepository.findOne({
@@ -189,8 +218,8 @@ export class InvoicesService {
 
       if (existingInvoice) {
         Object.assign(existingInvoice, {
-          subscriptionId,
-          paymentId,
+          subscriptionId: subscriptionId ?? existingInvoice.subscriptionId,
+          paymentId: paymentId ?? existingInvoice.paymentId,
           amountDue: providerResult.amountDue,
           amountPaid: providerResult.amountPaid,
           currency: providerResult.currency,
@@ -286,6 +315,12 @@ export class InvoicesService {
     }
     if (providerResult.providerPriceId) {
       metadata.providerPriceId = providerResult.providerPriceId;
+    }
+    if (providerResult.providerSubscriptionId) {
+      metadata.providerSubscriptionId = providerResult.providerSubscriptionId;
+    }
+    if (providerResult.providerPaymentId) {
+      metadata.providerPaymentId = providerResult.providerPaymentId;
     }
     if (providerResult.receiptUrl) {
       metadata.receiptUrl = providerResult.receiptUrl;
@@ -436,5 +471,110 @@ export class InvoicesService {
       price.interval,
       price.intervalCount ?? 1,
     );
+  }
+
+  /*
+   * Links an invoice to a local subscription, syncing from Stripe when missing.
+   */
+  private async resolveSubscriptionId(
+    userId: string,
+    paymentProviderId: string,
+    providerCode: string,
+    providerSubscriptionId: string,
+  ): Promise<string | null> {
+    const existingSubscription =
+      await this.subscriptionsService.findByProviderSubscriptionId(
+        providerSubscriptionId,
+        providerCode,
+      );
+    if (existingSubscription) {
+      return existingSubscription.id;
+    }
+
+    const customer =
+      await this.paymentCustomersService.findByUserAndPaymentProviderId(
+        userId,
+        paymentProviderId,
+      );
+    if (!customer) {
+      return null;
+    }
+
+    const syncedSubscription =
+      await this.subscriptionsService.syncFromStripeCheckout({
+        userId,
+        providerCode,
+        providerCustomerId: customer.providerCustomerId,
+        providerSubscriptionId,
+      });
+
+    return syncedSubscription?.id ?? null;
+  }
+
+  /*
+   * Resolves a Stripe payment intent ID, fetching the invoice when list data is sparse.
+   */
+  private async resolveProviderPaymentId(
+    providerCode: string,
+    providerResult: ProviderInvoiceResult,
+  ): Promise<string | null> {
+    if (providerResult.providerPaymentId) {
+      return providerResult.providerPaymentId;
+    }
+
+    if (providerCode !== PaymentProviderCode.STRIPE) {
+      return null;
+    }
+
+    return this.stripeProvider.retrieveInvoicePaymentIntentId(
+      providerResult.providerInvoiceId,
+    );
+  }
+
+  /*
+   * Backfills payment.subscriptionId from synced invoice rows for a user.
+   */
+  private async backfillPaymentSubscriptions(userId: string): Promise<void> {
+    const invoices = await this.invoicesRepository.find({
+      where: { userId },
+      select: {
+        id: true,
+        subscriptionId: true,
+        paymentId: true,
+        amountPaid: true,
+        currency: true,
+        paymentProviderId: true,
+        metadata: true,
+      },
+    });
+
+    for (const invoice of invoices) {
+      if (!invoice.subscriptionId) {
+        continue;
+      }
+
+      if (invoice.paymentId) {
+        await this.paymentsRecordService.setSubscriptionId(
+          invoice.paymentId,
+          invoice.subscriptionId,
+        );
+        continue;
+      }
+
+      const metadata = invoice.metadata ?? {};
+      const providerPaymentId =
+        typeof metadata.providerPaymentId === 'string'
+          ? metadata.providerPaymentId
+          : null;
+
+      await this.paymentsRecordService.linkSubscription({
+        userId,
+        paymentProviderId: invoice.paymentProviderId,
+        subscriptionId: invoice.subscriptionId,
+        providerPaymentId,
+        amount: invoice.amountPaid,
+        currency: invoice.currency,
+      });
+    }
   }
 }

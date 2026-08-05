@@ -394,9 +394,13 @@ export default function PricingPlansPage() {
   const shouldShowPlans = !subscription || showChangePlans;
 
   const handleChangePlan = () => {
-    setShowChangePlans(true);
-    window.requestAnimationFrame(() => {
-      plansSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
+    setShowChangePlans((visible) => {
+      if (!visible) {
+        window.requestAnimationFrame(() => {
+          plansSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
+        });
+      }
+      return !visible;
     });
   };
 
@@ -432,6 +436,7 @@ export default function PricingPlansPage() {
           scheduledPlanChangeAt={scheduledPlan ? scheduledPlanChangeAt : null}
           manageable
           processing={processing}
+          changePlansVisible={showChangePlans}
           onChangePlan={handleChangePlan}
           onCancel={() => setCancelOpen(true)}
           onResume={() => setResumeOpen(true)}

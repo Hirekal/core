@@ -3,7 +3,7 @@
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, IsNull } from 'typeorm';
 import { Payment } from './entities/payment.entity';
 import { PaymentProvidersService } from '../payment-providers/payment-providers.service';
 import { PaymentCustomersService } from '../payment-customers/payment-customers.service';
@@ -13,7 +13,7 @@ import {
   ERROR_MESSAGES,
   LOG_MESSAGES,
 } from '../common/messages/payment.messages';
-import { RecordStatus } from '../common/enums/payment.enums';
+import { RecordStatus, PaymentStatus } from '../common/enums/payment.enums';
 import { ProviderPaymentResult } from '../providers/payment-provider.interface';
 
 @Injectable()
@@ -51,6 +51,7 @@ export class PaymentsRecordService {
     providerCode: string,
     providerResult: ProviderPaymentResult,
     userId?: string,
+    knownSubscriptionId?: string | null,
   ): Promise<Payment> {
     try {
       const provider =
@@ -65,14 +66,15 @@ export class PaymentsRecordService {
         throw new Error(ERROR_MESSAGES.PAYMENT_CUSTOMER.NOT_FOUND);
       }
 
-      let subscriptionId: string | null = null;
-      if (providerResult.providerSubscriptionId) {
-        const subscription =
-          await this.subscriptionsService.findByProviderSubscriptionId(
-            providerResult.providerSubscriptionId,
-            providerCode,
-          );
-        subscriptionId = subscription?.id ?? null;
+      const resolvedUserId = userId ?? customer.userId;
+      let subscriptionId = knownSubscriptionId ?? null;
+      if (!subscriptionId && providerResult.providerSubscriptionId) {
+        subscriptionId = await this.resolveSubscriptionId(
+          resolvedUserId,
+          provider.id,
+          providerCode,
+          providerResult.providerSubscriptionId,
+        );
       }
 
       const existingPayment = await this.paymentsRepository.findOne({
@@ -82,6 +84,13 @@ export class PaymentsRecordService {
         },
       });
 
+      const resolvedSubscriptionId =
+        knownSubscriptionId ?? subscriptionId ?? existingPayment?.subscriptionId ?? null;
+
+      if (providerResult.providerSubscriptionId && !resolvedSubscriptionId) {
+        throw new Error(ERROR_MESSAGES.PAYMENT.SUBSCRIPTION_NOT_LINKED);
+      }
+
       if (existingPayment) {
         Object.assign(existingPayment, {
           amount: providerResult.amount,
@@ -89,16 +98,16 @@ export class PaymentsRecordService {
           paymentMethod: providerResult.paymentMethod,
           paymentStatus: providerResult.paymentStatus,
           paidAt: providerResult.paidAt,
-          subscriptionId,
+          subscriptionId: resolvedSubscriptionId,
           status: RecordStatus.ACTIVE,
         });
         return this.paymentsRepository.save(existingPayment);
       }
 
       return BaseRepository.createAndSave(this.paymentsRepository, {
-        userId: userId ?? customer.userId,
+        userId: resolvedUserId,
         customerId: customer.id,
-        subscriptionId,
+        subscriptionId: resolvedSubscriptionId,
         paymentProviderId: provider.id,
         providerPaymentId: providerResult.providerPaymentId,
         amount: providerResult.amount,
@@ -115,6 +124,160 @@ export class PaymentsRecordService {
         error,
       );
       throw error;
+    }
+  }
+
+  /*
+   * Upserts a payment row after checkout with a known subscription link.
+   */
+  async upsertAfterCheckout(input: {
+    userId: string;
+    customerId: string;
+    subscriptionId: string;
+    paymentProviderId: string;
+    providerPaymentId: string;
+    providerCustomerId: string;
+    providerSubscriptionId: string;
+    amount: number;
+    currency: string;
+    paidAt?: Date | null;
+    paymentStatus: PaymentStatus;
+  }): Promise<Payment> {
+    const existingPayment = await this.paymentsRepository.findOne({
+      where: {
+        paymentProviderId: input.paymentProviderId,
+        providerPaymentId: input.providerPaymentId,
+      },
+    });
+
+    if (existingPayment) {
+      Object.assign(existingPayment, {
+        amount: input.amount,
+        currency: input.currency.toUpperCase(),
+        paymentStatus: input.paymentStatus,
+        paidAt: input.paidAt ?? existingPayment.paidAt,
+        subscriptionId: input.subscriptionId,
+        status: RecordStatus.ACTIVE,
+      });
+      return this.paymentsRepository.save(existingPayment);
+    }
+
+    return BaseRepository.createAndSave(this.paymentsRepository, {
+      userId: input.userId,
+      customerId: input.customerId,
+      subscriptionId: input.subscriptionId,
+      paymentProviderId: input.paymentProviderId,
+      providerPaymentId: input.providerPaymentId,
+      amount: input.amount,
+      currency: input.currency.toUpperCase(),
+      paymentMethod: null,
+      paymentStatus: input.paymentStatus,
+      paidAt: input.paidAt ?? null,
+      status: RecordStatus.ACTIVE,
+      metadata: {},
+    });
+  }
+
+  /*
+   * Links a payment to a local subscription, syncing from Stripe when missing.
+   */
+  private async resolveSubscriptionId(
+    userId: string,
+    paymentProviderId: string,
+    providerCode: string,
+    providerSubscriptionId: string,
+  ): Promise<string | null> {
+    const existingSubscription =
+      await this.subscriptionsService.findByProviderSubscriptionId(
+        providerSubscriptionId,
+        providerCode,
+      );
+    if (existingSubscription) {
+      return existingSubscription.id;
+    }
+
+    const customer =
+      await this.paymentCustomersService.findByUserAndPaymentProviderId(
+        userId,
+        paymentProviderId,
+      );
+    if (!customer) {
+      return null;
+    }
+
+    const syncedSubscription =
+      await this.subscriptionsService.syncFromStripeCheckout({
+        userId,
+        providerCode,
+        providerCustomerId: customer.providerCustomerId,
+        providerSubscriptionId,
+      });
+
+    return syncedSubscription?.id ?? null;
+  }
+
+  /*
+   * Links existing payment rows to a subscription after invoice sync.
+   */
+  async linkSubscription(input: {
+    userId: string;
+    paymentProviderId: string;
+    subscriptionId: string;
+    providerPaymentId?: string | null;
+    amount?: number;
+    currency?: string;
+  }): Promise<void> {
+    if (input.providerPaymentId) {
+      const payment = await this.paymentsRepository.findOne({
+        where: {
+          paymentProviderId: input.paymentProviderId,
+          providerPaymentId: input.providerPaymentId,
+        },
+      });
+      if (payment) {
+        if (!payment.subscriptionId) {
+          payment.subscriptionId = input.subscriptionId;
+          await this.paymentsRepository.save(payment);
+        }
+        return;
+      }
+    }
+
+    if (!input.amount || input.amount <= 0 || !input.currency) {
+      return;
+    }
+
+    const candidates = await this.paymentsRepository.find({
+      where: {
+        userId: input.userId,
+        paymentProviderId: input.paymentProviderId,
+        amount: input.amount,
+        currency: input.currency.toUpperCase(),
+        subscriptionId: IsNull(),
+      },
+      order: { createdAt: 'DESC' },
+      take: 3,
+    });
+
+    for (const payment of candidates) {
+      payment.subscriptionId = input.subscriptionId;
+      await this.paymentsRepository.save(payment);
+    }
+  }
+
+  /*
+   * Sets subscriptionId on a payment when still unlinked.
+   */
+  async setSubscriptionId(
+    paymentId: string,
+    subscriptionId: string,
+  ): Promise<void> {
+    const payment = await this.paymentsRepository.findOne({
+      where: { id: paymentId },
+    });
+    if (payment && !payment.subscriptionId) {
+      payment.subscriptionId = subscriptionId;
+      await this.paymentsRepository.save(payment);
     }
   }
 }

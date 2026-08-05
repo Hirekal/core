@@ -409,12 +409,13 @@ export async function createCheckoutSession(input: {
  */
 export async function syncCheckoutSubscription(
   providerSubscriptionId: string,
+  providerPaymentId?: string,
 ): Promise<Subscription | null> {
   return withBillingErrorHandling(() =>
     apiRequest('/payments/checkout/sync', {
       method: 'POST',
       auth: true,
-      body: { providerSubscriptionId },
+      body: { providerSubscriptionId, providerPaymentId },
     }),
   );
 }

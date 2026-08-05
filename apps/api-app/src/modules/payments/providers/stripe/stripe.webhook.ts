@@ -312,7 +312,9 @@ export class StripeWebhookHandler {
       return;
     }
 
-    const mappedInvoice = this.stripeProvider.mapInvoice(invoice);
+    const mappedInvoice = await this.stripeProvider.retrieveInvoiceForSync(
+      invoice.id,
+    );
     await this.invoicesService.syncFromProviderResult(
       customer.paymentProviderId,
       customer.userId,
@@ -369,7 +371,7 @@ export class StripeWebhookHandler {
 
     await this.paymentsRecordService.syncFromProviderResult(
       PaymentProviderCode.STRIPE,
-      this.stripeProvider.mapPaymentIntent(paymentIntent),
+      await this.stripeProvider.mapPaymentIntentFromWebhook(paymentIntent),
       customer.userId,
     );
 
