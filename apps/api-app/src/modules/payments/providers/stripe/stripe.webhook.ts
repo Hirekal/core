@@ -352,10 +352,46 @@ export class StripeWebhookHandler {
     const providerSubscription = await this.stripeProvider.retrieveSubscription(
       providerSubscriptionId,
     );
-    await this.subscriptionsService.syncFromProviderResult(
-      existingSubscription,
-      providerSubscription,
+    const price = await this.pricesService.findByProviderPriceId(
+      providerSubscription.providerPriceId,
+      PaymentProviderCode.STRIPE,
     );
+
+    const invoicePaid = mappedInvoice.invoiceStatus === InvoiceStatus.PAID;
+    const pendingUpgrade = this.subscriptionsService.hasPendingUpgrade(
+      existingSubscription.metadata,
+    );
+
+    if (invoicePaid) {
+      await this.stripeProvider.finalizePendingUpgradeCheckout(
+        providerSubscriptionId,
+      );
+    }
+
+    if (invoicePaid && pendingUpgrade && price) {
+      await this.subscriptionsService.syncFromProviderResult(
+        existingSubscription,
+        providerSubscription,
+        this.subscriptionsService.clearPendingUpgradeMetadata(
+          existingSubscription.metadata,
+        ),
+        price.id,
+      );
+    } else {
+      const priceUpdate = this.subscriptionsService.resolveWebhookPriceUpdate(
+        existingSubscription,
+        providerSubscription.providerPriceId,
+        price,
+        providerSubscription.subscriptionStatus,
+      );
+
+      await this.subscriptionsService.syncFromProviderResult(
+        existingSubscription,
+        providerSubscription,
+        priceUpdate.metadata ?? existingSubscription.metadata,
+        priceUpdate.priceId,
+      );
+    }
 
     const couponCode =
       (typeof existingSubscription.metadata?.couponCode === 'string'

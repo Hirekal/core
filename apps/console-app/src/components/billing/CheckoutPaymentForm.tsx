@@ -1,7 +1,7 @@
 /**
  * @fileoverview Custom checkout payment form styled like Stripe Checkout.
  */
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronDown } from 'lucide-react';
 import {
@@ -27,6 +27,7 @@ const checkoutBoxClass =
   'overflow-hidden rounded-md border border-[#e6ebf1] bg-white shadow-sm';
 
 const BILLING_COUNTRIES = [
+  { code: '', label: 'Country or region' },
   { code: 'US', label: 'United States' },
   { code: 'IN', label: 'India' },
   { code: 'GB', label: 'United Kingdom' },
@@ -66,6 +67,7 @@ interface CheckoutPaymentFormProps {
     providerSubscriptionId: string;
   }>;
   onCheckoutFailed?: () => Promise<void>;
+  onCheckoutSucceeded?: () => void;
   switchError?: string;
   onEmailChange: (value: string) => void;
   onNameChange: (value: string) => void;
@@ -85,6 +87,7 @@ export default function CheckoutPaymentForm({
   navigationState,
   prepareCheckout,
   onCheckoutFailed,
+  onCheckoutSucceeded,
   switchError = '',
   onEmailChange,
   onNameChange,
@@ -96,17 +99,13 @@ export default function CheckoutPaymentForm({
 
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
-  const [billingName, setBillingName] = useState(name);
-  const [billingCountry, setBillingCountry] = useState('US');
+  const [billingName, setBillingName] = useState('');
+  const [billingCountry, setBillingCountry] = useState('');
   const [billingAddress, setBillingAddress] = useState('');
   const [showManualAddress, setShowManualAddress] = useState(false);
   const [billingCity, setBillingCity] = useState('');
   const [billingState, setBillingState] = useState('');
   const [billingPostal, setBillingPostal] = useState('');
-
-  useEffect(() => {
-    setBillingName(name);
-  }, [name]);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -140,19 +139,36 @@ export default function CheckoutPaymentForm({
         throw new Error('Checkout is missing required Stripe configuration');
       }
 
+      const trimmedName = billingName.trim();
+      const trimmedLine1 = billingAddress.trim();
+      const trimmedCity = billingCity.trim();
+      const trimmedState = billingState.trim();
+      const trimmedPostal = billingPostal.trim();
+      const hasAddressDetails = Boolean(
+        trimmedLine1 ||
+          trimmedCity ||
+          trimmedState ||
+          trimmedPostal ||
+          billingCountry,
+      );
+
       const confirmation = await stripe.confirmCardPayment(resolvedClientSecret, {
         payment_method: {
           card: cardNumberElement,
           billing_details: {
-            email: email.trim(),
-            name: billingName.trim() || name.trim() || undefined,
-            address: {
-              line1: billingAddress.trim() || undefined,
-              city: billingCity.trim() || undefined,
-              state: billingState.trim() || undefined,
-              postal_code: billingPostal.trim() || undefined,
-              country: billingCountry,
-            },
+            email: email.trim() || undefined,
+            ...(trimmedName ? { name: trimmedName } : {}),
+            ...(hasAddressDetails
+              ? {
+                  address: {
+                    ...(trimmedLine1 ? { line1: trimmedLine1 } : {}),
+                    ...(trimmedCity ? { city: trimmedCity } : {}),
+                    ...(trimmedState ? { state: trimmedState } : {}),
+                    ...(trimmedPostal ? { postal_code: trimmedPostal } : {}),
+                    ...(billingCountry ? { country: billingCountry } : {}),
+                  },
+                }
+              : {}),
           },
         },
       });
@@ -164,6 +180,8 @@ export default function CheckoutPaymentForm({
       if (confirmation.paymentIntent?.status !== 'succeeded') {
         throw new Error('Payment could not be completed.');
       }
+
+      onCheckoutSucceeded?.();
 
       const subscription = await billingService.syncCheckoutSubscription(
         resolvedProviderSubscriptionId,
@@ -224,7 +242,10 @@ export default function CheckoutPaymentForm({
         </div>
 
         <div>
-          <h2 className="text-sm font-medium text-heading">Billing address</h2>
+          <h2 className="text-sm font-medium text-heading">
+            Billing address{' '}
+            <span className="font-normal text-muted">(optional)</span>
+          </h2>
           <div className={`mt-3 ${checkoutBoxClass}`}>
             <input
               type="text"
@@ -234,17 +255,19 @@ export default function CheckoutPaymentForm({
                 onNameChange(event.target.value);
               }}
               placeholder="Name"
-              required
+              autoComplete="name"
               className={`${checkoutFieldClass} border-b border-[#e6ebf1]`}
             />
             <div className="relative border-b border-[#e6ebf1]">
               <select
                 value={billingCountry}
                 onChange={(event) => setBillingCountry(event.target.value)}
-                className={`${checkoutFieldClass} appearance-none pr-10`}
+                className={`${checkoutFieldClass} appearance-none pr-10 ${
+                  billingCountry ? 'text-heading' : 'text-[#8898aa]'
+                }`}
               >
                 {BILLING_COUNTRIES.map((country) => (
-                  <option key={country.code} value={country.code}>
+                  <option key={country.code || 'blank'} value={country.code}>
                     {country.label}
                   </option>
                 ))}
@@ -259,6 +282,7 @@ export default function CheckoutPaymentForm({
               value={billingAddress}
               onChange={(event) => setBillingAddress(event.target.value)}
               placeholder="Address"
+              autoComplete="street-address"
               className={checkoutFieldClass}
             />
             {showManualAddress && (
@@ -268,6 +292,7 @@ export default function CheckoutPaymentForm({
                   value={billingCity}
                   onChange={(event) => setBillingCity(event.target.value)}
                   placeholder="City"
+                  autoComplete="address-level2"
                   className={`${checkoutFieldClass} border-t border-[#e6ebf1]`}
                 />
                 <div className="grid grid-cols-2 border-t border-[#e6ebf1]">
@@ -276,6 +301,7 @@ export default function CheckoutPaymentForm({
                     value={billingState}
                     onChange={(event) => setBillingState(event.target.value)}
                     placeholder="State"
+                    autoComplete="address-level1"
                     className={`${checkoutFieldClass} border-r border-[#e6ebf1]`}
                   />
                   <input
@@ -283,6 +309,7 @@ export default function CheckoutPaymentForm({
                     value={billingPostal}
                     onChange={(event) => setBillingPostal(event.target.value)}
                     placeholder="ZIP"
+                    autoComplete="postal-code"
                     className={checkoutFieldClass}
                   />
                 </div>

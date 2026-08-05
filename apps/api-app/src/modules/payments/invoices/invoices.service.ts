@@ -111,13 +111,25 @@ export class InvoicesService {
 
       await this.backfillPaymentSubscriptions(customer.organizationId);
 
+      // Payment history is charge receipts only: paid invoices with a real amount.
+      // $0 "paid" invoices appear from Stripe on plan changes/reverts with no charge.
+      const invoices = await this.invoicesRepository
+        .createQueryBuilder('invoice')
+        .where('invoice.organizationId = :organizationId', {
+          organizationId: customer.organizationId,
+        })
+        .andWhere('invoice.invoiceStatus = :paidStatus', {
+          paidStatus: InvoiceStatus.PAID,
+        })
+        .andWhere('invoice.amountPaid > 0')
+        .orderBy('invoice.paidAt', 'DESC', 'NULLS LAST')
+        .addOrderBy('invoice.createdAt', 'DESC')
+        .getMany();
+
       return Promise.all(
-        (
-          await this.invoicesRepository.find({
-            where: { organizationId: customer.organizationId },
-            order: { createdAt: 'DESC' },
-          })
-        ).map((invoice) => this.formatInvoiceForApi(invoice, provider.code)),
+        invoices.map((invoice) =>
+          this.formatInvoiceForApi(invoice, provider.code),
+        ),
       );
     } catch (error) {
       this.logger.error(LOG_MESSAGES.INVOICE.LIST_FAILED(customerId), error);
@@ -400,7 +412,14 @@ export class InvoicesService {
       return fromAmount;
     }
 
-    return providerResult.planName ?? null;
+    if (
+      providerResult.planName &&
+      !this.isProrationPlanDescription(providerResult.planName)
+    ) {
+      return providerResult.planName;
+    }
+
+    return null;
   }
 
   /*
@@ -432,10 +451,25 @@ export class InvoicesService {
     }
 
     if (typeof metadata.planName === 'string' && metadata.planName.length > 0) {
-      return metadata.planName;
+      if (!this.isProrationPlanDescription(metadata.planName)) {
+        return metadata.planName;
+      }
     }
 
     return null;
+  }
+
+  /*
+   * Stripe proration line copy should not be shown as the plan name.
+   */
+  private isProrationPlanDescription(description: string): boolean {
+    const normalized = description.trim().toLowerCase();
+    return (
+      normalized.includes('unused time') ||
+      normalized.includes('remaining time') ||
+      normalized.includes('proration') ||
+      normalized.startsWith('time on ')
+    );
   }
 
   /*

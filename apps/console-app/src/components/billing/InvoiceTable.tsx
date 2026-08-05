@@ -99,7 +99,7 @@ export default function InvoiceTable({
           <Button
             variant="ghost"
             size="sm"
-            className="justify-start px-0"
+            className="justify-start !px-0"
             disabled={!row.invoicePdf && !row.invoiceUrl}
             onClick={(event) => {
               event.stopPropagation();

@@ -36,6 +36,7 @@ import type { Subscription } from './subscriptions/entities/subscription.entity'
 import { SyncCheckoutSubscriptionDto } from './common/dto/sync-checkout-subscription.dto';
 import { resolveStripeResourceId } from './common/utils/payment-mapper.util';
 import { CouponsService } from './coupons/coupons.service';
+import { SUBSCRIPTION_METADATA_KEYS } from './common/constants/subscription.constants';
 
 @Injectable()
 export class PaymentsService {
@@ -216,8 +217,37 @@ export class PaymentsService {
         throw new ForbiddenException(ERROR_MESSAGES.SUBSCRIPTION.NOT_FOUND);
       }
 
+      const pendingUpgradePriceId =
+        typeof metadata[SUBSCRIPTION_METADATA_KEYS.PENDING_UPGRADE_PRICE_ID] ===
+        'string'
+          ? metadata[SUBSCRIPTION_METADATA_KEYS.PENDING_UPGRADE_PRICE_ID]
+          : undefined;
+      const hadPendingUpgrade = Boolean(
+        metadata[
+          SUBSCRIPTION_METADATA_KEYS.PENDING_UPGRADE_PROVIDER_PRICE_ID
+        ] || metadata[SUBSCRIPTION_METADATA_KEYS.PREVIOUS_PROVIDER_PRICE_ID],
+      );
+
+      if (hadPendingUpgrade) {
+        const paymentProvider = this.paymentProviderRegistry.resolve(
+          PaymentProviderCode.STRIPE,
+        );
+        await paymentProvider.finalizePendingUpgradeCheckout(
+          providerSubscriptionId,
+        );
+        stripeSubscription = await stripe.subscriptions.retrieve(
+          providerSubscriptionId,
+        );
+      }
+
       const providerCustomerId = resolveStripeResourceId(
         stripeSubscription.customer,
+      );
+
+      const clearedMetadata = this.subscriptionsService.clearPendingUpgradeMetadata(
+        {
+          ...(stripeSubscription.metadata ?? {}),
+        },
       );
 
       const subscription = await this.subscriptionsService.syncFromStripeCheckout(
@@ -226,8 +256,11 @@ export class PaymentsService {
           providerCode: PaymentProviderCode.STRIPE,
           providerCustomerId,
           providerSubscriptionId,
-          priceId: metadata.priceId,
-          metadata: metadata as Record<string, unknown>,
+          priceId:
+            (typeof stripeSubscription.metadata?.priceId === 'string'
+              ? stripeSubscription.metadata.priceId
+              : undefined) ?? pendingUpgradePriceId,
+          metadata: clearedMetadata,
         },
       );
 

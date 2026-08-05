@@ -81,15 +81,34 @@ export default function CheckoutOrderSummary({
       </div>
 
       <div className="mt-10">
-        <p className="text-sm text-muted">{isUpgrade ? 'Upgrade to' : 'Subscribe to'}</p>
-        <p className="mt-1 text-3xl font-semibold tracking-tight text-heading sm:text-4xl">
-          {formatMoney(totalDue, price.currency)}
-        </p>
-        <p className="mt-1 text-sm text-muted">
-          {isUpgrade
-            ? 'Prorated amount due today'
-            : `per ${formatIntervalShort(price.interval, price.intervalCount ?? 1).replace('Per ', '').toLowerCase()}`}
-        </p>
+        {isUpgrade ? (
+          <>
+            <p className="text-sm text-muted">Upgrade to</p>
+            <p className="mt-1 text-3xl font-semibold tracking-tight text-heading sm:text-4xl">
+              {product.name}
+            </p>
+            <p className="mt-2 text-sm text-muted">
+              {formatMoney(price.amount, price.currency)}{' '}
+              {formatIntervalShort(price.interval, price.intervalCount ?? 1)
+                .replace(/^Per /i, '')
+                .toLowerCase()}
+              , billed going forward
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-muted">Subscribe to</p>
+            <p className="mt-1 text-3xl font-semibold tracking-tight text-heading sm:text-4xl">
+              {formatMoney(totalDue, price.currency)}
+            </p>
+            <p className="mt-1 text-sm text-muted">
+              per{' '}
+              {formatIntervalShort(price.interval, price.intervalCount ?? 1)
+                .replace(/^Per /i, '')
+                .toLowerCase()}
+            </p>
+          </>
+        )}
       </div>
 
       {!isUpgrade && onBillingPeriodChange && billingPeriod && availablePeriods && (
@@ -189,7 +208,7 @@ export default function CheckoutOrderSummary({
         </div>
       )}
 
-      <div className="mt-auto space-y-3 border-t border-black/10 pt-6 text-sm">
+      <div className="mt-6 space-y-3 border-t border-black/10 pt-6 text-sm">
         <div className="flex items-center justify-between gap-4">
           <span className="text-muted">{isUpgrade ? 'Prorated charge' : 'Subtotal'}</span>
           <span className="text-heading">
@@ -213,7 +232,7 @@ export default function CheckoutOrderSummary({
         </div>
       </div>
 
-      <p className="mt-8 text-xs text-muted">
+      <p className="mt-auto pt-8 text-xs text-muted">
         Powered by <span className="font-medium text-heading">stripe</span>
       </p>
     </div>

@@ -1,7 +1,7 @@
 /**
  * @fileoverview Custom checkout for prorated plan upgrades.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Elements } from '@stripe/react-stripe-js';
 import { loadStripe, type Stripe } from '@stripe/stripe-js';
@@ -39,6 +39,13 @@ export default function UpgradeCheckoutPage() {
   const [appliedCoupon, setAppliedCoupon] = useState<ValidatedCoupon | null>(null);
   const [couponApplying, setCouponApplying] = useState(false);
   const [couponError, setCouponError] = useState('');
+  const upgradePreparedRef = useRef(false);
+  const subscriptionIdRef = useRef<string | null>(null);
+  const upgradeSucceededRef = useRef(false);
+
+  useEffect(() => {
+    subscriptionIdRef.current = subscriptionId;
+  }, [subscriptionId]);
 
   useEffect(() => {
     if (!priceId) {
@@ -56,10 +63,19 @@ export default function UpgradeCheckoutPage() {
       try {
         setLoading(true);
         setError('');
+        upgradePreparedRef.current = false;
+        upgradeSucceededRef.current = false;
 
         const subscription = await billingService.getMySubscription();
         if (!subscription) {
           throw new Error('You need an active subscription before upgrading.');
+        }
+
+        // Clear any unpaid upgrade left from a failed/abandoned attempt.
+        try {
+          await billingService.cancelPendingUpgradeCheckout(subscription.id);
+        } catch {
+          // Ignore cleanup failures; preview/create also restore state.
         }
 
         const [loadedPrice, planChangePreview, checkoutConfig] = await Promise.all([
@@ -78,7 +94,11 @@ export default function UpgradeCheckoutPage() {
 
         if (!cancelled) {
           setPrice(loadedPrice);
-          setCurrentProductName(subscription.price?.product?.name ?? null);
+          setCurrentProductName(
+            planChangePreview.currentPlan.product?.name ??
+              subscription.price?.product?.name ??
+              null,
+          );
           setSubscriptionId(subscription.id);
           setEmail(user.email);
           setName(user.name ?? '');
@@ -102,6 +122,16 @@ export default function UpgradeCheckoutPage() {
 
     return () => {
       cancelled = true;
+      const preparedSubscriptionId = subscriptionIdRef.current;
+      if (
+        upgradePreparedRef.current &&
+        !upgradeSucceededRef.current &&
+        preparedSubscriptionId
+      ) {
+        void billingService
+          .cancelPendingUpgradeCheckout(preparedSubscriptionId)
+          .catch(() => undefined);
+      }
     };
   }, [navigate, priceId, user]);
 
@@ -226,13 +256,21 @@ export default function UpgradeCheckoutPage() {
                 setAmountDue(checkoutSession.amountDue);
               }
 
+              upgradePreparedRef.current = true;
+              upgradeSucceededRef.current = false;
+
               return {
                 clientSecret: checkoutSession.clientSecret,
                 providerSubscriptionId: checkoutSession.providerSubscriptionId,
               };
             }}
             onCheckoutFailed={async () => {
+              upgradePreparedRef.current = false;
               await billingService.cancelPendingUpgradeCheckout(subscriptionId);
+            }}
+            onCheckoutSucceeded={() => {
+              upgradeSucceededRef.current = true;
+              upgradePreparedRef.current = false;
             }}
             onEmailChange={setEmail}
             onNameChange={setName}

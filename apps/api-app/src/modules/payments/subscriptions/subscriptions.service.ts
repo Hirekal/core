@@ -213,10 +213,12 @@ export class SubscriptionsService {
     couponCode?: string,
   ): Promise<ProviderUpgradeCheckoutSessionResult & { publishableKey: string }> {
     try {
-      const subscription = await this.loadChangeableSubscription(
+      // Unpaid upgrade attempts leave Stripe on the new price; restore first.
+      let subscription = await this.loadChangeableSubscription(
         subscriptionId,
         organizationId,
       );
+      subscription = await this.revertUnpaidUpgradeCheckout(subscription);
 
       const currentPrice = await this.ensureCurrentPrice(subscription);
       const newPrice = await this.pricesService.findOne(newPriceId);
@@ -302,23 +304,7 @@ export class SubscriptionsService {
     try {
       const subscription = await this.findOne(subscriptionId);
       this.assertOrganizationOwnership(subscription, organizationId);
-
-      const provider = await this.paymentProvidersService.findById(
-        subscription.paymentProviderId,
-      );
-      const paymentProvider = this.paymentProviderRegistry.resolve(
-        provider.code,
-      );
-
-      const providerResult = await paymentProvider.revertPendingUpgradeCheckout(
-        subscription.providerSubscriptionId,
-      );
-
-      return this.syncFromProviderResult(
-        subscription,
-        providerResult,
-        this.clearPendingUpgradeMetadata(subscription.metadata),
-      );
+      return this.revertUnpaidUpgradeCheckout(subscription);
     } catch (error) {
       this.logger.error(
         LOG_MESSAGES.SUBSCRIPTION.CHANGE_PLAN_FAILED(subscriptionId),
@@ -326,6 +312,55 @@ export class SubscriptionsService {
       );
       rethrowStripeError(error);
     }
+  }
+
+  /*
+   * Restores the previous plan when an upgrade was applied on Stripe but not paid.
+   * No-ops when there is nothing to revert.
+   */
+  async revertUnpaidUpgradeCheckout(
+    subscription: Subscription,
+  ): Promise<Subscription> {
+    const previousPriceId =
+      typeof subscription.metadata?.[
+        SUBSCRIPTION_METADATA_KEYS.PREVIOUS_PRICE_ID
+      ] === 'string'
+        ? (subscription.metadata[
+            SUBSCRIPTION_METADATA_KEYS.PREVIOUS_PRICE_ID
+          ] as string)
+        : undefined;
+    const hadLocalPendingUpgrade =
+      this.hasPendingUpgrade(subscription.metadata) || Boolean(previousPriceId);
+
+    const provider = await this.paymentProvidersService.findById(
+      subscription.paymentProviderId,
+    );
+    const paymentProvider = this.paymentProviderRegistry.resolve(provider.code);
+
+    const providerResult = await paymentProvider.revertPendingUpgradeCheckout(
+      subscription.providerSubscriptionId,
+    );
+
+    const mappedPrice = providerResult.providerPriceId
+      ? await this.pricesService.findByProviderPriceId(
+          providerResult.providerPriceId,
+          provider.code,
+        )
+      : null;
+
+    const providerPriceDiffers =
+      Boolean(mappedPrice?.id) && mappedPrice!.id !== subscription.priceId;
+
+    if (!hadLocalPendingUpgrade && !providerPriceDiffers) {
+      return subscription;
+    }
+
+    return this.syncFromProviderResult(
+      subscription,
+      providerResult,
+      this.clearPendingUpgradeMetadata(subscription.metadata),
+      mappedPrice?.id ?? previousPriceId,
+    );
   }
 
   /*
@@ -372,8 +407,10 @@ export class SubscriptionsService {
         id,
         organizationId,
       );
+      const restoredSubscription =
+        await this.revertUnpaidUpgradeCheckout(subscription);
 
-      const currentPrice = await this.ensureCurrentPrice(subscription);
+      const currentPrice = await this.ensureCurrentPrice(restoredSubscription);
       const newPrice = await this.pricesService.findOne(newPriceId);
       const direction = comparePlans(currentPrice, newPrice);
       if (direction === PlanChangeDirection.SAME) {
@@ -381,7 +418,7 @@ export class SubscriptionsService {
       }
 
       const provider = await this.paymentProvidersService.findById(
-        subscription.paymentProviderId,
+        restoredSubscription.paymentProviderId,
       );
       const paymentProvider = this.paymentProviderRegistry.resolve(
         provider.code,
@@ -392,8 +429,10 @@ export class SubscriptionsService {
 
       const planChangePreviewResult =
         await paymentProvider.previewSubscriptionPlanChange({
-          providerCustomerId: subscription.customer.providerCustomerId,
-          providerSubscriptionId: subscription.providerSubscriptionId,
+          providerCustomerId:
+            restoredSubscription.customer.providerCustomerId,
+          providerSubscriptionId:
+            restoredSubscription.providerSubscriptionId,
           providerPriceId: newPrice.providerPriceId,
           providerCouponId: stripeDiscount?.id ?? null,
         });
@@ -759,20 +798,8 @@ export class SubscriptionsService {
       typeof pendingUpgradeProviderPriceId === 'string' &&
       pendingUpgradeProviderPriceId.length > 0
     ) {
-      if (
-        activeProviderPriceId === pendingUpgradeProviderPriceId &&
-        mappedPrice &&
-        (subscriptionStatus === SubscriptionStatus.ACTIVE ||
-          subscriptionStatus === SubscriptionStatus.TRIALING)
-      ) {
-        return {
-          priceId: mappedPrice.id,
-          metadata: this.clearPendingUpgradeMetadata(
-            this.clearScheduledChangeMetadata(subscription.metadata),
-          ),
-        };
-      }
-
+      // Stripe applies the new price before payment succeeds. Keep the local
+      // plan on the previous price until checkout sync / paid invoice finalizes.
       return {};
     }
 
@@ -821,14 +848,16 @@ export class SubscriptionsService {
       if (activeSubscription) {
         const refreshedSubscription =
           await this.refreshFromProvider(activeSubscription);
+        const restoredSubscription =
+          await this.revertUnpaidUpgradeCheckout(refreshedSubscription);
         if (
           CHANGEABLE_SUBSCRIPTION_STATUSES.includes(
-            refreshedSubscription.subscriptionStatus as (typeof CHANGEABLE_SUBSCRIPTION_STATUSES)[number],
+            restoredSubscription.subscriptionStatus as (typeof CHANGEABLE_SUBSCRIPTION_STATUSES)[number],
           ) ||
-          refreshedSubscription.subscriptionStatus ===
+          restoredSubscription.subscriptionStatus ===
             SubscriptionStatus.PAST_DUE
         ) {
-          return refreshedSubscription;
+          return restoredSubscription;
         }
       }
 
@@ -946,11 +975,13 @@ export class SubscriptionsService {
         providerResult.subscriptionStatus,
       );
       const hasScheduledChange = this.hasScheduledChange(subscription.metadata);
+      const hasPendingUpgrade = this.hasPendingUpgrade(subscription.metadata);
       const resolvedPriceId =
-        priceUpdate.priceId ?? (hasScheduledChange ? undefined : price?.id);
+        priceUpdate.priceId ??
+        (hasScheduledChange || hasPendingUpgrade ? undefined : price?.id);
       const metadata =
         priceUpdate.metadata ??
-        (hasScheduledChange
+        (hasScheduledChange || hasPendingUpgrade
           ? subscription.metadata
           : this.clearScheduledChangeMetadata(subscription.metadata));
 

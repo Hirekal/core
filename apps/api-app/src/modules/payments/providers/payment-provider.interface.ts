@@ -227,6 +227,9 @@ export interface PaymentProvider {
   revertPendingUpgradeCheckout(
     providerSubscriptionId: string,
   ): Promise<ProviderSubscriptionResult>;
+  finalizePendingUpgradeCheckout(
+    providerSubscriptionId: string,
+  ): Promise<ProviderSubscriptionResult>;
   retrieveCheckoutSession(sessionId: string): Promise<{
     status: string | null;
     providerSubscriptionId: string | null;

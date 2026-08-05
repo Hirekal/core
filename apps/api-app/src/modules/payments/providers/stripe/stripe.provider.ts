@@ -1,7 +1,7 @@
 /**
  * @fileoverview Stripe payment provider implementation.
  */
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import Stripe from 'stripe';
 import {
   PaymentProvider,
@@ -62,6 +62,7 @@ function buildStripeDiscounts(input: {
 @Injectable()
 export class StripeProvider implements PaymentProvider {
   readonly code = PaymentProviderCode.STRIPE;
+  private readonly logger = new Logger(StripeProvider.name);
 
   constructor(private readonly stripeService: StripeService) {}
 
@@ -788,8 +789,24 @@ export class StripeProvider implements PaymentProvider {
         subscription.metadata?.[
           SUBSCRIPTION_METADATA_KEYS.PREVIOUS_PROVIDER_PRICE_ID
         ];
-      if (!previousProviderPriceId) {
+      const pendingUpgradeProviderPriceId =
+        subscription.metadata?.[
+          SUBSCRIPTION_METADATA_KEYS.PENDING_UPGRADE_PROVIDER_PRICE_ID
+        ];
+
+      if (!previousProviderPriceId && !pendingUpgradeProviderPriceId) {
         return this.mapSubscription(subscription);
+      }
+
+      const latestInvoice = subscription.latest_invoice;
+      const latestInvoiceStatus =
+        latestInvoice && typeof latestInvoice === 'object'
+          ? latestInvoice.status
+          : null;
+
+      // Paid upgrade still carrying checkout metadata — finalize, don't revert.
+      if (latestInvoiceStatus === 'paid') {
+        return this.finalizePendingUpgradeCheckout(providerSubscriptionId);
       }
 
       const subscriptionItem = subscription.items.data[0];
@@ -797,10 +814,29 @@ export class StripeProvider implements PaymentProvider {
         throw new BadRequestException(ERROR_MESSAGES.SUBSCRIPTION.NOT_FOUND);
       }
 
-      const latestInvoice = subscription.latest_invoice;
+      const currentProviderPriceId = resolveStripeResourceId(
+        subscriptionItem.price,
+      );
+
       if (latestInvoice && typeof latestInvoice === 'object') {
         if (latestInvoice.status === 'open') {
-          await stripe.invoices.voidInvoice(latestInvoice.id);
+          try {
+            await stripe.invoices.voidInvoice(latestInvoice.id);
+          } catch (voidError) {
+            this.logger.warn(
+              `Failed to void open invoice ${latestInvoice.id} while reverting upgrade`,
+              voidError,
+            );
+          }
+        } else if (latestInvoice.status === 'draft') {
+          try {
+            await stripe.invoices.del(latestInvoice.id);
+          } catch (deleteError) {
+            this.logger.warn(
+              `Failed to delete draft invoice ${latestInvoice.id} while reverting upgrade`,
+              deleteError,
+            );
+          }
         }
       }
 
@@ -816,16 +852,78 @@ export class StripeProvider implements PaymentProvider {
         SUBSCRIPTION_METADATA_KEYS.PREVIOUS_PROVIDER_PRICE_ID
       ];
 
+      const shouldRestorePreviousPrice =
+        Boolean(previousProviderPriceId) &&
+        currentProviderPriceId !== previousProviderPriceId;
+
       const revertedSubscription = await stripe.subscriptions.update(
         providerSubscriptionId,
         {
-          items: [{ id: subscriptionItem.id, price: previousProviderPriceId }],
-          proration_behavior: 'none',
+          ...(shouldRestorePreviousPrice
+            ? {
+                items: [
+                  {
+                    id: subscriptionItem.id,
+                    price: previousProviderPriceId,
+                  },
+                ],
+                proration_behavior: 'none',
+              }
+            : {}),
           metadata: clearedMetadata,
         },
       );
 
       return this.mapSubscription(revertedSubscription);
+    } catch (error) {
+      rethrowStripeError(error);
+    }
+  }
+
+  /*
+   * Clears unpaid-upgrade metadata after a successful upgrade payment.
+   */
+  async finalizePendingUpgradeCheckout(
+    providerSubscriptionId: string,
+  ): Promise<ProviderSubscriptionResult> {
+    try {
+      const stripe = this.stripeService.getClient();
+      const subscription = await stripe.subscriptions.retrieve(
+        providerSubscriptionId,
+      );
+
+      const clearedMetadata = { ...(subscription.metadata ?? {}) };
+      const hadPendingUpgrade =
+        Boolean(
+          clearedMetadata[
+            SUBSCRIPTION_METADATA_KEYS.PENDING_UPGRADE_PROVIDER_PRICE_ID
+          ],
+        ) ||
+        Boolean(
+          clearedMetadata[SUBSCRIPTION_METADATA_KEYS.PREVIOUS_PROVIDER_PRICE_ID],
+        );
+
+      if (!hadPendingUpgrade) {
+        return this.mapSubscription(subscription);
+      }
+
+      delete clearedMetadata[
+        SUBSCRIPTION_METADATA_KEYS.PENDING_UPGRADE_PRICE_ID
+      ];
+      delete clearedMetadata[
+        SUBSCRIPTION_METADATA_KEYS.PENDING_UPGRADE_PROVIDER_PRICE_ID
+      ];
+      delete clearedMetadata[SUBSCRIPTION_METADATA_KEYS.PREVIOUS_PRICE_ID];
+      delete clearedMetadata[
+        SUBSCRIPTION_METADATA_KEYS.PREVIOUS_PROVIDER_PRICE_ID
+      ];
+
+      const updatedSubscription = await stripe.subscriptions.update(
+        providerSubscriptionId,
+        { metadata: clearedMetadata },
+      );
+
+      return this.mapSubscription(updatedSubscription);
     } catch (error) {
       rethrowStripeError(error);
     }
@@ -963,13 +1061,13 @@ export class StripeProvider implements PaymentProvider {
     providerCustomerId: string,
   ): Promise<ProviderInvoiceResult[]> {
     try {
+      // Stripe allows at most 4 expand levels on list responses, so
+      // data.lines.data.price.product (5) is rejected. Product names are
+      // resolved from line descriptions / local catalog via price IDs.
       const invoices = await this.stripeService.getClient().invoices.list({
         customer: providerCustomerId,
         limit: 100,
-        expand: [
-          'data.lines.data.price',
-          'data.lines.data.pricing.price_details.price',
-        ],
+        expand: ['data.lines.data.price'],
       });
 
       return invoices.data.map((invoice: Stripe.Invoice) =>
@@ -1282,7 +1380,6 @@ export class StripeProvider implements PaymentProvider {
       {
         expand: [
           'lines.data.price',
-          'lines.data.pricing.price_details.price',
           'payments.data.payment.payment_intent',
         ],
       },
@@ -1337,7 +1434,9 @@ export class StripeProvider implements PaymentProvider {
   }
 
   /*
-   * Picks the primary subscription charge line, skipping proration credits.
+   * Picks the primary subscription charge line.
+   * Prefers non-proration lines; for upgrade invoices falls back to the
+   * positive proration charge (new plan) rather than unused-time credits.
    */
   private resolveInvoiceSubscriptionLine(
     invoice: Stripe.Invoice,
@@ -1351,6 +1450,7 @@ export class StripeProvider implements PaymentProvider {
       price: Stripe.Price | null;
       priceId: string;
       amount: number;
+      isProration: boolean;
     };
 
     const candidates: Candidate[] = [];
@@ -1358,6 +1458,7 @@ export class StripeProvider implements PaymentProvider {
     for (const line of invoice.lines?.data ?? []) {
       const lineItem = line as Stripe.InvoiceLineItem & {
         price?: Stripe.Price | string | null;
+        proration?: boolean | null;
         pricing?: {
           type?: string;
           price_details?: {
@@ -1366,14 +1467,7 @@ export class StripeProvider implements PaymentProvider {
         } | null;
       };
 
-      const isProration = Boolean(
-        lineItem.parent?.invoice_item_details?.proration ||
-          lineItem.parent?.subscription_item_details?.proration,
-      );
-      if (isProration) {
-        continue;
-      }
-
+      const isProration = this.isInvoiceLineProration(lineItem);
       const price = this.resolveInvoiceLinePrice(lineItem);
       const priceId = this.resolveInvoiceLinePriceId(lineItem);
       if (!priceId) {
@@ -1395,7 +1489,11 @@ export class StripeProvider implements PaymentProvider {
           ? product.name
           : null;
 
-      if (!productName && line.description?.trim()) {
+      if (
+        !productName &&
+        line.description?.trim() &&
+        !this.isProrationPlanDescription(line.description)
+      ) {
         productName =
           line.description.replace(/^\d+\s×\s/, '').split('(')[0]?.trim() ||
           line.description;
@@ -1406,15 +1504,44 @@ export class StripeProvider implements PaymentProvider {
         price,
         priceId,
         amount: line.amount ?? 0,
+        isProration,
       });
     }
 
-    if (candidates.length === 0) {
-      return null;
+    const recurringCandidates = candidates.filter(
+      (candidate) => !candidate.isProration,
+    );
+    const pool =
+      recurringCandidates.length > 0
+        ? recurringCandidates
+        : candidates.filter((candidate) => candidate.amount > 0);
+
+    if (pool.length === 0) {
+      // Last resort: any priced line (including credits) for catalog lookup.
+      if (candidates.length === 0) {
+        return null;
+      }
+      candidates.sort(
+        (left, right) => Math.abs(right.amount) - Math.abs(left.amount),
+      );
+      return candidates[0];
     }
 
-    candidates.sort((left, right) => right.amount - left.amount);
-    return candidates[0];
+    pool.sort((left, right) => right.amount - left.amount);
+    return pool[0];
+  }
+
+  /*
+   * True when Stripe used a proration/unused-time description instead of a plan name.
+   */
+  private isProrationPlanDescription(description: string): boolean {
+    const normalized = description.trim().toLowerCase();
+    return (
+      normalized.includes('unused time') ||
+      normalized.includes('remaining time') ||
+      normalized.includes('proration') ||
+      normalized.startsWith('time on ')
+    );
   }
 
   /*
@@ -1521,16 +1648,27 @@ export class StripeProvider implements PaymentProvider {
           ? price.product
           : null;
 
-      if (
+      const productName =
         product &&
         'name' in product &&
         typeof product.name === 'string' &&
         product.name.length > 0
-      ) {
-        return product.name;
+          ? product.name
+          : null;
+
+      const formatted = this.formatStripePlanLabel(productName, price);
+      if (formatted) {
+        return formatted;
       }
 
-      if (line.description?.trim()) {
+      if (productName) {
+        return productName;
+      }
+
+      if (
+        line.description?.trim() &&
+        !this.isProrationPlanDescription(line.description)
+      ) {
         return (
           line.description.replace(/^\d+\s×\s/, '').split('(')[0]?.trim() ||
           line.description
@@ -1538,7 +1676,14 @@ export class StripeProvider implements PaymentProvider {
       }
     }
 
-    return invoice.description ?? null;
+    if (
+      invoice.description &&
+      !this.isProrationPlanDescription(invoice.description)
+    ) {
+      return invoice.description;
+    }
+
+    return null;
   }
 
   /*
