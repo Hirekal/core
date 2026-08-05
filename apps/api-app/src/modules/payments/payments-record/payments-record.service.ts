@@ -50,7 +50,7 @@ export class PaymentsRecordService {
   async syncFromProviderResult(
     providerCode: string,
     providerResult: ProviderPaymentResult,
-    userId?: string,
+    organizationId?: string,
     knownSubscriptionId?: string | null,
   ): Promise<Payment> {
     try {
@@ -66,11 +66,11 @@ export class PaymentsRecordService {
         throw new Error(ERROR_MESSAGES.PAYMENT_CUSTOMER.NOT_FOUND);
       }
 
-      const resolvedUserId = userId ?? customer.userId;
+      const resolvedOrganizationId = organizationId ?? customer.organizationId;
       let subscriptionId = knownSubscriptionId ?? null;
       if (!subscriptionId && providerResult.providerSubscriptionId) {
         subscriptionId = await this.resolveSubscriptionId(
-          resolvedUserId,
+          resolvedOrganizationId,
           provider.id,
           providerCode,
           providerResult.providerSubscriptionId,
@@ -105,7 +105,7 @@ export class PaymentsRecordService {
       }
 
       return BaseRepository.createAndSave(this.paymentsRepository, {
-        userId: resolvedUserId,
+        organizationId: resolvedOrganizationId,
         customerId: customer.id,
         subscriptionId: resolvedSubscriptionId,
         paymentProviderId: provider.id,
@@ -131,7 +131,7 @@ export class PaymentsRecordService {
    * Upserts a payment row after checkout with a known subscription link.
    */
   async upsertAfterCheckout(input: {
-    userId: string;
+    organizationId: string;
     customerId: string;
     subscriptionId: string;
     paymentProviderId: string;
@@ -163,7 +163,7 @@ export class PaymentsRecordService {
     }
 
     return BaseRepository.createAndSave(this.paymentsRepository, {
-      userId: input.userId,
+      organizationId: input.organizationId,
       customerId: input.customerId,
       subscriptionId: input.subscriptionId,
       paymentProviderId: input.paymentProviderId,
@@ -182,7 +182,7 @@ export class PaymentsRecordService {
    * Links a payment to a local subscription, syncing from Stripe when missing.
    */
   private async resolveSubscriptionId(
-    userId: string,
+    organizationId: string,
     paymentProviderId: string,
     providerCode: string,
     providerSubscriptionId: string,
@@ -197,8 +197,8 @@ export class PaymentsRecordService {
     }
 
     const customer =
-      await this.paymentCustomersService.findByUserAndPaymentProviderId(
-        userId,
+      await this.paymentCustomersService.findByOrganizationAndPaymentProviderId(
+        organizationId,
         paymentProviderId,
       );
     if (!customer) {
@@ -207,7 +207,7 @@ export class PaymentsRecordService {
 
     const syncedSubscription =
       await this.subscriptionsService.syncFromStripeCheckout({
-        userId,
+        organizationId,
         providerCode,
         providerCustomerId: customer.providerCustomerId,
         providerSubscriptionId,
@@ -220,7 +220,7 @@ export class PaymentsRecordService {
    * Links existing payment rows to a subscription after invoice sync.
    */
   async linkSubscription(input: {
-    userId: string;
+    organizationId: string;
     paymentProviderId: string;
     subscriptionId: string;
     providerPaymentId?: string | null;
@@ -249,7 +249,7 @@ export class PaymentsRecordService {
 
     const candidates = await this.paymentsRepository.find({
       where: {
-        userId: input.userId,
+        organizationId: input.organizationId,
         paymentProviderId: input.paymentProviderId,
         amount: input.amount,
         currency: input.currency.toUpperCase(),

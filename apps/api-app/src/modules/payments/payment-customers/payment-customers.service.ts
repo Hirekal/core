@@ -15,6 +15,7 @@ import {
   LOG_MESSAGES,
 } from '../common/messages/payment.messages';
 import { RecordStatus } from '../common/enums/payment.enums';
+import { User } from '../../auth/users/entities/user.entity';
 
 @Injectable()
 export class PaymentCustomersService {
@@ -23,6 +24,8 @@ export class PaymentCustomersService {
   constructor(
     @InjectRepository(PaymentCustomer)
     private readonly paymentCustomersRepository: Repository<PaymentCustomer>,
+    @InjectRepository(User)
+    private readonly usersRepository: Repository<User>,
     private readonly paymentProvidersService: PaymentProvidersService,
     private readonly paymentProviderRegistry: PaymentProviderRegistry,
   ) {}
@@ -31,7 +34,7 @@ export class PaymentCustomersService {
    * Creates a provider customer and persists the local payment customer record.
    */
   async create(
-    userId: string,
+    organizationId: string,
     dto: CreatePaymentCustomerDto,
   ): Promise<PaymentCustomer> {
     try {
@@ -41,7 +44,7 @@ export class PaymentCustomersService {
 
       const existingPaymentCustomer =
         await this.paymentCustomersRepository.findOne({
-          where: { userId, paymentProviderId: provider.id },
+          where: { organizationId, paymentProviderId: provider.id },
         });
       if (existingPaymentCustomer) {
         throw new ConflictException(
@@ -55,11 +58,14 @@ export class PaymentCustomersService {
       const providerCustomer = await paymentProvider.createCustomer({
         email: dto.email,
         name: dto.name,
-        metadata: dto.metadata,
+        metadata: {
+          ...(dto.metadata ?? {}),
+          organizationId,
+        },
       });
 
       return BaseRepository.createAndSave(this.paymentCustomersRepository, {
-        userId,
+        organizationId,
         paymentProviderId: provider.id,
         providerCustomerId: providerCustomer.providerCustomerId,
         email: dto.email,
@@ -69,7 +75,7 @@ export class PaymentCustomersService {
       });
     } catch (error) {
       this.logger.error(
-        LOG_MESSAGES.PAYMENT_CUSTOMER.CREATE_FAILED(userId),
+        LOG_MESSAGES.PAYMENT_CUSTOMER.CREATE_FAILED(organizationId),
         error,
       );
       throw error;
@@ -77,10 +83,10 @@ export class PaymentCustomersService {
   }
 
   /*
-   * Ensures the user has an active provider customer before checkout.
+   * Ensures the organization has an active provider customer before checkout.
    */
   async ensureActiveForCheckout(
-    userId: string,
+    organizationId: string,
     dto: CreatePaymentCustomerDto,
   ): Promise<PaymentCustomer> {
     try {
@@ -92,7 +98,7 @@ export class PaymentCustomersService {
       );
 
       const existingCustomer = await this.paymentCustomersRepository.findOne({
-        where: { userId, paymentProviderId: provider.id },
+        where: { organizationId, paymentProviderId: provider.id },
       });
 
       if (
@@ -113,7 +119,10 @@ export class PaymentCustomersService {
       const providerCustomer = await paymentProvider.createCustomer({
         email: dto.email,
         name: dto.name,
-        metadata: dto.metadata,
+        metadata: {
+          ...(dto.metadata ?? {}),
+          organizationId,
+        },
       });
 
       if (existingCustomer) {
@@ -127,7 +136,7 @@ export class PaymentCustomersService {
       }
 
       return BaseRepository.createAndSave(this.paymentCustomersRepository, {
-        userId,
+        organizationId,
         paymentProviderId: provider.id,
         providerCustomerId: providerCustomer.providerCustomerId,
         email: dto.email,
@@ -137,7 +146,7 @@ export class PaymentCustomersService {
       });
     } catch (error) {
       this.logger.error(
-        LOG_MESSAGES.PAYMENT_CUSTOMER.CREATE_FAILED(userId),
+        LOG_MESSAGES.PAYMENT_CUSTOMER.CREATE_FAILED(organizationId),
         error,
       );
       throw error;
@@ -197,21 +206,21 @@ export class PaymentCustomersService {
   }
 
   /*
-   * Finds a payment customer for a user and provider combination.
+   * Finds a payment customer for an organization and provider combination.
    */
-  async findByUserAndPaymentProviderId(
-    userId: string,
+  async findByOrganizationAndPaymentProviderId(
+    organizationId: string,
     paymentProviderId: string,
   ): Promise<PaymentCustomer | null> {
     try {
       return this.paymentCustomersRepository.findOne({
-        where: { userId, paymentProviderId },
+        where: { organizationId, paymentProviderId },
         relations: { paymentProvider: true },
       });
     } catch (error) {
       this.logger.error(
         LOG_MESSAGES.PAYMENT_CUSTOMER.FIND_FAILED(
-          `${userId}:${paymentProviderId}`,
+          `${organizationId}:${paymentProviderId}`,
         ),
         error,
       );
@@ -220,22 +229,24 @@ export class PaymentCustomersService {
   }
 
   /*
-   * Find By User And Provider Code.
+   * Find By Organization And Provider Code.
    */
-  async findByUserAndProviderCode(
-    userId: string,
+  async findByOrganizationAndProviderCode(
+    organizationId: string,
     providerCode: string,
   ): Promise<PaymentCustomer | null> {
     try {
       const provider =
         await this.paymentProvidersService.findByCode(providerCode);
       return this.paymentCustomersRepository.findOne({
-        where: { userId, paymentProviderId: provider.id },
+        where: { organizationId, paymentProviderId: provider.id },
         relations: { paymentProvider: true },
       });
     } catch (error) {
       this.logger.error(
-        LOG_MESSAGES.PAYMENT_CUSTOMER.FIND_FAILED(`${userId}:${providerCode}`),
+        LOG_MESSAGES.PAYMENT_CUSTOMER.FIND_FAILED(
+          `${organizationId}:${providerCode}`,
+        ),
         error,
       );
       throw error;
@@ -266,10 +277,34 @@ export class PaymentCustomersService {
   }
 
   /*
+   * Resolves organization ownership from provider metadata.
+   */
+  async resolveOrganizationIdFromMetadata(
+    metadata?: Record<string, unknown> | null,
+  ): Promise<string | null> {
+    if (
+      typeof metadata?.organizationId === 'string' &&
+      metadata.organizationId.length > 0
+    ) {
+      return metadata.organizationId;
+    }
+
+    if (typeof metadata?.userId === 'string' && metadata.userId.length > 0) {
+      const user = await this.usersRepository.findOne({
+        where: { id: metadata.userId },
+        select: { id: true, organizationId: true },
+      });
+      return user?.organizationId ?? null;
+    }
+
+    return null;
+  }
+
+  /*
    * Creates or updates a local record from provider webhook data.
    */
   async upsertFromProvider(input: {
-    userId: string;
+    organizationId: string;
     providerCode: string;
     providerCustomerId: string;
     email: string;
@@ -290,6 +325,7 @@ export class PaymentCustomersService {
 
       if (existingPaymentCustomer) {
         Object.assign(existingPaymentCustomer, {
+          organizationId: input.organizationId,
           email: input.email,
           name: input.name ?? existingPaymentCustomer.name,
           metadata: input.metadata ?? existingPaymentCustomer.metadata,
@@ -297,8 +333,26 @@ export class PaymentCustomersService {
         return this.paymentCustomersRepository.save(existingPaymentCustomer);
       }
 
+      const existingByOrganization =
+        await this.paymentCustomersRepository.findOne({
+          where: {
+            organizationId: input.organizationId,
+            paymentProviderId: provider.id,
+          },
+        });
+
+      if (existingByOrganization) {
+        Object.assign(existingByOrganization, {
+          providerCustomerId: input.providerCustomerId,
+          email: input.email,
+          name: input.name ?? existingByOrganization.name,
+          metadata: input.metadata ?? existingByOrganization.metadata,
+        });
+        return this.paymentCustomersRepository.save(existingByOrganization);
+      }
+
       return BaseRepository.createAndSave(this.paymentCustomersRepository, {
-        userId: input.userId,
+        organizationId: input.organizationId,
         paymentProviderId: provider.id,
         providerCustomerId: input.providerCustomerId,
         email: input.email,

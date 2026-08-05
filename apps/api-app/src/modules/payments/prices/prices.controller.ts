@@ -12,11 +12,12 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { Auth } from '../../auth/common/decorators/auth.decorator';
+import { SYSTEM_ROLES } from '../../auth/common/constants/auth.constants';
 import { PricesService } from './prices.service';
 import { CreatePriceDto } from './dto/create-price.dto';
 
 @ApiTags('Prices')
-@Auth()
+@Auth(SYSTEM_ROLES.ADMIN)
 @Controller('payments/prices')
 export class PricesController {
   constructor(private readonly pricesService: PricesService) {}

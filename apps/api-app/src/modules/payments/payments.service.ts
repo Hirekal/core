@@ -81,12 +81,12 @@ export class PaymentsService {
   /*
    * Creates a customer in the payment provider and returns mapped result.
    */
-  async createCustomer(userId: string, dto: CreatePaymentCustomerDto) {
+  async createCustomer(organizationId: string, dto: CreatePaymentCustomerDto) {
     try {
-      return this.paymentCustomersService.create(userId, dto);
+      return this.paymentCustomersService.create(organizationId, dto);
     } catch (error) {
       this.logger.error(
-        LOG_MESSAGES.PAYMENT_CUSTOMER.CREATE_FAILED(userId),
+        LOG_MESSAGES.PAYMENT_CUSTOMER.CREATE_FAILED(organizationId),
         error,
       );
       throw error;
@@ -115,7 +115,10 @@ export class PaymentsService {
   /*
    * Creates an embedded checkout session with client secret for in-app payment.
    */
-  async createCheckoutSession(userId: string, dto: CreateCheckoutSessionDto) {
+  async createCheckoutSession(
+    organizationId: string,
+    dto: CreateCheckoutSessionDto,
+  ) {
     try {
       const publishableKey = this.stripeService.getPublishableKey();
       if (!publishableKey) {
@@ -129,19 +132,19 @@ export class PaymentsService {
         price.paymentProviderId,
       );
       let customer = await this.paymentCustomersService.ensureActiveForCheckout(
-        userId,
+        organizationId,
         {
           paymentProviderId: price.paymentProviderId,
           email: dto.email,
           name: dto.name,
-          metadata: { userId },
+          metadata: { organizationId },
         },
       );
 
       const session = await client.createCheckoutSession({
         providerCustomerId: customer.providerCustomerId,
         providerPriceId: price.providerPriceId,
-        metadata: { userId, priceId: price.id },
+        metadata: { organizationId, priceId: price.id },
       });
 
       return {
@@ -149,7 +152,10 @@ export class PaymentsService {
         publishableKey,
       };
     } catch (error) {
-      this.logger.error(LOG_MESSAGES.CHECKOUT.CREATE_FAILED(userId), error);
+      this.logger.error(
+        LOG_MESSAGES.CHECKOUT.CREATE_FAILED(organizationId),
+        error,
+      );
       throw error;
     }
   }
@@ -158,7 +164,7 @@ export class PaymentsService {
    * Persists the subscription locally after custom checkout payment succeeds.
    */
   async syncCheckoutSubscription(
-    userId: string,
+    organizationId: string,
     dto: SyncCheckoutSubscriptionDto,
   ) {
     const providerSubscriptionId = dto.providerSubscriptionId;
@@ -186,9 +192,15 @@ export class PaymentsService {
       }
 
       const metadata = stripeSubscription.metadata ?? {};
-      const metadataUserId = metadata.userId;
+      const metadataOrganizationId =
+        await this.paymentCustomersService.resolveOrganizationIdFromMetadata(
+          metadata,
+        );
 
-      if (metadataUserId && metadataUserId !== userId) {
+      if (
+        metadataOrganizationId &&
+        metadataOrganizationId !== organizationId
+      ) {
         throw new ForbiddenException(ERROR_MESSAGES.SUBSCRIPTION.NOT_FOUND);
       }
 
@@ -198,7 +210,7 @@ export class PaymentsService {
 
       const subscription = await this.subscriptionsService.syncFromStripeCheckout(
         {
-          userId,
+          organizationId,
           providerCode: PaymentProviderCode.STRIPE,
           providerCustomerId,
           providerSubscriptionId,
@@ -212,16 +224,19 @@ export class PaymentsService {
       }
 
       try {
-        await this.listPaymentMethods(userId, subscription.paymentProviderId);
+        await this.listPaymentMethods(
+          organizationId,
+          subscription.paymentProviderId,
+        );
       } catch (paymentMethodError) {
         this.logger.warn(
-          `Payment method sync skipped after checkout for user ${userId}`,
+          `Payment method sync skipped after checkout for organization ${organizationId}`,
           paymentMethodError,
         );
       }
 
       await this.syncCheckoutPaymentRecord(
-        userId,
+        organizationId,
         subscription,
         providerCustomerId,
         providerSubscriptionId,
@@ -231,7 +246,7 @@ export class PaymentsService {
       return subscription;
     } catch (error) {
       this.logger.error(
-        `syncCheckoutSubscription failed for user ${userId}, subscription ${providerSubscriptionId}`,
+        `syncCheckoutSubscription failed for organization ${organizationId}, subscription ${providerSubscriptionId}`,
         error,
       );
       throw error;
@@ -241,7 +256,7 @@ export class PaymentsService {
   /*
    * Resolves checkout completion status and linked subscription when available.
    */
-  async getCheckoutSessionStatus(userId: string, sessionId: string) {
+  async getCheckoutSessionStatus(organizationId: string, sessionId: string) {
     try {
       const client = this.paymentProviderRegistry.resolve(
         PaymentProviderCode.STRIPE,
@@ -262,11 +277,14 @@ export class PaymentsService {
         checkoutSession.status === 'complete' &&
         checkoutSession.providerSubscriptionId
       ) {
-        const sessionUserId = checkoutSession.metadata?.userId ?? userId;
-        if (sessionUserId === userId) {
+        const sessionOrganizationId =
+          (await this.paymentCustomersService.resolveOrganizationIdFromMetadata(
+            checkoutSession.metadata,
+          )) ?? organizationId;
+        if (sessionOrganizationId === organizationId) {
           subscription = await this.subscriptionsService.syncFromStripeCheckout(
             {
-              userId,
+              organizationId,
               providerCode: PaymentProviderCode.STRIPE,
               providerCustomerId: checkoutSession.providerCustomerId || '',
               providerSubscriptionId: checkoutSession.providerSubscriptionId,
@@ -279,7 +297,7 @@ export class PaymentsService {
         }
       }
 
-      if (subscription && subscription.userId !== userId) {
+      if (subscription && subscription.organizationId !== organizationId) {
         subscription = null;
       }
 
@@ -290,7 +308,7 @@ export class PaymentsService {
       };
     } catch (error) {
       this.logger.error(
-        LOG_MESSAGES.CHECKOUT.CREATE_FAILED(`${userId}:${sessionId}`),
+        LOG_MESSAGES.CHECKOUT.CREATE_FAILED(`${organizationId}:${sessionId}`),
         error,
       );
       throw error;
@@ -301,7 +319,7 @@ export class PaymentsService {
    * Creates a hosted billing portal session URL.
    */
   async createBillingPortalSession(
-    userId: string,
+    organizationId: string,
     dto: CreateBillingPortalSessionDto,
   ) {
     try {
@@ -309,8 +327,8 @@ export class PaymentsService {
         dto.paymentProviderId,
       );
       const customer =
-        await this.paymentCustomersService.findByUserAndPaymentProviderId(
-          userId,
+        await this.paymentCustomersService.findByOrganizationAndPaymentProviderId(
+          organizationId,
           dto.paymentProviderId,
         );
       if (!customer) {
@@ -323,7 +341,7 @@ export class PaymentsService {
       });
     } catch (error) {
       this.logger.error(
-        LOG_MESSAGES.BILLING_PORTAL.CREATE_FAILED(userId),
+        LOG_MESSAGES.BILLING_PORTAL.CREATE_FAILED(organizationId),
         error,
       );
       throw error;
@@ -333,9 +351,17 @@ export class PaymentsService {
   /*
    * Cancels a subscription on the provider immediately or at period end.
    */
-  async cancelSubscription(id: string, cancelAtPeriodEnd = true) {
+  async cancelSubscription(
+    id: string,
+    cancelAtPeriodEnd = true,
+    organizationId?: string,
+  ) {
     try {
-      return this.subscriptionsService.cancel(id, cancelAtPeriodEnd);
+      return this.subscriptionsService.cancel(
+        id,
+        cancelAtPeriodEnd,
+        organizationId,
+      );
     } catch (error) {
       this.logger.error(LOG_MESSAGES.SUBSCRIPTION.CANCEL_FAILED(id), error);
       throw error;
@@ -345,9 +371,9 @@ export class PaymentsService {
   /*
    * Resumes a subscription that was set to cancel at period end.
    */
-  async resumeSubscription(id: string) {
+  async resumeSubscription(id: string, organizationId?: string) {
     try {
-      return this.subscriptionsService.resume(id);
+      return this.subscriptionsService.resume(id, organizationId);
     } catch (error) {
       this.logger.error(LOG_MESSAGES.SUBSCRIPTION.RESUME_FAILED(id), error);
       throw error;
@@ -357,14 +383,17 @@ export class PaymentsService {
   /*
    * Attaches a payment method to a customer and sets it as default.
    */
-  async attachPaymentMethod(userId: string, dto: AttachPaymentMethodDto) {
+  async attachPaymentMethod(
+    organizationId: string,
+    dto: AttachPaymentMethodDto,
+  ) {
     try {
       const { client } = await this.resolveProviderClient(
         dto.paymentProviderId,
       );
       const customer =
-        await this.paymentCustomersService.findByUserAndPaymentProviderId(
-          userId,
+        await this.paymentCustomersService.findByOrganizationAndPaymentProviderId(
+          organizationId,
           dto.paymentProviderId,
         );
       if (!customer) {
@@ -379,7 +408,7 @@ export class PaymentsService {
       return this.paymentMethodsService.syncFromProviderResult(
         dto.paymentProviderId,
         customer.id,
-        userId,
+        organizationId,
         providerMethod,
       );
     } catch (error) {
@@ -394,12 +423,12 @@ export class PaymentsService {
   /*
    * Lists payment methods for a provider customer.
    */
-  async listPaymentMethods(userId: string, paymentProviderId: string) {
+  async listPaymentMethods(organizationId: string, paymentProviderId: string) {
     try {
       const { client } = await this.resolveProviderClient(paymentProviderId);
       const customer =
-        await this.paymentCustomersService.findByUserAndPaymentProviderId(
-          userId,
+        await this.paymentCustomersService.findByOrganizationAndPaymentProviderId(
+          organizationId,
           paymentProviderId,
         );
       if (!customer) {
@@ -416,7 +445,7 @@ export class PaymentsService {
           await this.paymentMethodsService.syncFromProviderResult(
             paymentProviderId,
             customer.id,
-            userId,
+            organizationId,
             providerPaymentMethod,
           ),
         );
@@ -425,7 +454,7 @@ export class PaymentsService {
     } catch (error) {
       this.logger.error(
         LOG_MESSAGES.PAYMENT_METHOD.SYNC_FAILED(
-          `${userId}:${paymentProviderId}`,
+          `${organizationId}:${paymentProviderId}`,
         ),
         error,
       );
@@ -434,23 +463,23 @@ export class PaymentsService {
   }
 
   /*
-   * Lists invoices for the authenticated user using the default provider.
+   * Lists invoices for the authenticated organization using the default provider.
    */
-  async listInvoicesForUser(userId: string) {
+  async listInvoicesForOrganization(organizationId: string) {
     const provider = await this.paymentProvidersService.findByCode(
       this.options.defaultProviderCode,
     );
-    return this.listInvoices(userId, provider.id);
+    return this.listInvoices(organizationId, provider.id);
   }
 
   /*
    * Lists invoices for a provider customer.
    */
-  async listInvoices(userId: string, paymentProviderId: string) {
+  async listInvoices(organizationId: string, paymentProviderId: string) {
     try {
       const customer =
-        await this.paymentCustomersService.findByUserAndPaymentProviderId(
-          userId,
+        await this.paymentCustomersService.findByOrganizationAndPaymentProviderId(
+          organizationId,
           paymentProviderId,
         );
       if (!customer) {
@@ -462,7 +491,7 @@ export class PaymentsService {
       );
     } catch (error) {
       this.logger.error(
-        LOG_MESSAGES.INVOICE.LIST_FAILED(`${userId}:${paymentProviderId}`),
+        LOG_MESSAGES.INVOICE.LIST_FAILED(`${organizationId}:${paymentProviderId}`),
         error,
       );
       throw error;
@@ -473,7 +502,7 @@ export class PaymentsService {
    * Persists the checkout payment with a guaranteed subscription link.
    */
   private async syncCheckoutPaymentRecord(
-    userId: string,
+    organizationId: string,
     subscription: Subscription,
     providerCustomerId: string,
     providerSubscriptionId: string,
@@ -505,7 +534,7 @@ export class PaymentsService {
     );
 
     await this.paymentsRecordService.upsertAfterCheckout({
-      userId,
+      organizationId,
       customerId: subscription.customerId,
       subscriptionId: subscription.id,
       paymentProviderId: subscription.paymentProviderId,

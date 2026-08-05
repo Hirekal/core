@@ -14,12 +14,13 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { Auth } from '../../auth/common/decorators/auth.decorator';
+import { SYSTEM_ROLES } from '../../auth/common/constants/auth.constants';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 
 @ApiTags('Products')
-@Auth()
+@Auth(SYSTEM_ROLES.ADMIN)
 @Controller('payments/products')
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}

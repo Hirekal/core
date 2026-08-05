@@ -3,6 +3,8 @@ import { Briefcase, Building2, CreditCard, LifeBuoy, Menu, Wallet, X } from 'luc
 import { useState } from 'react';
 import UserMenu from './UserMenu';
 import NotificationBell from './NotificationBell';
+import { useAuth } from '../../context/AuthContext';
+import { isAdmin } from '../../utils/roles';
 
 const navLinkClass = ({ isActive }) =>
   `flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
@@ -12,6 +14,8 @@ const navLinkClass = ({ isActive }) =>
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
+  const { user } = useAuth();
+  const canManageBilling = isAdmin(user);
   const billingActive = location.pathname.startsWith('/billing');
   const paymentsActive = location.pathname.startsWith('/payments');
 
@@ -19,8 +23,12 @@ export default function Navbar() {
 
   const navItems = [
     { to: '/jobs', label: 'Jobs', icon: Briefcase, isActive: location.pathname.startsWith('/jobs') },
-    { to: '/billing/plans', label: 'Billing', icon: CreditCard, isActive: billingActive },
-    { to: '/payments', label: 'Payments', icon: Wallet, isActive: paymentsActive },
+    ...(canManageBilling
+      ? [
+          { to: '/billing/plans', label: 'Billing', icon: CreditCard, isActive: billingActive },
+          { to: '/payments', label: 'Payments', icon: Wallet, isActive: paymentsActive },
+        ]
+      : []),
     { to: '/support', label: 'Support', icon: LifeBuoy, isActive: supportActive },
   ];
 

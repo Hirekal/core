@@ -89,13 +89,16 @@ export class StripeWebhookHandler {
     payload: Record<string, unknown>,
   ): Promise<void> {
     const customer = this.getObject<Stripe.Customer>(payload);
-    const userId = customer.metadata?.userId;
-    if (!userId) {
+    const organizationId =
+      await this.paymentCustomersService.resolveOrganizationIdFromMetadata(
+        customer.metadata,
+      );
+    if (!organizationId) {
       return;
     }
 
     await this.paymentCustomersService.upsertFromProvider({
-      userId,
+      organizationId,
       providerCode: PaymentProviderCode.STRIPE,
       providerCustomerId: customer.id,
       email: customer.email ?? '',
@@ -111,7 +114,10 @@ export class StripeWebhookHandler {
     payload: Record<string, unknown>,
   ): Promise<void> {
     const checkoutSession = this.getObject<Stripe.Checkout.Session>(payload);
-    const userId = checkoutSession.metadata?.userId;
+    const organizationId =
+      await this.paymentCustomersService.resolveOrganizationIdFromMetadata(
+        checkoutSession.metadata,
+      );
     const priceId = checkoutSession.metadata?.priceId;
     const providerCustomerId = resolveStripeResourceId(
       checkoutSession.customer,
@@ -120,16 +126,16 @@ export class StripeWebhookHandler {
       checkoutSession.subscription,
     );
 
-    if (!userId || !providerSubscriptionId) {
+    if (!organizationId || !providerSubscriptionId) {
       this.logger.warn(
-        `checkout.session.completed missing userId or subscription: session=${checkoutSession.id}`,
+        `checkout.session.completed missing organizationId or subscription: session=${checkoutSession.id}`,
       );
       return;
     }
 
     const subscription = await this.subscriptionsService.syncFromStripeCheckout(
       {
-        userId,
+        organizationId,
         providerCode: PaymentProviderCode.STRIPE,
         providerCustomerId,
         providerSubscriptionId,
@@ -192,8 +198,11 @@ export class StripeWebhookHandler {
         PaymentProviderCode.STRIPE,
       );
     if (!customer) {
-      const metadataUserId = subscription.metadata?.userId;
-      if (!metadataUserId) {
+      const metadataOrganizationId =
+        await this.paymentCustomersService.resolveOrganizationIdFromMetadata(
+          subscription.metadata,
+        );
+      if (!metadataOrganizationId) {
         this.logger.warn(
           `customer.subscription event missing local customer: subscription=${subscription.id}`,
         );
@@ -202,7 +211,7 @@ export class StripeWebhookHandler {
 
       const syncedSubscription =
         await this.subscriptionsService.syncFromStripeCheckout({
-          userId: metadataUserId,
+          organizationId: metadataOrganizationId,
           providerCode: PaymentProviderCode.STRIPE,
           providerCustomerId: resolveStripeResourceId(subscription.customer),
           providerSubscriptionId: subscription.id,
@@ -230,7 +239,7 @@ export class StripeWebhookHandler {
     }
 
     await this.subscriptionsService.saveFromProviderResult({
-      userId: customer.userId,
+      organizationId: customer.organizationId,
       customerId: customer.id,
       priceId: price.id,
       paymentProviderId: customer.paymentProviderId,
@@ -320,7 +329,7 @@ export class StripeWebhookHandler {
     );
     await this.invoicesService.syncFromProviderResult(
       customer.paymentProviderId,
-      customer.userId,
+      customer.organizationId,
       mappedInvoice,
     );
 
@@ -375,7 +384,7 @@ export class StripeWebhookHandler {
     await this.paymentsRecordService.syncFromProviderResult(
       PaymentProviderCode.STRIPE,
       await this.stripeProvider.mapPaymentIntentFromWebhook(paymentIntent),
-      customer.userId,
+      customer.organizationId,
     );
 
     if (typeof paymentIntent.payment_method === 'string') {
@@ -385,7 +394,7 @@ export class StripeWebhookHandler {
       await this.paymentMethodsService.syncFromProviderResult(
         customer.paymentProviderId,
         customer.id,
-        customer.userId,
+        customer.organizationId,
         paymentMethod,
       );
     }

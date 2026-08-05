@@ -179,9 +179,20 @@ export default function PricingPlansPage() {
           setUpgradePreview(preview);
         }
       })
-      .catch(() => {
-        if (!cancelled) {
-          setUpgradePreview(null);
+      .catch(async (err) => {
+        if (cancelled) {
+          return;
+        }
+        setUpgradePreview(null);
+        setConfirmUpgradePlan(null);
+        showError(
+          err,
+          'Unable to upgrade this subscription. Subscribe to a new plan instead.',
+        );
+        try {
+          await loadData();
+        } catch {
+          // Keep the existing page state if reload fails.
         }
       })
       .finally(() => {
@@ -193,7 +204,7 @@ export default function PricingPlansPage() {
     return () => {
       cancelled = true;
     };
-  }, [confirmUpgradePlan, subscription]);
+  }, [confirmUpgradePlan, subscription, loadData, showError]);
 
   const visiblePlans = useMemo(
     () =>
@@ -273,7 +284,7 @@ export default function PricingPlansPage() {
     try {
       if (plan.price.id === currentPriceId) return;
 
-      if (!subscription) {
+      if (!subscription || !isBillableSubscription(subscription)) {
         navigate(`/billing/checkout/${plan.price.id}`);
         return;
       }

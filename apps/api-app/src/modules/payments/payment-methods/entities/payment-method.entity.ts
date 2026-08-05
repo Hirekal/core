@@ -13,7 +13,7 @@ import { PaymentProvider } from '../../payment-providers/entities/payment-provid
 @Entity('paymentMethods')
 export class PaymentMethod extends BaseEntity {
   @Column({ type: 'uuid' })
-  userId: string;
+  organizationId: string;
 
   @Column({ type: 'uuid' })
   customerId: string;

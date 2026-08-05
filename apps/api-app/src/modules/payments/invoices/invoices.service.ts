@@ -29,7 +29,7 @@ import { StripeProvider } from '../providers/stripe/stripe.provider';
 
 export interface InvoiceResponse {
   id: string;
-  userId: string;
+  organizationId: string;
   subscriptionId: string | null;
   paymentProviderId: string;
   providerInvoiceId: string;
@@ -101,18 +101,18 @@ export class InvoicesService {
         providerInvoices.map((providerInvoice) =>
           this.syncFromProviderResult(
             paymentProviderId,
-            customer.userId,
+            customer.organizationId,
             providerInvoice,
           ),
         ),
       );
 
-      await this.backfillPaymentSubscriptions(customer.userId);
+      await this.backfillPaymentSubscriptions(customer.organizationId);
 
       return Promise.all(
         (
           await this.invoicesRepository.find({
-            where: { userId: customer.userId },
+            where: { organizationId: customer.organizationId },
             order: { createdAt: 'DESC' },
           })
         ).map((invoice) => this.formatInvoiceForApi(invoice, provider.code)),
@@ -128,7 +128,7 @@ export class InvoicesService {
    */
   async syncFromProviderResult(
     paymentProviderId: string,
-    userId: string,
+    organizationId: string,
     providerResult: ProviderInvoiceResult,
   ): Promise<Invoice> {
     try {
@@ -143,7 +143,7 @@ export class InvoicesService {
       let subscriptionId: string | null = null;
       if (providerResult.providerSubscriptionId) {
         subscriptionId = await this.resolveSubscriptionId(
-          userId,
+          organizationId,
           paymentProviderId,
           provider.code,
           providerResult.providerSubscriptionId,
@@ -163,8 +163,8 @@ export class InvoicesService {
       let paymentId: string | null = null;
       if (providerPaymentId && providerResult.amountPaid > 0) {
         const customer =
-          await this.paymentCustomersService.findByUserAndPaymentProviderId(
-            userId,
+          await this.paymentCustomersService.findByOrganizationAndPaymentProviderId(
+            organizationId,
             paymentProviderId,
           );
         if (customer) {
@@ -184,7 +184,7 @@ export class InvoicesService {
                     : PaymentStatus.PENDING,
                 paidAt: providerResult.paidAt,
               },
-              userId,
+              organizationId,
               subscriptionId,
             )
             .catch((error) => {
@@ -200,7 +200,7 @@ export class InvoicesService {
 
       if (subscriptionId) {
         await this.paymentsRecordService.linkSubscription({
-          userId,
+          organizationId,
           paymentProviderId: provider.id,
           subscriptionId,
           providerPaymentId,
@@ -237,7 +237,7 @@ export class InvoicesService {
       }
 
       return BaseRepository.createAndSave(this.invoicesRepository, {
-        userId,
+        organizationId,
         subscriptionId,
         paymentId,
         paymentProviderId: provider.id,
@@ -278,7 +278,7 @@ export class InvoicesService {
 
     return {
       id: invoice.id,
-      userId: invoice.userId,
+      organizationId: invoice.organizationId,
       subscriptionId: invoice.subscriptionId,
       paymentProviderId: invoice.paymentProviderId,
       providerInvoiceId: invoice.providerInvoiceId,
@@ -477,7 +477,7 @@ export class InvoicesService {
    * Links an invoice to a local subscription, syncing from Stripe when missing.
    */
   private async resolveSubscriptionId(
-    userId: string,
+    organizationId: string,
     paymentProviderId: string,
     providerCode: string,
     providerSubscriptionId: string,
@@ -492,8 +492,8 @@ export class InvoicesService {
     }
 
     const customer =
-      await this.paymentCustomersService.findByUserAndPaymentProviderId(
-        userId,
+      await this.paymentCustomersService.findByOrganizationAndPaymentProviderId(
+        organizationId,
         paymentProviderId,
       );
     if (!customer) {
@@ -502,7 +502,7 @@ export class InvoicesService {
 
     const syncedSubscription =
       await this.subscriptionsService.syncFromStripeCheckout({
-        userId,
+        organizationId,
         providerCode,
         providerCustomerId: customer.providerCustomerId,
         providerSubscriptionId,
@@ -534,9 +534,11 @@ export class InvoicesService {
   /*
    * Backfills payment.subscriptionId from synced invoice rows for a user.
    */
-  private async backfillPaymentSubscriptions(userId: string): Promise<void> {
+  private async backfillPaymentSubscriptions(
+    organizationId: string,
+  ): Promise<void> {
     const invoices = await this.invoicesRepository.find({
-      where: { userId },
+      where: { organizationId },
       select: {
         id: true,
         subscriptionId: true,
@@ -568,7 +570,7 @@ export class InvoicesService {
           : null;
 
       await this.paymentsRecordService.linkSubscription({
-        userId,
+        organizationId,
         paymentProviderId: invoice.paymentProviderId,
         subscriptionId: invoice.subscriptionId,
         providerPaymentId,

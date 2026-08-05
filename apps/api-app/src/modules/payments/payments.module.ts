@@ -36,6 +36,7 @@ import { StripeProvider } from './providers/stripe/stripe.provider';
 import { StripeWebhookHandler } from './providers/stripe/stripe.webhook';
 import { WebhookProcessorService } from './webhooks/webhook-processor.service';
 import { CatalogCacheService } from './catalog/catalog-cache.service';
+import { User } from '../auth/users/entities/user.entity';
 
 export interface PaymentsModuleAsyncOptions {
   imports?: Array<Type<unknown> | DynamicModule>;
@@ -66,7 +67,7 @@ export class PaymentsModule {
       global: options.global ?? true,
       imports: [
         ...(options.imports ?? []),
-        TypeOrmModule.forFeature(PAYMENTS_ENTITIES),
+        TypeOrmModule.forFeature([...PAYMENTS_ENTITIES, User]),
       ],
       controllers: [
         PaymentsController,

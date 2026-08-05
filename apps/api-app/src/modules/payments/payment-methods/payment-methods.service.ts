@@ -31,7 +31,7 @@ export class PaymentMethodsService {
   async syncFromProviderResult(
     paymentProviderId: string,
     customerId: string,
-    userId: string,
+    organizationId: string,
     providerResult: ProviderPaymentMethodResult,
   ): Promise<PaymentMethod> {
     try {
@@ -60,7 +60,7 @@ export class PaymentMethodsService {
       }
 
       return BaseRepository.createAndSave(this.paymentMethodsRepository, {
-        userId,
+        organizationId,
         customerId,
         paymentProviderId: provider.id,
         providerPaymentMethodId: providerResult.providerPaymentMethodId,
@@ -108,7 +108,7 @@ export class PaymentMethodsService {
   async storePaymentMethod(input: {
     paymentProviderId: string;
     customerId: string;
-    userId: string;
+    organizationId: string;
     providerPaymentMethodId: string;
   }): Promise<PaymentMethod> {
     try {
@@ -129,7 +129,7 @@ export class PaymentMethodsService {
       return this.syncFromProviderResult(
         input.paymentProviderId,
         customer.id,
-        input.userId,
+        input.organizationId,
         providerMethod,
       );
     } catch (error) {

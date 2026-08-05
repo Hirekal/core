@@ -38,7 +38,8 @@ export const ERROR_MESSAGES = {
       'Plan change requires the same currency as the current subscription',
     INTERVAL_NOT_SUPPORTED:
       'Plan change is not supported for the selected billing interval',
-    NOT_CHANGEABLE: 'Subscription must be active or trialing to change plans',
+    NOT_CHANGEABLE:
+      'Subscription must be active or trialing to change plans. If it was canceled, subscribe to a new plan instead.',
     MISSING_PAYMENT_METHOD:
       'A default payment method is required before upgrading the subscription',
     PAYMENT_REQUIRED:

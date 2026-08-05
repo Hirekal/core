@@ -8,15 +8,30 @@ import {
 import { ERROR_MESSAGES } from '../messages/payment.messages';
 import { getStripeErrorsNamespace } from './stripe-sdk.util';
 
+interface StripeLikeError extends Error {
+  type?: string;
+  code?: string;
+  param?: string;
+}
+
 const STRIPE_CODE_MESSAGES: Record<string, string> = {
   resource_missing: ERROR_MESSAGES.STRIPE.RESOURCE_MISSING,
   customer_tax_location_invalid: ERROR_MESSAGES.STRIPE.INVALID_CUSTOMER,
 };
 
-interface StripeLikeError extends Error {
-  type?: string;
-  code?: string;
-  param?: string;
+function mapStripeInvalidRequestMessage(error: StripeLikeError): string {
+  const code = error.code ?? '';
+  const mapped = STRIPE_CODE_MESSAGES[code];
+  if (mapped) {
+    return mapped;
+  }
+
+  const message = error.message.toLowerCase();
+  if (message.includes('canceled subscription')) {
+    return ERROR_MESSAGES.SUBSCRIPTION.NOT_CHANGEABLE;
+  }
+
+  return ERROR_MESSAGES.STRIPE.REQUEST_FAILED(error.message);
 }
 
 /**
@@ -52,10 +67,7 @@ export function rethrowStripeError(error: unknown): never {
     stripeErrors?.StripeInvalidRequestError &&
     error instanceof stripeErrors.StripeInvalidRequestError
   ) {
-    const code = error.code ?? '';
-    const message =
-      STRIPE_CODE_MESSAGES[code] ??
-      ERROR_MESSAGES.STRIPE.REQUEST_FAILED(error.message);
+    const message = mapStripeInvalidRequestMessage(error);
 
     if (error.param === 'payment_method') {
       throw new BadRequestException(
@@ -78,10 +90,7 @@ export function rethrowStripeError(error: unknown): never {
     }
 
     if (error.type === 'StripeInvalidRequestError') {
-      const code = error.code ?? '';
-      const message =
-        STRIPE_CODE_MESSAGES[code] ??
-        ERROR_MESSAGES.STRIPE.REQUEST_FAILED(error.message);
+      const message = mapStripeInvalidRequestMessage(error);
 
       if (error.param === 'payment_method') {
         throw new BadRequestException(

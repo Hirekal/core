@@ -56,7 +56,7 @@ export interface Price {
 
 export interface PaymentCustomer {
   id: string;
-  userId: string;
+  organizationId: string;
   paymentProviderId: string;
   providerCustomerId: string;
   email: string;
@@ -68,7 +68,7 @@ export interface PaymentCustomer {
 
 export interface PaymentMethod {
   id: string;
-  userId: string;
+  organizationId: string;
   customerId: string;
   paymentProviderId: string;
   providerPaymentMethodId: string;
@@ -83,7 +83,7 @@ export interface PaymentMethod {
 
 export interface Subscription {
   id: string;
-  userId: string;
+  organizationId: string;
   customerId: string;
   priceId: string;
   paymentProviderId: string;
@@ -104,7 +104,7 @@ export interface Subscription {
 
 export interface Invoice {
   id: string;
-  userId: string;
+  organizationId: string;
   subscriptionId: string | null;
   paymentProviderId: string;
   providerInvoiceId: string;

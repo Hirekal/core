@@ -11,7 +11,7 @@ import { PaymentProvider } from '../../payment-providers/entities/payment-provid
 @Entity('invoices')
 export class Invoice extends BaseEntity {
   @Column({ type: 'uuid' })
-  userId: string;
+  organizationId: string;
 
   @Column({ type: 'uuid', nullable: true })
   subscriptionId: string | null;

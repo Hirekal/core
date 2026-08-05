@@ -4,10 +4,11 @@
 import { Controller, Get, Param, ParseUUIDPipe } from '@nestjs/common';
 import { ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 import { Auth } from '../../auth/common/decorators/auth.decorator';
+import { SYSTEM_ROLES } from '../../auth/common/constants/auth.constants';
 import { PaymentProvidersService } from './payment-providers.service';
 
 @ApiTags('Payment Providers')
-@Auth()
+@Auth(SYSTEM_ROLES.ADMIN)
 @Controller('payments/providers')
 export class PaymentProvidersController {
   constructor(

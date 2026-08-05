@@ -16,7 +16,7 @@ import { Invoice } from '../../invoices/entities/invoice.entity';
 @Entity('subscriptions')
 export class Subscription extends BaseEntity {
   @Column({ type: 'uuid' })
-  userId: string;
+  organizationId: string;
 
   @Column({ type: 'uuid' })
   customerId: string;

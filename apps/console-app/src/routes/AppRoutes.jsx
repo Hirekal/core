@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
-import ProtectedRoute, { PublicRoute, HomeRedirect } from './ProtectedRoute';
+import ProtectedRoute, { AdminRoute, PublicRoute, HomeRedirect } from './ProtectedRoute';
 import Navbar from '../components/layout/Navbar';
 
 import LoginPage from '../pages/auth/LoginPage';
@@ -136,65 +136,65 @@ export default function AppRoutes() {
       <Route
         path="/billing/plans"
         element={
-          <ProtectedRoute>
+          <AdminRoute>
             <AppLayout><PricingPlansPage /></AppLayout>
-          </ProtectedRoute>
+          </AdminRoute>
         }
       />
       <Route
         path="/billing/upgrade/checkout/:priceId"
         element={
-          <ProtectedRoute>
+          <AdminRoute>
             <AppLayout><UpgradeCheckoutPage /></AppLayout>
-          </ProtectedRoute>
+          </AdminRoute>
         }
       />
       <Route
         path="/billing/upgrade/:priceId"
         element={
-          <ProtectedRoute>
+          <AdminRoute>
             <AppLayout><PlanUpgradePage /></AppLayout>
-          </ProtectedRoute>
+          </AdminRoute>
         }
       />
       <Route
         path="/billing/checkout/:priceId"
         element={
-          <ProtectedRoute>
+          <AdminRoute>
             <AppLayout><CheckoutPage /></AppLayout>
-          </ProtectedRoute>
+          </AdminRoute>
         }
       />
       <Route
         path="/billing/success"
         element={
-          <ProtectedRoute>
+          <AdminRoute>
             <AppLayout><CheckoutSuccessPage /></AppLayout>
-          </ProtectedRoute>
+          </AdminRoute>
         }
       />
       <Route
         path="/billing/failed"
         element={
-          <ProtectedRoute>
+          <AdminRoute>
             <AppLayout><CheckoutFailedPage /></AppLayout>
-          </ProtectedRoute>
+          </AdminRoute>
         }
       />
       <Route
         path="/billing/subscription"
         element={
-          <ProtectedRoute>
+          <AdminRoute>
             <AppLayout><ManageSubscriptionPage /></AppLayout>
-          </ProtectedRoute>
+          </AdminRoute>
         }
       />
       <Route
         path="/payments"
         element={
-          <ProtectedRoute>
+          <AdminRoute>
             <AppLayout><InvoicesPage /></AppLayout>
-          </ProtectedRoute>
+          </AdminRoute>
         }
       />
       <Route path="/invoices" element={<Navigate to="/payments" replace />} />

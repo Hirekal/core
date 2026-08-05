@@ -62,11 +62,17 @@ export class SubscriptionsService {
   /*
    * Creates a provider subscription for a customer and persists local state.
    */
-  async create(dto: CreateSubscriptionDto): Promise<Subscription> {
+  async create(
+    dto: CreateSubscriptionDto,
+    organizationId: string,
+  ): Promise<Subscription> {
     try {
       const customer = await this.paymentCustomersService.findOne(
         dto.customerId,
       );
+      if (customer.organizationId !== organizationId) {
+        throw new ForbiddenException(ERROR_MESSAGES.SUBSCRIPTION.NOT_FOUND);
+      }
       const price = await this.pricesService.findOne(dto.priceId);
       const provider = await this.paymentProvidersService.findById(
         customer.paymentProviderId,
@@ -86,7 +92,7 @@ export class SubscriptionsService {
       });
 
       return this.saveFromProviderResult({
-        userId: customer.userId,
+        organizationId: customer.organizationId,
         customerId: customer.id,
         priceId: price.id,
         paymentProviderId: provider.id,
@@ -105,9 +111,14 @@ export class SubscriptionsService {
   /*
    * Cancels a subscription and syncs provider state to the database.
    */
-  async cancel(id: string, cancelAtPeriodEnd = true): Promise<Subscription> {
+  async cancel(
+    id: string,
+    cancelAtPeriodEnd = true,
+    organizationId?: string,
+  ): Promise<Subscription> {
     try {
       const subscription = await this.findOne(id);
+      this.assertOrganizationOwnership(subscription, organizationId);
       this.assertSubscriptionChangeable(subscription);
       const provider = await this.paymentProvidersService.findById(
         subscription.paymentProviderId,
@@ -134,9 +145,10 @@ export class SubscriptionsService {
   /*
    * Resumes a subscription scheduled to cancel at period end.
    */
-  async resume(id: string): Promise<Subscription> {
+  async resume(id: string, organizationId?: string): Promise<Subscription> {
     try {
       const subscription = await this.findOne(id);
+      this.assertOrganizationOwnership(subscription, organizationId);
       const provider = await this.paymentProvidersService.findById(
         subscription.paymentProviderId,
       );
@@ -167,12 +179,17 @@ export class SubscriptionsService {
   /*
    * Upgrades a subscription to a higher plan with immediate proration.
    */
-  async upgrade(id: string, newPriceId: string): Promise<Subscription> {
+  async upgrade(
+    id: string,
+    newPriceId: string,
+    organizationId?: string,
+  ): Promise<Subscription> {
     try {
       const planChangeResult = await this.changePlan(
         id,
         newPriceId,
         SubscriptionPlanChangeAction.UPGRADE,
+        organizationId,
       );
       return planChangeResult.subscription;
     } catch (error) {
@@ -188,17 +205,15 @@ export class SubscriptionsService {
    * Creates an upgrade checkout session so the user can pay proration with a card.
    */
   async createUpgradeCheckout(
-    userId: string,
+    organizationId: string,
     subscriptionId: string,
     newPriceId: string,
   ): Promise<ProviderUpgradeCheckoutSessionResult & { publishableKey: string }> {
     try {
-      const subscription = await this.findOne(subscriptionId);
-      if (subscription.userId !== userId) {
-        throw new ForbiddenException(ERROR_MESSAGES.SUBSCRIPTION.NOT_FOUND);
-      }
-
-      this.assertSubscriptionChangeable(subscription);
+      const subscription = await this.loadChangeableSubscription(
+        subscriptionId,
+        organizationId,
+      );
 
       const currentPrice = await this.ensureCurrentPrice(subscription);
       const newPrice = await this.pricesService.findOne(newPriceId);
@@ -228,7 +243,7 @@ export class SubscriptionsService {
         providerSubscriptionId: subscription.providerSubscriptionId,
         providerPriceId: newPrice.providerPriceId,
         metadata: {
-          userId,
+          organizationId,
           priceId: newPrice.id,
           [SUBSCRIPTION_METADATA_KEYS.PENDING_UPGRADE_PRICE_ID]: newPrice.id,
           [SUBSCRIPTION_METADATA_KEYS.PENDING_UPGRADE_PROVIDER_PRICE_ID]:
@@ -268,14 +283,12 @@ export class SubscriptionsService {
    * Reverts an unpaid upgrade checkout and restores the previous plan locally.
    */
   async cancelPendingUpgradeCheckout(
-    userId: string,
+    organizationId: string,
     subscriptionId: string,
   ): Promise<Subscription> {
     try {
       const subscription = await this.findOne(subscriptionId);
-      if (subscription.userId !== userId) {
-        throw new ForbiddenException(ERROR_MESSAGES.SUBSCRIPTION.NOT_FOUND);
-      }
+      this.assertOrganizationOwnership(subscription, organizationId);
 
       const provider = await this.paymentProvidersService.findById(
         subscription.paymentProviderId,
@@ -305,12 +318,17 @@ export class SubscriptionsService {
   /*
    * Schedules a downgrade to take effect at the next billing period.
    */
-  async downgrade(id: string, newPriceId: string): Promise<Subscription> {
+  async downgrade(
+    id: string,
+    newPriceId: string,
+    organizationId?: string,
+  ): Promise<Subscription> {
     try {
       const planChangeResult = await this.changePlan(
         id,
         newPriceId,
         SubscriptionPlanChangeAction.DOWNGRADE,
+        organizationId,
       );
       return planChangeResult.subscription;
     } catch (error) {
@@ -328,6 +346,7 @@ export class SubscriptionsService {
   async previewPlanChange(
     id: string,
     newPriceId: string,
+    organizationId?: string,
   ): Promise<{
     currentPlan: Price;
     newPlan: Price;
@@ -335,8 +354,10 @@ export class SubscriptionsService {
     direction: PlanChangeDirection;
   }> {
     try {
-      const subscription = await this.findOne(id);
-      this.assertSubscriptionChangeable(subscription);
+      const subscription = await this.loadChangeableSubscription(
+        id,
+        organizationId,
+      );
 
       const currentPrice = await this.ensureCurrentPrice(subscription);
       const newPrice = await this.pricesService.findOne(newPriceId);
@@ -377,9 +398,13 @@ export class SubscriptionsService {
   /*
    * Cancels a pending scheduled downgrade on the subscription.
    */
-  async cancelScheduledChange(id: string): Promise<Subscription> {
+  async cancelScheduledChange(
+    id: string,
+    organizationId?: string,
+  ): Promise<Subscription> {
     try {
       const subscription = await this.findOne(id);
+      this.assertOrganizationOwnership(subscription, organizationId);
       if (!this.hasScheduledChange(subscription.metadata)) {
         throw new BadRequestException(
           ERROR_MESSAGES.SUBSCRIPTION.NO_SCHEDULED_CHANGE,
@@ -420,10 +445,13 @@ export class SubscriptionsService {
     id: string,
     newPriceId: string,
     direction: SubscriptionPlanChangeAction,
+    organizationId?: string,
   ): Promise<{ subscription: Subscription; message: string }> {
     try {
-      const subscription = await this.findOne(id);
-      this.assertSubscriptionChangeable(subscription);
+      const subscription = await this.loadChangeableSubscription(
+        id,
+        organizationId,
+      );
 
       const currentPrice = await this.ensureCurrentPrice(subscription);
       const newPrice = await this.pricesService.findOne(newPriceId);
@@ -543,6 +571,20 @@ export class SubscriptionsService {
     }
 
     return comparison;
+  }
+
+  /*
+   * Loads a subscription, syncs provider status, and verifies it can change plans.
+   */
+  private async loadChangeableSubscription(
+    id: string,
+    organizationId?: string,
+  ): Promise<Subscription> {
+    const subscription = await this.findOne(id);
+    this.assertOrganizationOwnership(subscription, organizationId);
+    const refreshedSubscription = await this.refreshFromProvider(subscription);
+    this.assertSubscriptionChangeable(refreshedSubscription);
+    return refreshedSubscription;
   }
 
   /*
@@ -735,17 +777,45 @@ export class SubscriptionsService {
   }
 
   /*
-   * Returns the user's latest subscription regardless of status.
+   * Ensures the subscription belongs to the authenticated organization.
    */
-  async findLatestByUserId(userId: string): Promise<Subscription | null> {
+  private assertOrganizationOwnership(
+    subscription: Subscription,
+    organizationId?: string,
+  ): void {
+    if (
+      organizationId &&
+      subscription.organizationId !== organizationId
+    ) {
+      throw new ForbiddenException(ERROR_MESSAGES.SUBSCRIPTION.NOT_FOUND);
+    }
+  }
+
+  /*
+   * Returns the organization's latest subscription regardless of status.
+   */
+  async findLatestByOrganizationId(
+    organizationId: string,
+  ): Promise<Subscription | null> {
     try {
-      const activeSubscription = await this.findActiveByUserId(userId);
+      const activeSubscription =
+        await this.findActiveByOrganizationId(organizationId);
       if (activeSubscription) {
-        return activeSubscription;
+        const refreshedSubscription =
+          await this.refreshFromProvider(activeSubscription);
+        if (
+          CHANGEABLE_SUBSCRIPTION_STATUSES.includes(
+            refreshedSubscription.subscriptionStatus as (typeof CHANGEABLE_SUBSCRIPTION_STATUSES)[number],
+          ) ||
+          refreshedSubscription.subscriptionStatus ===
+            SubscriptionStatus.PAST_DUE
+        ) {
+          return refreshedSubscription;
+        }
       }
 
       const subscription = await this.subscriptionsRepository.findOne({
-        where: { userId },
+        where: { organizationId },
         relations: {
           customer: true,
           price: { product: true },
@@ -756,19 +826,24 @@ export class SubscriptionsService {
 
       return subscription ?? null;
     } catch (error) {
-      this.logger.error(LOG_MESSAGES.SUBSCRIPTION.FIND_FAILED(userId), error);
+      this.logger.error(
+        LOG_MESSAGES.SUBSCRIPTION.FIND_FAILED(organizationId),
+        error,
+      );
       throw error;
     }
   }
 
   /*
-   * Returns the user's latest active subscription when one exists.
+   * Returns the organization's latest active subscription when one exists.
    */
-  async findActiveByUserId(userId: string): Promise<Subscription | null> {
+  async findActiveByOrganizationId(
+    organizationId: string,
+  ): Promise<Subscription | null> {
     try {
       return this.subscriptionsRepository.findOne({
         where: {
-          userId,
+          organizationId,
           status: RecordStatus.ACTIVE,
           subscriptionStatus: In([
             SubscriptionStatus.ACTIVE,
@@ -784,7 +859,10 @@ export class SubscriptionsService {
         order: { createdAt: 'DESC' },
       });
     } catch (error) {
-      this.logger.error(LOG_MESSAGES.SUBSCRIPTION.FIND_FAILED(userId), error);
+      this.logger.error(
+        LOG_MESSAGES.SUBSCRIPTION.FIND_FAILED(organizationId),
+        error,
+      );
       throw error;
     }
   }
@@ -807,12 +885,15 @@ export class SubscriptionsService {
   }
 
   /*
-   * Returns a subscription when it belongs to the given user.
+   * Returns a subscription when it belongs to the given organization.
    */
-  async findOneForUser(id: string, userId: string): Promise<Subscription> {
+  async findOneForOrganization(
+    id: string,
+    organizationId: string,
+  ): Promise<Subscription> {
     try {
       const subscription = await this.findOne(id);
-      if (subscription.userId !== userId) {
+      if (subscription.organizationId !== organizationId) {
         throw new ForbiddenException(ERROR_MESSAGES.SUBSCRIPTION.NOT_FOUND);
       }
       return this.refreshFromProvider(subscription);
@@ -874,7 +955,7 @@ export class SubscriptionsService {
    * Persists a Stripe subscription from checkout or webhook context.
    */
   async syncFromStripeCheckout(input: {
-    userId: string;
+    organizationId: string;
     providerCode: string;
     providerCustomerId: string;
     providerSubscriptionId: string;
@@ -908,7 +989,7 @@ export class SubscriptionsService {
         }
 
         customer = await this.paymentCustomersService.upsertFromProvider({
-          userId: input.userId,
+          organizationId: input.organizationId,
           providerCode: input.providerCode,
           providerCustomerId: input.providerCustomerId,
           email: input.email ?? '',
@@ -959,7 +1040,7 @@ export class SubscriptionsService {
       }
 
       return this.saveFromProviderResult({
-        userId: input.userId,
+        organizationId: customer.organizationId,
         customerId: customer.id,
         priceId: localPriceId,
         paymentProviderId: customer.paymentProviderId,
@@ -1060,7 +1141,7 @@ export class SubscriptionsService {
    * Creates a new local record from a provider subscription result.
    */
   async saveFromProviderResult(input: {
-    userId: string;
+    organizationId: string;
     customerId: string;
     priceId: string;
     paymentProviderId: string;
@@ -1087,7 +1168,7 @@ export class SubscriptionsService {
       const createdSubscription = await BaseRepository.createAndSave(
         this.subscriptionsRepository,
         {
-          userId: input.userId,
+          organizationId: input.organizationId,
           customerId: input.customerId,
           priceId: input.priceId,
           paymentProviderId: input.paymentProviderId,

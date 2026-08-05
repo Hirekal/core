@@ -4,6 +4,7 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Logger,
   Param,
@@ -14,6 +15,7 @@ import {
 import { ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { Auth } from '../auth/common/decorators/auth.decorator';
 import { CurrentUser } from '../auth/common/decorators/current-user.decorator';
+import { SYSTEM_ROLES } from '../auth/common/constants/auth.constants';
 import { User } from '../auth/users/entities/user.entity';
 import { PaymentsService } from './payments.service';
 import { PaymentCustomersService } from './payment-customers/payment-customers.service';
@@ -23,9 +25,10 @@ import { CreateBillingPortalSessionDto } from './common/dto/create-billing-porta
 import { AttachPaymentMethodDto } from './common/dto/attach-payment-method.dto';
 import { SyncCheckoutSubscriptionDto } from './common/dto/sync-checkout-subscription.dto';
 import { CatalogCacheService } from './catalog/catalog-cache.service';
+import { ERROR_MESSAGES } from './common/messages/payment.messages';
 
 @ApiTags('Payments')
-@Auth()
+@Auth(SYSTEM_ROLES.ADMIN)
 @Controller('payments')
 export class PaymentsController {
   private readonly logger = new Logger(PaymentsController.name);
@@ -37,7 +40,7 @@ export class PaymentsController {
   ) {}
 
   /*
-   * Creates or links a payment provider customer for the authenticated user.
+   * Creates or links a payment provider customer for the authenticated organization.
    */
   @Post('customers')
   @ApiOperation({ summary: 'Create payment customer' })
@@ -46,15 +49,21 @@ export class PaymentsController {
     @Body() dto: CreatePaymentCustomerDto,
   ) {
     try {
-      return await this.paymentsService.createCustomer(user.id, dto);
+      return await this.paymentsService.createCustomer(
+        user.organizationId,
+        dto,
+      );
     } catch (error) {
-      this.logger.error(`createCustomer failed for user ${user.id}`, error);
+      this.logger.error(
+        `createCustomer failed for organization ${user.organizationId}`,
+        error,
+      );
       throw error;
     }
   }
 
   /*
-   * Returns the authenticated user's payment customer record for a provider.
+   * Returns the authenticated organization's payment customer record for a provider.
    */
   @Get('customers/me')
   @ApiOperation({ summary: 'Get my payment customer' })
@@ -64,12 +73,15 @@ export class PaymentsController {
     @Query('paymentProviderId', ParseUUIDPipe) paymentProviderId: string,
   ) {
     try {
-      return await this.paymentCustomersService.findByUserAndPaymentProviderId(
-        user.id,
+      return await this.paymentCustomersService.findByOrganizationAndPaymentProviderId(
+        user.organizationId,
         paymentProviderId,
       );
     } catch (error) {
-      this.logger.error(`getMyCustomer failed for user ${user.id}`, error);
+      this.logger.error(
+        `getMyCustomer failed for organization ${user.organizationId}`,
+        error,
+      );
       throw error;
     }
   }
@@ -98,9 +110,15 @@ export class PaymentsController {
     @Body() dto: CreateCheckoutSessionDto,
   ) {
     try {
-      return await this.paymentsService.createCheckoutSession(user.id, dto);
+      return await this.paymentsService.createCheckoutSession(
+        user.organizationId,
+        dto,
+      );
     } catch (error) {
-      this.logger.error(`createCheckout failed for user ${user.id}`, error);
+      this.logger.error(
+        `createCheckout failed for organization ${user.organizationId}`,
+        error,
+      );
       throw error;
     }
   }
@@ -116,11 +134,14 @@ export class PaymentsController {
   ) {
     try {
       return await this.paymentsService.syncCheckoutSubscription(
-        user.id,
+        user.organizationId,
         dto,
       );
     } catch (error) {
-      this.logger.error(`syncCheckoutSubscription failed for user ${user.id}`, error);
+      this.logger.error(
+        `syncCheckoutSubscription failed for organization ${user.organizationId}`,
+        error,
+      );
       throw error;
     }
   }
@@ -137,12 +158,12 @@ export class PaymentsController {
   ) {
     try {
       return await this.paymentsService.getCheckoutSessionStatus(
-        user.id,
+        user.organizationId,
         sessionId,
       );
     } catch (error) {
       this.logger.error(
-        `getCheckoutSession failed for user ${user.id}, session ${sessionId}`,
+        `getCheckoutSession failed for organization ${user.organizationId}, session ${sessionId}`,
         error,
       );
       throw error;
@@ -160,12 +181,12 @@ export class PaymentsController {
   ) {
     try {
       return await this.paymentsService.createBillingPortalSession(
-        user.id,
+        user.organizationId,
         dto,
       );
     } catch (error) {
       this.logger.error(
-        `createBillingPortal failed for user ${user.id}`,
+        `createBillingPortal failed for organization ${user.organizationId}`,
         error,
       );
       throw error;
@@ -182,10 +203,13 @@ export class PaymentsController {
     @Body() dto: AttachPaymentMethodDto,
   ) {
     try {
-      return await this.paymentsService.attachPaymentMethod(user.id, dto);
+      return await this.paymentsService.attachPaymentMethod(
+        user.organizationId,
+        dto,
+      );
     } catch (error) {
       this.logger.error(
-        `attachPaymentMethod failed for user ${user.id}`,
+        `attachPaymentMethod failed for organization ${user.organizationId}`,
         error,
       );
       throw error;
@@ -193,7 +217,7 @@ export class PaymentsController {
   }
 
   /*
-   * Lists saved payment methods for the authenticated user and provider.
+   * Lists saved payment methods for the authenticated organization and provider.
    */
   @Get('payment-methods')
   @ApiOperation({ summary: 'List payment methods' })
@@ -204,31 +228,39 @@ export class PaymentsController {
   ) {
     try {
       return await this.paymentsService.listPaymentMethods(
-        user.id,
+        user.organizationId,
         paymentProviderId,
       );
     } catch (error) {
-      this.logger.error(`listPaymentMethods failed for user ${user.id}`, error);
+      this.logger.error(
+        `listPaymentMethods failed for organization ${user.organizationId}`,
+        error,
+      );
       throw error;
     }
   }
 
   /*
-   * Lists invoices for the authenticated user.
+   * Lists invoices for the authenticated organization.
    */
   @Get('invoices/me')
   @ApiOperation({ summary: 'List my invoices' })
   async listMyInvoices(@CurrentUser() user: User) {
     try {
-      return await this.paymentsService.listInvoicesForUser(user.id);
+      return await this.paymentsService.listInvoicesForOrganization(
+        user.organizationId,
+      );
     } catch (error) {
-      this.logger.error(`listMyInvoices failed for user ${user.id}`, error);
+      this.logger.error(
+        `listMyInvoices failed for organization ${user.organizationId}`,
+        error,
+      );
       throw error;
     }
   }
 
   /*
-   * Lists invoices from the payment provider for the authenticated user.
+   * Lists invoices from the payment provider for the authenticated organization.
    */
   @Get('invoices')
   @ApiOperation({ summary: 'List invoices' })
@@ -239,11 +271,14 @@ export class PaymentsController {
   ) {
     try {
       return await this.paymentsService.listInvoices(
-        user.id,
+        user.organizationId,
         paymentProviderId,
       );
     } catch (error) {
-      this.logger.error(`listInvoices failed for user ${user.id}`, error);
+      this.logger.error(
+        `listInvoices failed for organization ${user.organizationId}`,
+        error,
+      );
       throw error;
     }
   }
@@ -269,9 +304,16 @@ export class PaymentsController {
   @Get('customers/:id')
   @ApiOperation({ summary: 'Get payment customer by ID' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  async getCustomer(@Param('id', ParseUUIDPipe) id: string) {
+  async getCustomer(
+    @CurrentUser() user: User,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     try {
-      return await this.paymentCustomersService.findOne(id);
+      const customer = await this.paymentCustomersService.findOne(id);
+      if (customer.organizationId !== user.organizationId) {
+        throw new ForbiddenException(ERROR_MESSAGES.PAYMENT_CUSTOMER.NOT_FOUND);
+      }
+      return customer;
     } catch (error) {
       this.logger.error(`getCustomer failed for id ${id}`, error);
       throw error;

@@ -15,6 +15,7 @@ import { ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { Auth } from '../../auth/common/decorators/auth.decorator';
 import { Public } from '../../auth/common/decorators/public.decorator';
 import { CurrentUser } from '../../auth/common/decorators/current-user.decorator';
+import { SYSTEM_ROLES } from '../../auth/common/constants/auth.constants';
 import { User } from '../../auth/users/entities/user.entity';
 import { SubscriptionsService } from './subscriptions.service';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
@@ -23,7 +24,7 @@ import { ChangeSubscriptionPlanDto } from './dto/change-subscription-plan.dto';
 import { SUCCESS_MESSAGES } from '../common/messages/payment.messages';
 
 @ApiTags('Subscriptions')
-@Auth()
+@Auth(SYSTEM_ROLES.ADMIN)
 @Controller('payments/subscriptions')
 export class SubscriptionsController {
   private readonly logger = new Logger(SubscriptionsController.name);
@@ -35,9 +36,12 @@ export class SubscriptionsController {
    */
   @Post()
   @ApiOperation({ summary: 'Create subscription' })
-  async create(@Body() dto: CreateSubscriptionDto) {
+  async create(
+    @CurrentUser() user: User,
+    @Body() dto: CreateSubscriptionDto,
+  ) {
     try {
-      return await this.subscriptionsService.create(dto);
+      return await this.subscriptionsService.create(dto, user.organizationId);
     } catch (error) {
       this.logger.error('create subscription failed', error);
       throw error;
@@ -81,15 +85,20 @@ export class SubscriptionsController {
   }
 
   /*
-   * Returns the authenticated user's latest subscription record.
+   * Returns the authenticated organization's latest subscription record.
    */
   @Get('me')
   @ApiOperation({ summary: 'Get my subscription' })
   async findMine(@CurrentUser() user: User) {
     try {
-      return await this.subscriptionsService.findLatestByUserId(user.id);
+      return await this.subscriptionsService.findLatestByOrganizationId(
+        user.organizationId,
+      );
     } catch (error) {
-      this.logger.error(`findMine failed for user ${user.id}`, error);
+      this.logger.error(
+        `findMine failed for organization ${user.organizationId}`,
+        error,
+      );
       throw error;
     }
   }
@@ -105,7 +114,10 @@ export class SubscriptionsController {
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     try {
-      return await this.subscriptionsService.findOneForUser(id, user.id);
+      return await this.subscriptionsService.findOneForOrganization(
+        id,
+        user.organizationId,
+      );
     } catch (error) {
       this.logger.error(`findOne failed for subscription ${id}`, error);
       throw error;
@@ -119,6 +131,7 @@ export class SubscriptionsController {
   @ApiOperation({ summary: 'Cancel subscription' })
   @ApiParam({ name: 'id', format: 'uuid' })
   async cancel(
+    @CurrentUser() user: User,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CancelSubscriptionDto,
   ) {
@@ -126,6 +139,7 @@ export class SubscriptionsController {
       return await this.subscriptionsService.cancel(
         id,
         dto.cancelAtPeriodEnd ?? true,
+        user.organizationId,
       );
     } catch (error) {
       this.logger.error(`cancel failed for subscription ${id}`, error);
@@ -139,9 +153,12 @@ export class SubscriptionsController {
   @Post(':id/resume')
   @ApiOperation({ summary: 'Resume subscription' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  async resume(@Param('id', ParseUUIDPipe) id: string) {
+  async resume(
+    @CurrentUser() user: User,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     try {
-      return await this.subscriptionsService.resume(id);
+      return await this.subscriptionsService.resume(id, user.organizationId);
     } catch (error) {
       this.logger.error(`resume failed for subscription ${id}`, error);
       throw error;
@@ -155,12 +172,17 @@ export class SubscriptionsController {
   @ApiOperation({ summary: 'Preview plan change' })
   @ApiParam({ name: 'id', format: 'uuid' })
   async previewPlanChange(
+    @CurrentUser() user: User,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ChangeSubscriptionPlanDto,
   ) {
     try {
       const planChangePreview =
-        await this.subscriptionsService.previewPlanChange(id, dto.priceId);
+        await this.subscriptionsService.previewPlanChange(
+          id,
+          dto.priceId,
+          user.organizationId,
+        );
       return {
         currentPlan: planChangePreview.currentPlan,
         newPlan: planChangePreview.newPlan,
@@ -182,10 +204,16 @@ export class SubscriptionsController {
   @Post(':id/cancel-scheduled-change')
   @ApiOperation({ summary: 'Cancel scheduled plan change' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  async cancelScheduledChange(@Param('id', ParseUUIDPipe) id: string) {
+  async cancelScheduledChange(
+    @CurrentUser() user: User,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     try {
       const subscription =
-        await this.subscriptionsService.cancelScheduledChange(id);
+        await this.subscriptionsService.cancelScheduledChange(
+          id,
+          user.organizationId,
+        );
       return {
         message: this.subscriptionsService.getSuccessMessage(
           'cancelScheduledChange',
@@ -214,7 +242,7 @@ export class SubscriptionsController {
   ) {
     try {
       return await this.subscriptionsService.createUpgradeCheckout(
-        user.id,
+        user.organizationId,
         id,
         dto.priceId,
       );
@@ -233,7 +261,7 @@ export class SubscriptionsController {
   ) {
     try {
       return await this.subscriptionsService.cancelPendingUpgradeCheckout(
-        user.id,
+        user.organizationId,
         id,
       );
     } catch (error) {
@@ -249,6 +277,7 @@ export class SubscriptionsController {
   @ApiOperation({ summary: 'Upgrade subscription' })
   @ApiParam({ name: 'id', format: 'uuid' })
   async upgrade(
+    @CurrentUser() user: User,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ChangeSubscriptionPlanDto,
   ) {
@@ -256,6 +285,7 @@ export class SubscriptionsController {
       const subscription = await this.subscriptionsService.upgrade(
         id,
         dto.priceId,
+        user.organizationId,
       );
       return {
         message: SUCCESS_MESSAGES.SUBSCRIPTION.UPGRADED,
@@ -274,6 +304,7 @@ export class SubscriptionsController {
   @ApiOperation({ summary: 'Downgrade subscription' })
   @ApiParam({ name: 'id', format: 'uuid' })
   async downgrade(
+    @CurrentUser() user: User,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ChangeSubscriptionPlanDto,
   ) {
@@ -281,6 +312,7 @@ export class SubscriptionsController {
       const subscription = await this.subscriptionsService.downgrade(
         id,
         dto.priceId,
+        user.organizationId,
       );
       return {
         message: SUCCESS_MESSAGES.SUBSCRIPTION.DOWNGRADED,
