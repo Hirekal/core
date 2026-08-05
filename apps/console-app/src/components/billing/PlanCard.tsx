@@ -19,6 +19,7 @@ interface PlanCardProps {
   actionLabel: string;
   actionDisabled?: boolean;
   actionLoading?: boolean;
+  hideAction?: boolean;
   onAction: () => void;
 }
 
@@ -33,6 +34,7 @@ export default function PlanCard({
   actionLabel,
   actionDisabled = false,
   actionLoading = false,
+  hideAction = false,
   onAction,
 }: PlanCardProps) {
   const { product, price, features, recommended } = plan;
@@ -92,6 +94,7 @@ export default function PlanCard({
         </ul>
       </div>
 
+      {!hideAction && (
       <div className="mt-8 space-y-2">
         <Button
           className="w-full"
@@ -114,6 +117,7 @@ export default function PlanCard({
           <p className="text-center text-xs text-muted">This plan starts on the scheduled date</p>
         )}
       </div>
+      )}
     </Card>
   );
 }

@@ -55,6 +55,11 @@ export default function BillingSummaryCard({
   const paymentMethodLabel = paymentMethod
     ? `${paymentMethod.brand?.toUpperCase() ?? 'CARD'} ···· ${paymentMethod.last4 ?? '****'}`
     : 'No payment method';
+  const showChangePlan = Boolean(onChangePlan);
+  const changePlanDisabled = processing;
+  const showCancelSchedule = Boolean(hasScheduledDowngrade && onCancelScheduledChange);
+  const showCancel = Boolean(!subscription.cancelAtPeriodEnd && onCancel);
+  const showActions = manageable && (showChangePlan || showCancelSchedule || showCancel);
 
   return (
     <Card className="p-4 sm:p-5">
@@ -97,17 +102,22 @@ export default function BillingSummaryCard({
         </p>
       )}
 
-      {manageable && (
+      {showActions && (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
           <div className="flex flex-wrap gap-2">
-            {onChangePlan && (
-              <Button variant="secondary" size="sm" disabled={processing} onClick={onChangePlan}>
+            {showChangePlan && (
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={changePlanDisabled}
+                onClick={onChangePlan}
+              >
                 {changePlansVisible ? 'Hide plans' : 'Change plan'}
               </Button>
             )}
           </div>
           <div className="flex flex-wrap gap-2">
-            {hasScheduledDowngrade && onCancelScheduledChange && (
+            {showCancelSchedule && (
               <Button
                 variant="secondary"
                 size="sm"
@@ -117,17 +127,11 @@ export default function BillingSummaryCard({
                 Cancel schedule
               </Button>
             )}
-            {subscription.cancelAtPeriodEnd
-              ? onResume && (
-                  <Button size="sm" disabled={processing} onClick={onResume}>
-                    Resume subscription
-                  </Button>
-                )
-              : onCancel && (
-                  <Button variant="danger" size="sm" disabled={processing} onClick={onCancel}>
-                    Cancel subscription
-                  </Button>
-                )}
+            {showCancel && (
+              <Button variant="danger" size="sm" disabled={processing} onClick={onCancel}>
+                Cancel subscription
+              </Button>
+            )}
           </div>
         </div>
       )}

@@ -1,8 +1,9 @@
 /**
  * @fileoverview Custom checkout payment form styled like Stripe Checkout.
  */
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ChevronDown } from 'lucide-react';
 import {
   CardCvcElement,
   CardExpiryElement,
@@ -11,7 +12,6 @@ import {
   useStripe,
 } from '@stripe/react-stripe-js';
 import type { StripeCardElementOptions } from '@stripe/stripe-js';
-import Input from '../common/Input';
 import Button from '../common/Button';
 import BillingErrorState from './BillingErrorState';
 import { formatMoney, isBillableSubscription } from '../../utils/billingFormat';
@@ -20,6 +20,19 @@ import { persistSubscriptionSession } from '../../utils/billingStorage';
 import * as billingService from '../../services/billingService';
 import { toUserErrorMessage } from '../../utils/errorMessage';
 import type { Price } from '../../types/billing';
+
+const checkoutFieldClass =
+  'w-full border-0 bg-transparent px-3 py-3 text-base text-heading placeholder:text-[#8898aa] focus:outline-none';
+const checkoutBoxClass =
+  'overflow-hidden rounded-md border border-[#e6ebf1] bg-white shadow-sm';
+
+const BILLING_COUNTRIES = [
+  { code: 'US', label: 'United States' },
+  { code: 'IN', label: 'India' },
+  { code: 'GB', label: 'United Kingdom' },
+  { code: 'CA', label: 'Canada' },
+  { code: 'AU', label: 'Australia' },
+];
 
 const cardElementOptions: StripeCardElementOptions = {
   style: {
@@ -53,6 +66,7 @@ interface CheckoutPaymentFormProps {
     providerSubscriptionId: string;
   }>;
   onCheckoutFailed?: () => Promise<void>;
+  switchError?: string;
   onEmailChange: (value: string) => void;
   onNameChange: (value: string) => void;
 }
@@ -71,6 +85,7 @@ export default function CheckoutPaymentForm({
   navigationState,
   prepareCheckout,
   onCheckoutFailed,
+  switchError = '',
   onEmailChange,
   onNameChange,
 }: CheckoutPaymentFormProps) {
@@ -81,6 +96,17 @@ export default function CheckoutPaymentForm({
 
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
+  const [billingName, setBillingName] = useState(name);
+  const [billingCountry, setBillingCountry] = useState('US');
+  const [billingAddress, setBillingAddress] = useState('');
+  const [showManualAddress, setShowManualAddress] = useState(false);
+  const [billingCity, setBillingCity] = useState('');
+  const [billingState, setBillingState] = useState('');
+  const [billingPostal, setBillingPostal] = useState('');
+
+  useEffect(() => {
+    setBillingName(name);
+  }, [name]);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -119,7 +145,14 @@ export default function CheckoutPaymentForm({
           card: cardNumberElement,
           billing_details: {
             email: email.trim(),
-            name: name.trim() || undefined,
+            name: billingName.trim() || name.trim() || undefined,
+            address: {
+              line1: billingAddress.trim() || undefined,
+              city: billingCity.trim() || undefined,
+              state: billingState.trim() || undefined,
+              postal_code: billingPostal.trim() || undefined,
+              country: billingCountry,
+            },
           },
         },
       });
@@ -178,22 +211,100 @@ export default function CheckoutPaymentForm({
       <div className="space-y-6">
         <div>
           <h2 className="text-sm font-medium text-heading">Contact information</h2>
-          <div className="mt-3">
-            <Input
-              label="Email"
+          <div className={`mt-3 ${checkoutBoxClass}`}>
+            <input
               type="email"
               value={email}
               onChange={(event) => onEmailChange(event.target.value)}
+              placeholder="Email"
               required
+              className={checkoutFieldClass}
             />
           </div>
+        </div>
+
+        <div>
+          <h2 className="text-sm font-medium text-heading">Billing address</h2>
+          <div className={`mt-3 ${checkoutBoxClass}`}>
+            <input
+              type="text"
+              value={billingName}
+              onChange={(event) => {
+                setBillingName(event.target.value);
+                onNameChange(event.target.value);
+              }}
+              placeholder="Name"
+              required
+              className={`${checkoutFieldClass} border-b border-[#e6ebf1]`}
+            />
+            <div className="relative border-b border-[#e6ebf1]">
+              <select
+                value={billingCountry}
+                onChange={(event) => setBillingCountry(event.target.value)}
+                className={`${checkoutFieldClass} appearance-none pr-10`}
+              >
+                {BILLING_COUNTRIES.map((country) => (
+                  <option key={country.code} value={country.code}>
+                    {country.label}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown
+                size={16}
+                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-heading"
+              />
+            </div>
+            <input
+              type="text"
+              value={billingAddress}
+              onChange={(event) => setBillingAddress(event.target.value)}
+              placeholder="Address"
+              className={checkoutFieldClass}
+            />
+            {showManualAddress && (
+              <>
+                <input
+                  type="text"
+                  value={billingCity}
+                  onChange={(event) => setBillingCity(event.target.value)}
+                  placeholder="City"
+                  className={`${checkoutFieldClass} border-t border-[#e6ebf1]`}
+                />
+                <div className="grid grid-cols-2 border-t border-[#e6ebf1]">
+                  <input
+                    type="text"
+                    value={billingState}
+                    onChange={(event) => setBillingState(event.target.value)}
+                    placeholder="State"
+                    className={`${checkoutFieldClass} border-r border-[#e6ebf1]`}
+                  />
+                  <input
+                    type="text"
+                    value={billingPostal}
+                    onChange={(event) => setBillingPostal(event.target.value)}
+                    placeholder="ZIP"
+                    className={checkoutFieldClass}
+                  />
+                </div>
+              </>
+            )}
+          </div>
+          {!showManualAddress && (
+            <button
+              type="button"
+              onClick={() => setShowManualAddress(true)}
+              className="mt-2 text-sm text-muted underline underline-offset-2 hover:text-heading"
+            >
+              Enter address manually
+            </button>
+          )}
         </div>
 
         <div>
           <h2 className="text-sm font-medium text-heading">Payment details</h2>
           <p className="mt-1 text-sm text-muted">Card information</p>
 
-          <div className="mt-3 overflow-hidden rounded-md border border-[#e6ebf1] bg-white shadow-sm">
+          <div className={`mt-3 ${checkoutBoxClass}`}>
             <div className="border-b border-[#e6ebf1] px-3 py-3">
               <CardNumberElement options={cardElementOptions} />
             </div>
@@ -207,20 +318,11 @@ export default function CheckoutPaymentForm({
             </div>
           </div>
         </div>
-
-        <div>
-          <Input
-            label="Name on card"
-            value={name}
-            onChange={(event) => onNameChange(event.target.value)}
-            placeholder="Full name on card"
-          />
-        </div>
       </div>
 
-      {error && (
+      {(error || switchError) && (
         <div className="mt-4">
-          <BillingErrorState message={error} />
+          <BillingErrorState message={error || switchError} />
         </div>
       )}
 

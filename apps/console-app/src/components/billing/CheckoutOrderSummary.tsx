@@ -3,8 +3,9 @@
  */
 import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
-import { formatIntervalShort, formatMoney } from '../../utils/billingFormat';
+import { formatIntervalShort, formatMoney, type BillingPeriod } from '../../utils/billingFormat';
 import type { Price, Product } from '../../types/billing';
+import BillingPeriodToggle from './BillingPeriodToggle';
 
 interface CheckoutOrderSummaryProps {
   product: Product;
@@ -12,6 +13,10 @@ interface CheckoutOrderSummaryProps {
   mode?: 'subscribe' | 'upgrade';
   amountDueToday?: number;
   currentProductName?: string | null;
+  billingPeriod?: BillingPeriod;
+  availablePeriods?: BillingPeriod[];
+  onBillingPeriodChange?: (period: BillingPeriod) => void;
+  periodSwitching?: boolean;
 }
 
 /**
@@ -23,6 +28,10 @@ export default function CheckoutOrderSummary({
   mode = 'subscribe',
   amountDueToday,
   currentProductName = null,
+  billingPeriod,
+  availablePeriods,
+  onBillingPeriodChange,
+  periodSwitching = false,
 }: CheckoutOrderSummaryProps) {
   const isUpgrade = mode === 'upgrade';
   const totalDue = amountDueToday ?? price.amount;
@@ -54,6 +63,18 @@ export default function CheckoutOrderSummary({
             : `per ${formatIntervalShort(price.interval, price.intervalCount ?? 1).replace('Per ', '').toLowerCase()}`}
         </p>
       </div>
+
+      {!isUpgrade && onBillingPeriodChange && billingPeriod && availablePeriods && (
+        <div className="mt-6">
+          <BillingPeriodToggle
+            variant="radio"
+            value={billingPeriod}
+            periods={availablePeriods}
+            onChange={onBillingPeriodChange}
+            disabled={periodSwitching}
+          />
+        </div>
+      )}
 
       <div className="mt-10 space-y-4 border-t border-black/10 pt-6">
         {isUpgrade && currentProductName && (

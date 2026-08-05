@@ -54,7 +54,6 @@ export default function PricingPlansPage() {
   const [upgradePreviewLoading, setUpgradePreviewLoading] = useState(false);
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly');
   const [cancelOpen, setCancelOpen] = useState(false);
-  const [resumeOpen, setResumeOpen] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [showChangePlans, setShowChangePlans] = useState(false);
   const subscriptionPeriodSyncedRef = useRef(false);
@@ -345,21 +344,6 @@ export default function PricingPlansPage() {
     }
   };
 
-  const handleResume = async () => {
-    if (!subscription) return;
-    setProcessing(true);
-    try {
-      const updated = await billingService.resumeSubscription(subscription.id);
-      setSubscription(updated);
-      setResumeOpen(false);
-      showSuccess('Subscription resumed successfully');
-    } catch (err) {
-      showError(err, 'Failed to resume subscription');
-    } finally {
-      setProcessing(false);
-    }
-  };
-
   const handleCancelScheduledChange = async () => {
     if (!subscription) return;
     setProcessing(true);
@@ -392,6 +376,7 @@ export default function PricingPlansPage() {
     'your current plan';
 
   const shouldShowPlans = !subscription || showChangePlans;
+  const hidePlanActions = Boolean(subscription?.cancelAtPeriodEnd);
 
   const handleChangePlan = () => {
     setShowChangePlans((visible) => {
@@ -437,9 +422,8 @@ export default function PricingPlansPage() {
           manageable
           processing={processing}
           changePlansVisible={showChangePlans}
-          onChangePlan={handleChangePlan}
+          onChangePlan={subscription ? handleChangePlan : undefined}
           onCancel={() => setCancelOpen(true)}
-          onResume={() => setResumeOpen(true)}
           onCancelScheduledChange={handleCancelScheduledChange}
         />
       )}
@@ -482,6 +466,7 @@ export default function PricingPlansPage() {
                   (Boolean(actionPriceId) && actionPriceId !== plan.price.id)
                 }
                 actionLoading={actionPriceId === plan.price.id}
+                hideAction={hidePlanActions}
                 onAction={() => handlePlanAction(plan)}
               />
             );
@@ -534,17 +519,6 @@ export default function PricingPlansPage() {
         loading={processing}
         onConfirm={handleCancel}
         onClose={() => setCancelOpen(false)}
-      />
-
-      <ConfirmationModal
-        isOpen={resumeOpen}
-        title="Resume subscription"
-        message={`Your ${planName} subscription will stay active and renew on ${formatDate(subscription?.currentPeriodEnd ?? '')}. The scheduled cancellation will be removed and your saved payment method will be charged on the next billing date.`}
-        confirmLabel="Resume subscription"
-        confirmVariant="primary"
-        loading={processing}
-        onConfirm={handleResume}
-        onClose={() => setResumeOpen(false)}
       />
     </div>
   );

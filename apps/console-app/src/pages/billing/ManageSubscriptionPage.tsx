@@ -35,7 +35,6 @@ export default function ManageSubscriptionPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [cancelOpen, setCancelOpen] = useState(false);
-  const [resumeOpen, setResumeOpen] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [updatingPaymentMethod, setUpdatingPaymentMethod] = useState(false);
 
@@ -113,24 +112,6 @@ export default function ManageSubscriptionPage() {
       showSuccess('Subscription will cancel at the end of the billing period');
     } catch (err) {
       showError(err, 'Failed to cancel subscription');
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  /*
-   * Clears cancel-at-period-end and keeps the subscription active.
-   */
-  const handleResume = async () => {
-    if (!subscription) return;
-    setProcessing(true);
-    try {
-      const updated = await billingService.resumeSubscription(subscription.id);
-      setSubscription(updated);
-      setResumeOpen(false);
-      showSuccess('Subscription resumed successfully');
-    } catch (err) {
-      showError(err, 'Failed to resume subscription');
     } finally {
       setProcessing(false);
     }
@@ -308,19 +289,20 @@ export default function ManageSubscriptionPage() {
       </Card>
 
       <div className="flex flex-wrap gap-3">
-        <Button variant="secondary" onClick={() => navigate('/billing/plans')}>
-          {isEnded ? 'Subscribe again' : 'Change plan'}
-        </Button>
-        {!isEnded &&
-          (subscription.cancelAtPeriodEnd ? (
-            <Button disabled={processing} onClick={() => setResumeOpen(true)}>
-              Resume subscription
-            </Button>
-          ) : (
+        {isEnded ? (
+          <Button variant="secondary" onClick={() => navigate('/billing/plans')}>
+            Subscribe again
+          </Button>
+        ) : (
+          <Button variant="secondary" onClick={() => navigate('/billing/plans')}>
+            Change plan
+          </Button>
+        )}
+        {!isEnded && !subscription.cancelAtPeriodEnd && (
             <Button variant="danger" disabled={processing} onClick={() => setCancelOpen(true)}>
               Cancel subscription
             </Button>
-          ))}
+          )}
         <Button variant="ghost" onClick={() => navigate('/payments')}>
           View payments
         </Button>
@@ -334,17 +316,6 @@ export default function ManageSubscriptionPage() {
         loading={processing}
         onConfirm={handleCancel}
         onClose={() => setCancelOpen(false)}
-      />
-
-      <ConfirmationModal
-        isOpen={resumeOpen}
-        title="Resume subscription"
-        message={`Your ${planName} subscription will stay active and renew on ${formatDate(subscription.currentPeriodEnd)}. The scheduled cancellation will be removed and your saved payment method will be charged on the next billing date.`}
-        confirmLabel="Resume subscription"
-        confirmVariant="primary"
-        loading={processing}
-        onConfirm={handleResume}
-        onClose={() => setResumeOpen(false)}
       />
     </div>
   );
