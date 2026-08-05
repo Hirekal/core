@@ -230,6 +230,24 @@ export class SubscriptionsService {
         metadata: {
           userId,
           priceId: newPrice.id,
+          [SUBSCRIPTION_METADATA_KEYS.PENDING_UPGRADE_PRICE_ID]: newPrice.id,
+          [SUBSCRIPTION_METADATA_KEYS.PENDING_UPGRADE_PROVIDER_PRICE_ID]:
+            newPrice.providerPriceId,
+          [SUBSCRIPTION_METADATA_KEYS.PREVIOUS_PRICE_ID]: currentPrice.id,
+          [SUBSCRIPTION_METADATA_KEYS.PREVIOUS_PROVIDER_PRICE_ID]:
+            currentPrice.providerPriceId,
+        },
+      });
+
+      await this.subscriptionsRepository.update(subscription.id, {
+        metadata: {
+          ...(subscription.metadata ?? {}),
+          [SUBSCRIPTION_METADATA_KEYS.PENDING_UPGRADE_PRICE_ID]: newPrice.id,
+          [SUBSCRIPTION_METADATA_KEYS.PENDING_UPGRADE_PROVIDER_PRICE_ID]:
+            newPrice.providerPriceId,
+          [SUBSCRIPTION_METADATA_KEYS.PREVIOUS_PRICE_ID]: currentPrice.id,
+          [SUBSCRIPTION_METADATA_KEYS.PREVIOUS_PROVIDER_PRICE_ID]:
+            currentPrice.providerPriceId,
         },
       });
 
@@ -237,6 +255,44 @@ export class SubscriptionsService {
         ...session,
         publishableKey,
       };
+    } catch (error) {
+      this.logger.error(
+        LOG_MESSAGES.SUBSCRIPTION.CHANGE_PLAN_FAILED(subscriptionId),
+        error,
+      );
+      rethrowStripeError(error);
+    }
+  }
+
+  /*
+   * Reverts an unpaid upgrade checkout and restores the previous plan locally.
+   */
+  async cancelPendingUpgradeCheckout(
+    userId: string,
+    subscriptionId: string,
+  ): Promise<Subscription> {
+    try {
+      const subscription = await this.findOne(subscriptionId);
+      if (subscription.userId !== userId) {
+        throw new ForbiddenException(ERROR_MESSAGES.SUBSCRIPTION.NOT_FOUND);
+      }
+
+      const provider = await this.paymentProvidersService.findById(
+        subscription.paymentProviderId,
+      );
+      const paymentProvider = this.paymentProviderRegistry.resolve(
+        provider.code,
+      );
+
+      const providerResult = await paymentProvider.revertPendingUpgradeCheckout(
+        subscription.providerSubscriptionId,
+      );
+
+      return this.syncFromProviderResult(
+        subscription,
+        providerResult,
+        this.clearPendingUpgradeMetadata(subscription.metadata),
+      );
     } catch (error) {
       this.logger.error(
         LOG_MESSAGES.SUBSCRIPTION.CHANGE_PLAN_FAILED(subscriptionId),
@@ -562,6 +618,31 @@ export class SubscriptionsService {
   }
 
   /*
+   * Removes pending upgrade checkout metadata after payment or cancellation.
+   */
+  clearPendingUpgradeMetadata(
+    metadata: Record<string, unknown> | null | undefined,
+  ): Record<string, unknown> {
+    const next = { ...(metadata ?? {}) };
+    delete next[SUBSCRIPTION_METADATA_KEYS.PENDING_UPGRADE_PRICE_ID];
+    delete next[SUBSCRIPTION_METADATA_KEYS.PENDING_UPGRADE_PROVIDER_PRICE_ID];
+    delete next[SUBSCRIPTION_METADATA_KEYS.PREVIOUS_PRICE_ID];
+    delete next[SUBSCRIPTION_METADATA_KEYS.PREVIOUS_PROVIDER_PRICE_ID];
+    return next;
+  }
+
+  /*
+   * Returns true when an upgrade checkout was started but not yet paid.
+   */
+  hasPendingUpgrade(
+    metadata: Record<string, unknown> | null | undefined,
+  ): boolean {
+    return Boolean(
+      metadata?.[SUBSCRIPTION_METADATA_KEYS.PENDING_UPGRADE_PROVIDER_PRICE_ID],
+    );
+  }
+
+  /*
    * Returns true when a downgrade or lateral change is scheduled in metadata.
    */
   hasScheduledChange(
@@ -581,9 +662,16 @@ export class SubscriptionsService {
     subscription: Subscription,
     activeProviderPriceId: string,
     mappedPrice: Price | null,
+    subscriptionStatus?: SubscriptionStatus,
+    providerMetadata?: Record<string, string>,
   ): { priceId?: string; metadata?: Record<string, unknown> } {
+    const mergedMetadata = {
+      ...(subscription.metadata ?? {}),
+      ...(providerMetadata ?? {}),
+    };
+
     const pendingProviderPriceId =
-      subscription.metadata?.[
+      mergedMetadata[
         SUBSCRIPTION_METADATA_KEYS.PENDING_DOWNGRADE_PROVIDER_PRICE_ID
       ];
 
@@ -599,6 +687,43 @@ export class SubscriptionsService {
       }
 
       // Keep the current plan and scheduled metadata until Stripe switches price.
+      return {};
+    }
+
+    const pendingUpgradeProviderPriceId =
+      mergedMetadata[
+        SUBSCRIPTION_METADATA_KEYS.PENDING_UPGRADE_PROVIDER_PRICE_ID
+      ];
+
+    if (
+      typeof pendingUpgradeProviderPriceId === 'string' &&
+      pendingUpgradeProviderPriceId.length > 0
+    ) {
+      if (
+        activeProviderPriceId === pendingUpgradeProviderPriceId &&
+        mappedPrice &&
+        (subscriptionStatus === SubscriptionStatus.ACTIVE ||
+          subscriptionStatus === SubscriptionStatus.TRIALING)
+      ) {
+        return {
+          priceId: mappedPrice.id,
+          metadata: this.clearPendingUpgradeMetadata(
+            this.clearScheduledChangeMetadata(subscription.metadata),
+          ),
+        };
+      }
+
+      return {};
+    }
+
+    if (
+      mappedPrice &&
+      mappedPrice.id !== subscription.priceId &&
+      subscriptionStatus &&
+      (subscriptionStatus === SubscriptionStatus.INCOMPLETE ||
+        subscriptionStatus === SubscriptionStatus.PAST_DUE ||
+        subscriptionStatus === SubscriptionStatus.UNPAID)
+    ) {
       return {};
     }
 
@@ -719,6 +844,7 @@ export class SubscriptionsService {
         subscription,
         providerResult.providerPriceId,
         price,
+        providerResult.subscriptionStatus,
       );
       const hasScheduledChange = this.hasScheduledChange(subscription.metadata);
       const resolvedPriceId =

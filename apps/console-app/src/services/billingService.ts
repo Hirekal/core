@@ -388,6 +388,20 @@ export async function createUpgradeCheckoutSession(
 }
 
 /*
+ * Reverts an unpaid upgrade checkout after card confirmation fails.
+ */
+export async function cancelPendingUpgradeCheckout(
+  subscriptionId: string,
+): Promise<Subscription> {
+  return withBillingErrorHandling(() =>
+    apiRequest(`/payments/subscriptions/${subscriptionId}/upgrade/checkout/cancel`, {
+      method: 'POST',
+      auth: true,
+    }),
+  );
+}
+
+/*
  * Creates a checkout payment intent via the backend.
  */
 export async function createCheckoutSession(input: {

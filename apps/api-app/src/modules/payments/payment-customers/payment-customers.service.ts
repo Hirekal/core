@@ -77,6 +77,74 @@ export class PaymentCustomersService {
   }
 
   /*
+   * Ensures the user has an active provider customer before checkout.
+   */
+  async ensureActiveForCheckout(
+    userId: string,
+    dto: CreatePaymentCustomerDto,
+  ): Promise<PaymentCustomer> {
+    try {
+      const provider = await this.paymentProvidersService.findById(
+        dto.paymentProviderId,
+      );
+      const paymentProvider = this.paymentProviderRegistry.resolve(
+        provider.code,
+      );
+
+      const existingCustomer = await this.paymentCustomersRepository.findOne({
+        where: { userId, paymentProviderId: provider.id },
+      });
+
+      if (
+        existingCustomer &&
+        (await paymentProvider.isProviderCustomerActive(
+          existingCustomer.providerCustomerId,
+        ))
+      ) {
+        if (dto.email && dto.email !== existingCustomer.email) {
+          existingCustomer.email = dto.email;
+        }
+        if (dto.name && dto.name !== existingCustomer.name) {
+          existingCustomer.name = dto.name;
+        }
+        return this.paymentCustomersRepository.save(existingCustomer);
+      }
+
+      const providerCustomer = await paymentProvider.createCustomer({
+        email: dto.email,
+        name: dto.name,
+        metadata: dto.metadata,
+      });
+
+      if (existingCustomer) {
+        existingCustomer.providerCustomerId =
+          providerCustomer.providerCustomerId;
+        existingCustomer.email = dto.email;
+        existingCustomer.name = dto.name ?? null;
+        existingCustomer.metadata = dto.metadata ?? existingCustomer.metadata;
+        existingCustomer.status = RecordStatus.ACTIVE;
+        return this.paymentCustomersRepository.save(existingCustomer);
+      }
+
+      return BaseRepository.createAndSave(this.paymentCustomersRepository, {
+        userId,
+        paymentProviderId: provider.id,
+        providerCustomerId: providerCustomer.providerCustomerId,
+        email: dto.email,
+        name: dto.name ?? null,
+        status: RecordStatus.ACTIVE,
+        metadata: dto.metadata ?? {},
+      });
+    } catch (error) {
+      this.logger.error(
+        LOG_MESSAGES.PAYMENT_CUSTOMER.CREATE_FAILED(userId),
+        error,
+      );
+      throw error;
+    }
+  }
+
+  /*
    * Updates an existing record locally and on the payment provider when applicable.
    */
   async update(

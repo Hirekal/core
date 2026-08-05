@@ -173,6 +173,8 @@ export class StripeWebhookHandler {
         existingSubscription,
         providerResult.providerPriceId,
         price,
+        providerResult.subscriptionStatus,
+        subscription.metadata ?? undefined,
       );
 
       await this.subscriptionsService.syncFromProviderResult(
@@ -288,6 +290,7 @@ export class StripeWebhookHandler {
       existingSubscription,
       providerSubscription.providerPriceId,
       price,
+      providerSubscription.subscriptionStatus,
     );
 
     await this.subscriptionsService.syncFromProviderResult(

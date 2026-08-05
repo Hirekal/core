@@ -43,11 +43,16 @@ interface CheckoutPaymentFormProps {
   price: Price;
   email: string;
   name: string;
-  clientSecret: string;
-  providerSubscriptionId: string;
+  clientSecret?: string;
+  providerSubscriptionId?: string;
   payAmount?: number;
   successMessage?: string;
   navigationState?: Record<string, unknown>;
+  prepareCheckout?: () => Promise<{
+    clientSecret: string;
+    providerSubscriptionId: string;
+  }>;
+  onCheckoutFailed?: () => Promise<void>;
   onEmailChange: (value: string) => void;
   onNameChange: (value: string) => void;
 }
@@ -64,6 +69,8 @@ export default function CheckoutPaymentForm({
   payAmount,
   successMessage = 'Subscription activated successfully',
   navigationState,
+  prepareCheckout,
+  onCheckoutFailed,
   onEmailChange,
   onNameChange,
 }: CheckoutPaymentFormProps) {
@@ -90,8 +97,24 @@ export default function CheckoutPaymentForm({
     }
 
     setProcessing(true);
+    let checkoutPrepared = false;
+
     try {
-      const confirmation = await stripe.confirmCardPayment(clientSecret, {
+      let resolvedClientSecret = clientSecret;
+      let resolvedProviderSubscriptionId = providerSubscriptionId;
+
+      if (prepareCheckout) {
+        const checkoutSession = await prepareCheckout();
+        resolvedClientSecret = checkoutSession.clientSecret;
+        resolvedProviderSubscriptionId = checkoutSession.providerSubscriptionId;
+        checkoutPrepared = true;
+      }
+
+      if (!resolvedClientSecret || !resolvedProviderSubscriptionId) {
+        throw new Error('Checkout is missing required Stripe configuration');
+      }
+
+      const confirmation = await stripe.confirmCardPayment(resolvedClientSecret, {
         payment_method: {
           card: cardNumberElement,
           billing_details: {
@@ -110,7 +133,7 @@ export default function CheckoutPaymentForm({
       }
 
       const subscription = await billingService.syncCheckoutSubscription(
-        providerSubscriptionId,
+        resolvedProviderSubscriptionId,
         confirmation.paymentIntent?.id,
       );
 
@@ -137,6 +160,13 @@ export default function CheckoutPaymentForm({
         },
       });
     } catch (err) {
+      if (checkoutPrepared && onCheckoutFailed) {
+        try {
+          await onCheckoutFailed();
+        } catch {
+          // Ignore cleanup failures; surface the original payment error.
+        }
+      }
       setError(toUserErrorMessage(err, 'Payment failed'));
     } finally {
       setProcessing(false);

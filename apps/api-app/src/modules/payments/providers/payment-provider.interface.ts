@@ -175,6 +175,7 @@ export interface ProviderWebhookEvent {
 export interface PaymentProvider {
   readonly code: string;
   createCustomer(input: ProviderCustomerInput): Promise<ProviderCustomerResult>;
+  isProviderCustomerActive(providerCustomerId: string): Promise<boolean>;
   updateCustomer(
     providerCustomerId: string,
     input: Partial<ProviderCustomerInput>,
@@ -214,6 +215,9 @@ export interface PaymentProvider {
   createUpgradeCheckoutSession(
     input: ProviderUpgradeCheckoutSessionInput,
   ): Promise<ProviderUpgradeCheckoutSessionResult>;
+  revertPendingUpgradeCheckout(
+    providerSubscriptionId: string,
+  ): Promise<ProviderSubscriptionResult>;
   retrieveCheckoutSession(sessionId: string): Promise<{
     status: string | null;
     providerSubscriptionId: string | null;

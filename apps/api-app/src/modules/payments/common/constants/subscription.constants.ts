@@ -4,6 +4,10 @@
 export const SUBSCRIPTION_METADATA_KEYS = {
   PENDING_DOWNGRADE_PRICE_ID: 'pendingDowngradePriceId',
   PENDING_DOWNGRADE_PROVIDER_PRICE_ID: 'pendingDowngradeProviderPriceId',
+  PENDING_UPGRADE_PRICE_ID: 'pendingUpgradePriceId',
+  PENDING_UPGRADE_PROVIDER_PRICE_ID: 'pendingUpgradeProviderPriceId',
+  PREVIOUS_PRICE_ID: 'previousPriceId',
+  PREVIOUS_PROVIDER_PRICE_ID: 'previousProviderPriceId',
   PROVIDER_SCHEDULE_ID: 'providerScheduleId',
   SCHEDULED_PLAN_CHANGE_AT: 'scheduledPlanChangeAt',
 } as const;

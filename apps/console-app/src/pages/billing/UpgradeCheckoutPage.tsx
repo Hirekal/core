@@ -25,12 +25,9 @@ export default function UpgradeCheckoutPage() {
 
   const [price, setPrice] = useState<Price | null>(null);
   const [currentProductName, setCurrentProductName] = useState<string | null>(null);
+  const [subscriptionId, setSubscriptionId] = useState<string | null>(null);
   const [email, setEmail] = useState(user?.email ?? '');
   const [name, setName] = useState(user?.name ?? '');
-  const [clientSecret, setClientSecret] = useState<string | null>(null);
-  const [providerSubscriptionId, setProviderSubscriptionId] = useState<string | null>(
-    null,
-  );
   const [amountDue, setAmountDue] = useState<number | null>(null);
   const [stripePromise, setStripePromise] = useState<Promise<Stripe | null> | null>(
     null,
@@ -60,24 +57,28 @@ export default function UpgradeCheckoutPage() {
           throw new Error('You need an active subscription before upgrading.');
         }
 
-        const [loadedPrice, checkoutSession] = await Promise.all([
+        const [loadedPrice, planChangePreview, checkoutConfig] = await Promise.all([
           billingService.getPrice(priceId),
-          billingService.createUpgradeCheckoutSession(subscription.id, priceId),
+          billingService.previewPlanChange(subscription.id, priceId),
+          billingService.getCheckoutConfig(),
         ]);
 
-        if (!checkoutSession.clientSecret || !checkoutSession.publishableKey) {
+        if (planChangePreview.direction !== 'upgrade') {
+          throw new Error('Selected plan is not an upgrade from your current plan.');
+        }
+
+        if (!checkoutConfig.publishableKey) {
           throw new Error('Checkout is missing required Stripe configuration');
         }
 
         if (!cancelled) {
           setPrice(loadedPrice);
           setCurrentProductName(subscription.price?.product?.name ?? null);
+          setSubscriptionId(subscription.id);
           setEmail(user.email);
           setName(user.name ?? '');
-          setClientSecret(checkoutSession.clientSecret);
-          setProviderSubscriptionId(checkoutSession.providerSubscriptionId);
-          setAmountDue(checkoutSession.amountDue);
-          setStripePromise(loadStripe(checkoutSession.publishableKey));
+          setAmountDue(planChangePreview.preview.estimatedAmountPayable);
+          setStripePromise(loadStripe(checkoutConfig.publishableKey));
         }
       } catch (err) {
         if (!cancelled) {
@@ -104,9 +105,8 @@ export default function UpgradeCheckoutPage() {
   if (
     error ||
     !price?.product ||
-    !clientSecret ||
     !stripePromise ||
-    !providerSubscriptionId ||
+    !subscriptionId ||
     amountDue === null
   ) {
     return (
@@ -134,11 +134,31 @@ export default function UpgradeCheckoutPage() {
             price={price}
             email={email}
             name={name}
-            clientSecret={clientSecret}
-            providerSubscriptionId={providerSubscriptionId}
             payAmount={amountDue}
             successMessage="Subscription upgraded successfully"
             navigationState={{ upgraded: true }}
+            prepareCheckout={async () => {
+              const checkoutSession =
+                await billingService.createUpgradeCheckoutSession(
+                  subscriptionId,
+                  priceId!,
+                );
+
+              if (
+                !checkoutSession.clientSecret ||
+                !checkoutSession.providerSubscriptionId
+              ) {
+                throw new Error('Checkout is missing required Stripe configuration');
+              }
+
+              return {
+                clientSecret: checkoutSession.clientSecret,
+                providerSubscriptionId: checkoutSession.providerSubscriptionId,
+              };
+            }}
+            onCheckoutFailed={async () => {
+              await billingService.cancelPendingUpgradeCheckout(subscriptionId);
+            }}
             onEmailChange={setEmail}
             onNameChange={setName}
           />

@@ -128,20 +128,15 @@ export class PaymentsService {
       const { client } = await this.resolveProviderClient(
         price.paymentProviderId,
       );
-      let customer =
-        await this.paymentCustomersService.findByUserAndPaymentProviderId(
-          userId,
-          price.paymentProviderId,
-        );
-
-      if (!customer) {
-        customer = await this.paymentCustomersService.create(userId, {
+      let customer = await this.paymentCustomersService.ensureActiveForCheckout(
+        userId,
+        {
           paymentProviderId: price.paymentProviderId,
           email: dto.email,
           name: dto.name,
           metadata: { userId },
-        });
-      }
+        },
+      );
 
       const session = await client.createCheckoutSession({
         providerCustomerId: customer.providerCustomerId,

@@ -224,6 +224,27 @@ export class SubscriptionsController {
     }
   }
 
+  @Post(':id/upgrade/checkout/cancel')
+  @ApiOperation({ summary: 'Revert an unpaid upgrade checkout' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  async cancelPendingUpgradeCheckout(
+    @CurrentUser() user: User,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    try {
+      return await this.subscriptionsService.cancelPendingUpgradeCheckout(
+        user.id,
+        id,
+      );
+    } catch (error) {
+      this.logger.error(
+        `cancelPendingUpgradeCheckout failed for subscription ${id}`,
+        error,
+      );
+      throw error;
+    }
+  }
+
   @Post(':id/upgrade')
   @ApiOperation({ summary: 'Upgrade subscription' })
   @ApiParam({ name: 'id', format: 'uuid' })

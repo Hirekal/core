@@ -44,6 +44,7 @@ import {
 import { rethrowStripeError } from '../../common/utils/stripe-error.util';
 import { ERROR_MESSAGES } from '../../common/messages/payment.messages';
 import { now, toDate } from '../../common/utils/date.util';
+import { SUBSCRIPTION_METADATA_KEYS } from '../../common/constants/subscription.constants';
 
 /*
  * Immediately invoices proration adjustments during upgrades so they are not
@@ -71,6 +72,29 @@ export class StripeProvider implements PaymentProvider {
       });
       return { providerCustomerId: customer.id };
     } catch (error) {
+      rethrowStripeError(error);
+    }
+  }
+
+  /*
+   * Returns false when the Stripe customer was deleted or cannot be retrieved.
+   */
+  async isProviderCustomerActive(
+    providerCustomerId: string,
+  ): Promise<boolean> {
+    try {
+      const customer = await this.stripeService
+        .getClient()
+        .customers.retrieve(providerCustomerId);
+      return !('deleted' in customer && customer.deleted);
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        (error as { code?: string }).code === 'resource_missing'
+      ) {
+        return false;
+      }
       rethrowStripeError(error);
     }
   }
@@ -720,6 +744,66 @@ export class StripeProvider implements PaymentProvider {
   }
 
   /*
+   * Reverts an unpaid upgrade checkout by restoring the previous plan on Stripe.
+   */
+  async revertPendingUpgradeCheckout(
+    providerSubscriptionId: string,
+  ): Promise<ProviderSubscriptionResult> {
+    try {
+      const stripe = this.stripeService.getClient();
+      const subscription = await stripe.subscriptions.retrieve(
+        providerSubscriptionId,
+        { expand: ['latest_invoice'] },
+      );
+
+      const previousProviderPriceId =
+        subscription.metadata?.[
+          SUBSCRIPTION_METADATA_KEYS.PREVIOUS_PROVIDER_PRICE_ID
+        ];
+      if (!previousProviderPriceId) {
+        return this.mapSubscription(subscription);
+      }
+
+      const subscriptionItem = subscription.items.data[0];
+      if (!subscriptionItem) {
+        throw new BadRequestException(ERROR_MESSAGES.SUBSCRIPTION.NOT_FOUND);
+      }
+
+      const latestInvoice = subscription.latest_invoice;
+      if (latestInvoice && typeof latestInvoice === 'object') {
+        if (latestInvoice.status === 'open') {
+          await stripe.invoices.voidInvoice(latestInvoice.id);
+        }
+      }
+
+      const clearedMetadata = { ...(subscription.metadata ?? {}) };
+      delete clearedMetadata[
+        SUBSCRIPTION_METADATA_KEYS.PENDING_UPGRADE_PRICE_ID
+      ];
+      delete clearedMetadata[
+        SUBSCRIPTION_METADATA_KEYS.PENDING_UPGRADE_PROVIDER_PRICE_ID
+      ];
+      delete clearedMetadata[SUBSCRIPTION_METADATA_KEYS.PREVIOUS_PRICE_ID];
+      delete clearedMetadata[
+        SUBSCRIPTION_METADATA_KEYS.PREVIOUS_PROVIDER_PRICE_ID
+      ];
+
+      const revertedSubscription = await stripe.subscriptions.update(
+        providerSubscriptionId,
+        {
+          items: [{ id: subscriptionItem.id, price: previousProviderPriceId }],
+          proration_behavior: 'none',
+          metadata: clearedMetadata,
+        },
+      );
+
+      return this.mapSubscription(revertedSubscription);
+    } catch (error) {
+      rethrowStripeError(error);
+    }
+  }
+
+  /*
    * Retrieves a Stripe Checkout session by ID.
    */
   async retrieveCheckoutSession(sessionId: string): Promise<{
@@ -1014,7 +1098,7 @@ export class StripeProvider implements PaymentProvider {
       const invoice = await this.stripeService.getClient().invoices.retrieve(
         providerInvoiceId,
         {
-          expand: ['payments.data.payment.payment_intent', 'latest_charge'],
+          expand: ['payments.data.payment.payment_intent'],
         },
       );
       return this.resolveInvoicePaymentId(invoice);
@@ -1036,7 +1120,6 @@ export class StripeProvider implements PaymentProvider {
           'lines.data.price',
           'lines.data.pricing.price_details.price',
           'payments.data.payment.payment_intent',
-          'latest_charge',
         ],
       },
     );
