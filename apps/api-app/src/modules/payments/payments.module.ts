@@ -37,6 +37,8 @@ import { StripeWebhookHandler } from './providers/stripe/stripe.webhook';
 import { WebhookProcessorService } from './webhooks/webhook-processor.service';
 import { CatalogCacheService } from './catalog/catalog-cache.service';
 import { User } from '../auth/users/entities/user.entity';
+import { CouponsService } from './coupons/coupons.service';
+import { CouponsController } from './coupons/coupons.controller';
 
 export interface PaymentsModuleAsyncOptions {
   imports?: Array<Type<unknown> | DynamicModule>;
@@ -76,6 +78,7 @@ export class PaymentsModule {
         SubscriptionsController,
         PaymentProvidersController,
         WebhooksController,
+        CouponsController,
       ],
       providers: [
         optionsProvider,
@@ -95,6 +98,7 @@ export class PaymentsModule {
         StripeWebhookHandler,
         WebhookProcessorService,
         CatalogCacheService,
+        CouponsService,
       ],
       exports: [
         PAYMENTS_MODULE_OPTIONS,
@@ -110,6 +114,7 @@ export class PaymentsModule {
         WebhookEventsService,
         PaymentProviderRegistry,
         CatalogCacheService,
+        CouponsService,
         TypeOrmModule,
       ],
     };

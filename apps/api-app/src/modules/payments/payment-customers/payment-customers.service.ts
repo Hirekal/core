@@ -38,41 +38,7 @@ export class PaymentCustomersService {
     dto: CreatePaymentCustomerDto,
   ): Promise<PaymentCustomer> {
     try {
-      const provider = await this.paymentProvidersService.findById(
-        dto.paymentProviderId,
-      );
-
-      const existingPaymentCustomer =
-        await this.paymentCustomersRepository.findOne({
-          where: { organizationId, paymentProviderId: provider.id },
-        });
-      if (existingPaymentCustomer) {
-        throw new ConflictException(
-          ERROR_MESSAGES.PAYMENT_CUSTOMER.ALREADY_EXISTS,
-        );
-      }
-
-      const paymentProvider = this.paymentProviderRegistry.resolve(
-        provider.code,
-      );
-      const providerCustomer = await paymentProvider.createCustomer({
-        email: dto.email,
-        name: dto.name,
-        metadata: {
-          ...(dto.metadata ?? {}),
-          organizationId,
-        },
-      });
-
-      return BaseRepository.createAndSave(this.paymentCustomersRepository, {
-        organizationId,
-        paymentProviderId: provider.id,
-        providerCustomerId: providerCustomer.providerCustomerId,
-        email: dto.email,
-        name: dto.name ?? null,
-        status: RecordStatus.ACTIVE,
-        metadata: dto.metadata ?? {},
-      });
+      return await this.ensureActiveForCheckout(organizationId, dto);
     } catch (error) {
       this.logger.error(
         LOG_MESSAGES.PAYMENT_CUSTOMER.CREATE_FAILED(organizationId),
@@ -84,6 +50,7 @@ export class PaymentCustomersService {
 
   /*
    * Ensures the organization has an active provider customer before checkout.
+   * Safe under concurrent checkouts and soft-deleted unique rows.
    */
   async ensureActiveForCheckout(
     organizationId: string,
@@ -97,23 +64,34 @@ export class PaymentCustomersService {
         provider.code,
       );
 
-      const existingCustomer = await this.paymentCustomersRepository.findOne({
-        where: { organizationId, paymentProviderId: provider.id },
-      });
+      const existingCustomer = await this.findOrganizationProviderCustomer(
+        organizationId,
+        provider.id,
+      );
 
-      if (
-        existingCustomer &&
-        (await paymentProvider.isProviderCustomerActive(
+      if (existingCustomer) {
+        const isActive = await paymentProvider.isProviderCustomerActive(
           existingCustomer.providerCustomerId,
-        ))
-      ) {
-        if (dto.email && dto.email !== existingCustomer.email) {
-          existingCustomer.email = dto.email;
+        );
+
+        if (isActive) {
+          return this.refreshLocalCustomer(existingCustomer, dto);
         }
-        if (dto.name && dto.name !== existingCustomer.name) {
-          existingCustomer.name = dto.name;
-        }
-        return this.paymentCustomersRepository.save(existingCustomer);
+
+        const providerCustomer = await paymentProvider.createCustomer({
+          email: dto.email,
+          name: dto.name,
+          metadata: {
+            ...(dto.metadata ?? {}),
+            organizationId,
+          },
+        });
+
+        existingCustomer.providerCustomerId =
+          providerCustomer.providerCustomerId;
+        return this.refreshLocalCustomer(existingCustomer, dto, {
+          forceActive: true,
+        });
       }
 
       const providerCustomer = await paymentProvider.createCustomer({
@@ -125,26 +103,18 @@ export class PaymentCustomersService {
         },
       });
 
-      if (existingCustomer) {
-        existingCustomer.providerCustomerId =
-          providerCustomer.providerCustomerId;
-        existingCustomer.email = dto.email;
-        existingCustomer.name = dto.name ?? null;
-        existingCustomer.metadata = dto.metadata ?? existingCustomer.metadata;
-        existingCustomer.status = RecordStatus.ACTIVE;
-        return this.paymentCustomersRepository.save(existingCustomer);
-      }
-
-      return BaseRepository.createAndSave(this.paymentCustomersRepository, {
+      return this.upsertOrganizationProviderCustomer({
         organizationId,
         paymentProviderId: provider.id,
         providerCustomerId: providerCustomer.providerCustomerId,
         email: dto.email,
         name: dto.name ?? null,
-        status: RecordStatus.ACTIVE,
         metadata: dto.metadata ?? {},
       });
     } catch (error) {
+      if (error instanceof ConflictException) {
+        throw error;
+      }
       this.logger.error(
         LOG_MESSAGES.PAYMENT_CUSTOMER.CREATE_FAILED(organizationId),
         error,
@@ -321,25 +291,25 @@ export class PaymentCustomersService {
             paymentProviderId: provider.id,
             providerCustomerId: input.providerCustomerId,
           },
+          withDeleted: true,
         });
 
       if (existingPaymentCustomer) {
+        existingPaymentCustomer.deletedAt = null;
         Object.assign(existingPaymentCustomer, {
           organizationId: input.organizationId,
           email: input.email,
           name: input.name ?? existingPaymentCustomer.name,
           metadata: input.metadata ?? existingPaymentCustomer.metadata,
+          status: RecordStatus.ACTIVE,
         });
         return this.paymentCustomersRepository.save(existingPaymentCustomer);
       }
 
-      const existingByOrganization =
-        await this.paymentCustomersRepository.findOne({
-          where: {
-            organizationId: input.organizationId,
-            paymentProviderId: provider.id,
-          },
-        });
+      const existingByOrganization = await this.findOrganizationProviderCustomer(
+        input.organizationId,
+        provider.id,
+      );
 
       if (existingByOrganization) {
         Object.assign(existingByOrganization, {
@@ -347,17 +317,17 @@ export class PaymentCustomersService {
           email: input.email,
           name: input.name ?? existingByOrganization.name,
           metadata: input.metadata ?? existingByOrganization.metadata,
+          status: RecordStatus.ACTIVE,
         });
         return this.paymentCustomersRepository.save(existingByOrganization);
       }
 
-      return BaseRepository.createAndSave(this.paymentCustomersRepository, {
+      return this.upsertOrganizationProviderCustomer({
         organizationId: input.organizationId,
         paymentProviderId: provider.id,
         providerCustomerId: input.providerCustomerId,
         email: input.email,
         name: input.name ?? null,
-        status: RecordStatus.ACTIVE,
         metadata: input.metadata ?? {},
       });
     } catch (error) {
@@ -367,5 +337,118 @@ export class PaymentCustomersService {
       );
       throw error;
     }
+  }
+
+  /*
+   * Finds org+provider customer including soft-deleted rows that still hold
+   * the unique constraint.
+   */
+  private async findOrganizationProviderCustomer(
+    organizationId: string,
+    paymentProviderId: string,
+  ): Promise<PaymentCustomer | null> {
+    return this.paymentCustomersRepository
+      .createQueryBuilder('customer')
+      .withDeleted()
+      .where('customer.organizationId = :organizationId', { organizationId })
+      .andWhere('customer.paymentProviderId = :paymentProviderId', {
+        paymentProviderId,
+      })
+      .getOne();
+  }
+
+  /*
+   * Inserts or updates the org/provider customer row atomically.
+   */
+  private async upsertOrganizationProviderCustomer(input: {
+    organizationId: string;
+    paymentProviderId: string;
+    providerCustomerId: string;
+    email: string;
+    name: string | null;
+    metadata: Record<string, unknown>;
+  }): Promise<PaymentCustomer> {
+    const rows = await this.paymentCustomersRepository.query(
+      `
+        INSERT INTO "paymentCustomers" (
+          "organizationId",
+          "paymentProviderId",
+          "providerCustomerId",
+          "email",
+          "name",
+          "status",
+          "metadata",
+          "deletedAt"
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, NULL)
+        ON CONFLICT ("organizationId", "paymentProviderId")
+        DO UPDATE SET
+          "providerCustomerId" = EXCLUDED."providerCustomerId",
+          "email" = EXCLUDED."email",
+          "name" = EXCLUDED."name",
+          "status" = EXCLUDED."status",
+          "metadata" = EXCLUDED."metadata",
+          "deletedAt" = NULL,
+          "updatedAt" = NOW()
+        RETURNING *
+      `,
+      [
+        input.organizationId,
+        input.paymentProviderId,
+        input.providerCustomerId,
+        input.email,
+        input.name,
+        RecordStatus.ACTIVE,
+        JSON.stringify(input.metadata ?? {}),
+      ],
+    );
+
+    const row = Array.isArray(rows) ? rows[0] : null;
+    if (!row?.id) {
+      const existing = await this.findOrganizationProviderCustomer(
+        input.organizationId,
+        input.paymentProviderId,
+      );
+      if (existing) {
+        return existing;
+      }
+      throw new Error(ERROR_MESSAGES.PAYMENT_CUSTOMER.NOT_FOUND);
+    }
+
+    const customer = await this.findOrganizationProviderCustomer(
+      input.organizationId,
+      input.paymentProviderId,
+    );
+    if (!customer) {
+      throw new Error(ERROR_MESSAGES.PAYMENT_CUSTOMER.NOT_FOUND);
+    }
+    return customer;
+  }
+
+  /*
+   * Restores soft-deleted rows and refreshes local contact fields.
+   */
+  private async refreshLocalCustomer(
+    customer: PaymentCustomer,
+    dto: CreatePaymentCustomerDto,
+    options?: { forceActive?: boolean },
+  ): Promise<PaymentCustomer> {
+    customer.deletedAt = null;
+    if (options?.forceActive) {
+      customer.status = RecordStatus.ACTIVE;
+    }
+    if (dto.email) {
+      customer.email = dto.email;
+    }
+    if (dto.name !== undefined) {
+      customer.name = dto.name ?? null;
+    }
+    if (dto.metadata) {
+      customer.metadata = {
+        ...(customer.metadata ?? {}),
+        ...dto.metadata,
+      };
+    }
+    return this.paymentCustomersRepository.save(customer);
   }
 }

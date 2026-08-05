@@ -1,5 +1,4 @@
 import { HttpException, Logger } from '@nestjs/common';
-import { QueryFailedError } from 'typeorm';
 
 /**
  * Convert an unknown thrown value into a safe log string.
@@ -48,10 +47,26 @@ export function logServiceError(
 
 /**
  * True when Postgres rejected a write for a UNIQUE constraint (SQLSTATE 23505).
- * Used to retry slug allocation after a TOCTOU race.
+ * Duck-typed so duplicate typeorm package instances still match.
  */
 export function isPostgresUniqueViolation(error: unknown): boolean {
-  if (!(error instanceof QueryFailedError)) return false;
-  const driverError = error.driverError as { code?: string } | undefined;
-  return driverError?.code === '23505';
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const candidate = error as {
+    code?: string;
+    driverError?: { code?: string };
+    message?: string;
+  };
+
+  if (candidate.driverError?.code === '23505' || candidate.code === '23505') {
+    return true;
+  }
+
+  return (
+    typeof candidate.message === 'string' &&
+    candidate.message.toLowerCase().includes('duplicate key')
+  );
 }
+

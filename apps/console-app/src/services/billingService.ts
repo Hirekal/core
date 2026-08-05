@@ -15,6 +15,7 @@ import type {
   Product,
   Subscription,
   UpgradeCheckoutSessionResponse,
+  ValidatedCoupon,
 } from '../types/billing';
 import {
   getProductFeatures,
@@ -332,12 +333,16 @@ export async function cancelScheduledPlanChange(
 export async function previewPlanChange(
   subscriptionId: string,
   priceId: string,
+  couponCode?: string,
 ): Promise<PlanChangePreview> {
   return withBillingErrorHandling(() =>
     apiRequest(`/payments/subscriptions/${subscriptionId}/plan-change/preview`, {
       method: 'POST',
       auth: true,
-      body: { priceId },
+      body: {
+        priceId,
+        ...(couponCode ? { couponCode } : {}),
+      },
     }),
   );
 }
@@ -377,12 +382,16 @@ export async function getCheckoutConfig(): Promise<{ publishableKey: string }> {
 export async function createUpgradeCheckoutSession(
   subscriptionId: string,
   priceId: string,
+  couponCode?: string,
 ): Promise<UpgradeCheckoutSessionResponse> {
   return withBillingErrorHandling(() =>
     apiRequest(`/payments/subscriptions/${subscriptionId}/upgrade/checkout`, {
       method: 'POST',
       auth: true,
-      body: { priceId },
+      body: {
+        priceId,
+        ...(couponCode ? { couponCode } : {}),
+      },
     }),
   );
 }
@@ -408,12 +417,28 @@ export async function createCheckoutSession(input: {
   priceId: string;
   email: string;
   name?: string;
+  couponCode?: string;
 }): Promise<CheckoutSessionResponse> {
   return withBillingErrorHandling(() =>
     apiRequest('/payments/checkout', {
       method: 'POST',
       auth: true,
       body: input,
+    }),
+  );
+}
+
+/*
+ * Validates a promotion / coupon code against the catalog.
+ */
+export async function validateCoupon(
+  promotionCode: string,
+): Promise<ValidatedCoupon> {
+  return withBillingErrorHandling(() =>
+    apiRequest('/payments/coupons/validate', {
+      method: 'POST',
+      auth: true,
+      body: { promotionCode },
     }),
   );
 }

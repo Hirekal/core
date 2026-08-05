@@ -13,7 +13,7 @@ import CheckoutPaymentForm from '../../components/billing/CheckoutPaymentForm';
 import { useAuth } from '../../context/AuthContext';
 import * as billingService from '../../services/billingService';
 import { toUserErrorMessage } from '../../utils/errorMessage';
-import type { Price } from '../../types/billing';
+import type { Price, ValidatedCoupon } from '../../types/billing';
 
 /**
  * Renders upgrade checkout with prorated amount and card entry.
@@ -29,11 +29,16 @@ export default function UpgradeCheckoutPage() {
   const [email, setEmail] = useState(user?.email ?? '');
   const [name, setName] = useState(user?.name ?? '');
   const [amountDue, setAmountDue] = useState<number | null>(null);
+  const [discountAmount, setDiscountAmount] = useState(0);
+  const [discountLabel, setDiscountLabel] = useState<string | null>(null);
   const [stripePromise, setStripePromise] = useState<Promise<Stripe | null> | null>(
     null,
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState<ValidatedCoupon | null>(null);
+  const [couponApplying, setCouponApplying] = useState(false);
+  const [couponError, setCouponError] = useState('');
 
   useEffect(() => {
     if (!priceId) {
@@ -78,6 +83,8 @@ export default function UpgradeCheckoutPage() {
           setEmail(user.email);
           setName(user.name ?? '');
           setAmountDue(planChangePreview.preview.estimatedAmountPayable);
+          setDiscountAmount(planChangePreview.preview.discountAmount ?? 0);
+          setDiscountLabel(planChangePreview.preview.discountLabel ?? null);
           setStripePromise(loadStripe(checkoutConfig.publishableKey));
         }
       } catch (err) {
@@ -97,6 +104,62 @@ export default function UpgradeCheckoutPage() {
       cancelled = true;
     };
   }, [navigate, priceId, user]);
+
+  const refreshPreview = async (coupon?: ValidatedCoupon | null) => {
+    if (!subscriptionId || !priceId) {
+      return;
+    }
+
+    const planChangePreview = await billingService.previewPlanChange(
+      subscriptionId,
+      priceId,
+      coupon?.promotionCode,
+    );
+
+    setAmountDue(planChangePreview.preview.estimatedAmountPayable);
+    setDiscountAmount(planChangePreview.preview.discountAmount ?? 0);
+    setDiscountLabel(
+      planChangePreview.preview.discountLabel ?? coupon?.promotionCode ?? null,
+    );
+  };
+
+  const handleApplyCoupon = async (code: string) => {
+    if (couponApplying) {
+      return;
+    }
+
+    setCouponApplying(true);
+    setCouponError('');
+
+    try {
+      const validated = await billingService.validateCoupon(code);
+      await refreshPreview(validated);
+      setAppliedCoupon(validated);
+    } catch (err) {
+      setCouponError(toUserErrorMessage(err, 'Coupon code is not available'));
+    } finally {
+      setCouponApplying(false);
+    }
+  };
+
+  const handleRemoveCoupon = async () => {
+    if (couponApplying) {
+      return;
+    }
+
+    setCouponApplying(true);
+    setCouponError('');
+
+    try {
+      await refreshPreview(null);
+      setAppliedCoupon(null);
+      setDiscountLabel(null);
+    } catch (err) {
+      setCouponError(toUserErrorMessage(err, 'Failed to remove coupon'));
+    } finally {
+      setCouponApplying(false);
+    }
+  };
 
   if (loading) {
     return <LoadingSpinner message="Loading upgrade checkout…" />;
@@ -127,7 +190,14 @@ export default function UpgradeCheckoutPage() {
           price={price}
           mode="upgrade"
           amountDueToday={amountDue}
+          discountAmount={discountAmount}
+          discountLabel={discountLabel}
           currentProductName={currentProductName}
+          appliedCoupon={appliedCoupon}
+          couponApplying={couponApplying}
+          couponError={couponError}
+          onApplyCoupon={handleApplyCoupon}
+          onRemoveCoupon={handleRemoveCoupon}
         />
         <Elements stripe={stripePromise}>
           <CheckoutPaymentForm
@@ -142,6 +212,7 @@ export default function UpgradeCheckoutPage() {
                 await billingService.createUpgradeCheckoutSession(
                   subscriptionId,
                   priceId!,
+                  appliedCoupon?.promotionCode,
                 );
 
               if (
@@ -149,6 +220,10 @@ export default function UpgradeCheckoutPage() {
                 !checkoutSession.providerSubscriptionId
               ) {
                 throw new Error('Checkout is missing required Stripe configuration');
+              }
+
+              if (typeof checkoutSession.amountDue === 'number') {
+                setAmountDue(checkoutSession.amountDue);
               }
 
               return {

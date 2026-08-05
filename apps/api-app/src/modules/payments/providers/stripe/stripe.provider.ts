@@ -46,11 +46,18 @@ import { ERROR_MESSAGES } from '../../common/messages/payment.messages';
 import { now, toDate } from '../../common/utils/date.util';
 import { SUBSCRIPTION_METADATA_KEYS } from '../../common/constants/subscription.constants';
 
-/*
- * Immediately invoices proration adjustments during upgrades so they are not
- * collected again on the next billing cycle invoice.
- */
 const UPGRADE_PRORATION_BEHAVIOR = 'always_invoice' as const;
+
+function buildStripeDiscounts(input: {
+  providerCouponId?: string | null;
+}): Stripe.SubscriptionCreateParams.Discount[] | undefined {
+  // Use coupon IDs during incomplete checkout so promotion-code redemption
+  // counters are not consumed before payment succeeds.
+  if (input.providerCouponId) {
+    return [{ coupon: input.providerCouponId }];
+  }
+  return undefined;
+}
 
 @Injectable()
 export class StripeProvider implements PaymentProvider {
@@ -281,10 +288,12 @@ export class StripeProvider implements PaymentProvider {
           ...(intervalChange ? { billing_cycle_anchor: 'now' } : {}),
         };
 
+      const discounts = buildStripeDiscounts(input);
       const invoicePreview = await stripe.invoices.createPreview({
         customer: input.providerCustomerId,
         subscription: input.providerSubscriptionId,
         subscription_details: subscriptionDetails,
+        ...(discounts ? { discounts } : {}),
       });
 
       const currency = invoicePreview.currency.toUpperCase();
@@ -293,10 +302,7 @@ export class StripeProvider implements PaymentProvider {
 
       for (const invoiceLine of invoicePreview.lines.data) {
         const amount = toMajorAmount(invoiceLine.amount, currency);
-        const isProrationLine = Boolean(
-          invoiceLine.parent?.invoice_item_details?.proration ||
-          invoiceLine.parent?.subscription_item_details?.proration,
-        );
+        const isProrationLine = this.isInvoiceLineProration(invoiceLine);
         if (amount < 0) {
           prorationCredit += Math.abs(amount);
         } else if (isProrationLine) {
@@ -305,7 +311,19 @@ export class StripeProvider implements PaymentProvider {
       }
 
       const netProrationAmount = Math.max(prorationCharge - prorationCredit, 0);
-      const estimatedAmountPayable = netProrationAmount;
+      const discount = this.resolveInvoiceDiscount(invoicePreview, currency);
+      const discountAmount = this.resolveProrationDiscountAmount(
+        netProrationAmount,
+        discount,
+        invoicePreview,
+        currency,
+      );
+      // amount_due on preview invoices often includes the next full billing
+      // period plus prorations. Charge-today for upgrades is proration only.
+      const estimatedAmountPayable = Math.max(
+        netProrationAmount - discountAmount,
+        0,
+      );
 
       return {
         currency,
@@ -319,11 +337,13 @@ export class StripeProvider implements PaymentProvider {
         prorationCharge,
         netProrationAmount,
         estimatedAmountPayable,
-        invoiceTotal: toMajorAmount(invoicePreview.total, currency),
+        invoiceTotal: estimatedAmountPayable,
         remainingPeriodSeconds: Math.max(
           (periodEnd ?? subscription.start_date) - now().unix(),
           0,
         ),
+        discountAmount,
+        discountLabel: discount.label,
       };
     } catch (error) {
       rethrowStripeError(error);
@@ -639,6 +659,7 @@ export class StripeProvider implements PaymentProvider {
     input: ProviderCheckoutSessionInput,
   ): Promise<ProviderCheckoutSessionResult> {
     try {
+      const discounts = buildStripeDiscounts(input);
       const subscription = await this.stripeService
         .getClient()
         .subscriptions.create({
@@ -650,6 +671,7 @@ export class StripeProvider implements PaymentProvider {
           },
           expand: ['latest_invoice.confirmation_secret'],
           metadata: input.metadata,
+          ...(discounts ? { discounts } : {}),
         });
 
       const latestInvoice = subscription.latest_invoice;
@@ -666,10 +688,14 @@ export class StripeProvider implements PaymentProvider {
         );
       }
 
+      const currency = latestInvoice.currency.toUpperCase();
+
       return {
         clientSecret,
         sessionId: subscription.id,
         providerSubscriptionId: subscription.id,
+        amountDue: toMajorAmount(latestInvoice.amount_due, currency),
+        currency,
       };
     } catch (error) {
       rethrowStripeError(error);
@@ -700,6 +726,7 @@ export class StripeProvider implements PaymentProvider {
         input.providerPriceId,
       );
 
+      const discounts = buildStripeDiscounts(input);
       const updatedSubscription = await stripe.subscriptions.update(
         input.providerSubscriptionId,
         {
@@ -712,6 +739,7 @@ export class StripeProvider implements PaymentProvider {
             ...(subscription.metadata ?? {}),
             ...(input.metadata ?? {}),
           },
+          ...(discounts ? { discounts } : {}),
         },
       );
 
@@ -1016,6 +1044,8 @@ export class StripeProvider implements PaymentProvider {
   mapInvoice(invoice: Stripe.Invoice): ProviderInvoiceResult {
     const providerSubscriptionId = this.resolveInvoiceProviderSubscriptionId(invoice);
     const subscriptionLine = this.resolveInvoiceSubscriptionLine(invoice);
+    const currency = invoice.currency.toUpperCase();
+    const discount = this.resolveInvoiceDiscount(invoice, currency);
 
     return {
       providerInvoiceId: invoice.id,
@@ -1023,7 +1053,7 @@ export class StripeProvider implements PaymentProvider {
       providerPaymentId: this.resolveInvoicePaymentId(invoice),
       amountDue: invoice.amount_due,
       amountPaid: invoice.amount_paid,
-      currency: invoice.currency.toUpperCase(),
+      currency,
       invoiceStatus: mapStripeInvoiceStatus(invoice.status ?? 'draft'),
       invoiceUrl: invoice.hosted_invoice_url ?? null,
       invoicePdf: invoice.invoice_pdf ?? null,
@@ -1037,7 +1067,141 @@ export class StripeProvider implements PaymentProvider {
         : this.resolveInvoicePlanNameFallback(invoice),
       receiptUrl: this.resolveInvoiceReceiptUrl(invoice),
       invoiceNumber: invoice.number ?? null,
+      discountAmount: discount.amount,
+      discountLabel: discount.label,
     };
+  }
+
+  /*
+   * Extracts coupon discount totals and a display label from a Stripe invoice.
+   */
+  private resolveInvoiceDiscount(
+    invoice: Stripe.Invoice,
+    currency: string,
+  ): {
+    amount: number;
+    label: string | null;
+    percentOff: number | null;
+    amountOff: number | null;
+  } {
+    const totalDiscountAmounts = (
+      invoice as Stripe.Invoice & {
+        total_discount_amounts?: Array<{ amount?: number | null }> | null;
+      }
+    ).total_discount_amounts;
+
+    const discountMinor = (totalDiscountAmounts ?? []).reduce(
+      (sum, entry) => sum + (entry.amount ?? 0),
+      0,
+    );
+
+    const discounts = (
+      invoice as Stripe.Invoice & {
+        discounts?: Array<
+          | string
+          | {
+              coupon?: {
+                name?: string | null;
+                percent_off?: number | null;
+                amount_off?: number | null;
+              } | null;
+              promotion_code?: string | { code?: string | null } | null;
+            }
+          | null
+        > | null;
+      }
+    ).discounts;
+
+    let label: string | null = null;
+    let percentOff: number | null = null;
+    let amountOff: number | null = null;
+    for (const entry of discounts ?? []) {
+      if (!entry || typeof entry === 'string') {
+        continue;
+      }
+
+      const promotionCode =
+        typeof entry.promotion_code === 'object'
+          ? entry.promotion_code?.code
+          : null;
+      const couponName = entry.coupon?.name ?? null;
+      label = promotionCode || couponName || label;
+      if (typeof entry.coupon?.percent_off === 'number') {
+        percentOff = entry.coupon.percent_off;
+      }
+      if (typeof entry.coupon?.amount_off === 'number') {
+        amountOff = toMajorAmount(entry.coupon.amount_off, currency);
+      }
+      if (label && (percentOff != null || amountOff != null)) {
+        break;
+      }
+    }
+
+    return {
+      amount: toMajorAmount(discountMinor, currency),
+      label,
+      percentOff,
+      amountOff,
+    };
+  }
+
+  /*
+   * Discount amount attributable to today's proration charge only.
+   */
+  private resolveProrationDiscountAmount(
+    netProrationAmount: number,
+    discount: {
+      amount: number;
+      percentOff: number | null;
+      amountOff: number | null;
+    },
+    invoice: Stripe.Invoice,
+    currency: string,
+  ): number {
+    if (netProrationAmount <= 0) {
+      return 0;
+    }
+
+    if (typeof discount.percentOff === 'number' && discount.percentOff > 0) {
+      return Number(
+        ((netProrationAmount * discount.percentOff) / 100).toFixed(2),
+      );
+    }
+
+    if (typeof discount.amountOff === 'number' && discount.amountOff > 0) {
+      return Math.min(discount.amountOff, netProrationAmount);
+    }
+
+    if (discount.amount <= 0) {
+      return 0;
+    }
+
+    const subtotal = toMajorAmount(invoice.subtotal ?? 0, currency);
+    if (subtotal <= 0) {
+      return Math.min(discount.amount, netProrationAmount);
+    }
+
+    return Number(
+      Math.min(
+        (discount.amount * netProrationAmount) / subtotal,
+        netProrationAmount,
+      ).toFixed(2),
+    );
+  }
+
+  /*
+   * Detects proration lines across Stripe invoice line shapes.
+   */
+  private isInvoiceLineProration(invoiceLine: Stripe.InvoiceLineItem): boolean {
+    const line = invoiceLine as Stripe.InvoiceLineItem & {
+      proration?: boolean | null;
+    };
+
+    return Boolean(
+      line.proration ||
+        line.parent?.invoice_item_details?.proration ||
+        line.parent?.subscription_item_details?.proration,
+    );
   }
 
   /*

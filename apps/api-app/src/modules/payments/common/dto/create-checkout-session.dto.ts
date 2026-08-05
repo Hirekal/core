@@ -1,6 +1,7 @@
 /**
  * @fileoverview DTO for creating a checkout session.
  */
+import { Transform } from 'class-transformer';
 import {
   IsEmail,
   IsOptional,
@@ -21,4 +22,12 @@ export class CreateCheckoutSessionDto {
   @IsString()
   @MaxLength(255)
   name?: string;
+
+  @IsOptional()
+  @Transform(({ value }) =>
+    typeof value === 'string' && value.trim() === '' ? undefined : value,
+  )
+  @IsString()
+  @MaxLength(100)
+  couponCode?: string;
 }

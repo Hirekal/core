@@ -78,6 +78,7 @@ export interface ProviderPlanChangePreviewInput {
   providerCustomerId: string;
   providerSubscriptionId: string;
   providerPriceId: string;
+  providerCouponId?: string | null;
 }
 
 export interface ProviderPlanChangePreviewResult {
@@ -92,18 +93,23 @@ export interface ProviderPlanChangePreviewResult {
   estimatedAmountPayable: number;
   invoiceTotal: number;
   remainingPeriodSeconds: number;
+  discountAmount?: number;
+  discountLabel?: string | null;
 }
 
 export interface ProviderCheckoutSessionInput {
   providerCustomerId: string;
   providerPriceId: string;
   metadata?: Record<string, string>;
+  providerCouponId?: string | null;
 }
 
 export interface ProviderCheckoutSessionResult {
   clientSecret: string;
   sessionId: string;
   providerSubscriptionId: string;
+  amountDue?: number;
+  currency?: string;
 }
 
 export interface ProviderUpgradeCheckoutSessionInput {
@@ -111,6 +117,7 @@ export interface ProviderUpgradeCheckoutSessionInput {
   providerSubscriptionId: string;
   providerPriceId: string;
   metadata?: Record<string, string>;
+  providerCouponId?: string | null;
 }
 
 export interface ProviderUpgradeCheckoutSessionResult
@@ -153,6 +160,8 @@ export interface ProviderInvoiceResult {
   providerPriceId?: string | null;
   receiptUrl?: string | null;
   invoiceNumber?: string | null;
+  discountAmount?: number | null;
+  discountLabel?: string | null;
 }
 
 export interface ProviderPaymentResult {

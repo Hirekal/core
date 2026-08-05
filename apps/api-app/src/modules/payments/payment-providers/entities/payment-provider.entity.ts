@@ -11,6 +11,7 @@ import { Payment } from '../../payments-record/entities/payment.entity';
 import { PaymentMethod } from '../../payment-methods/entities/payment-method.entity';
 import { Invoice } from '../../invoices/entities/invoice.entity';
 import { WebhookEvent } from '../../webhooks/entities/webhook-event.entity';
+import { Coupon } from '../../coupons/entities/coupon.entity';
 
 @Entity('paymentProviders')
 export class PaymentProvider extends BaseEntity {
@@ -45,4 +46,7 @@ export class PaymentProvider extends BaseEntity {
 
   @OneToMany(() => WebhookEvent, (event) => event.paymentProvider)
   webhookEvents: WebhookEvent[];
+
+  @OneToMany(() => Coupon, (coupon) => coupon.paymentProvider)
+  coupons: Coupon[];
 }

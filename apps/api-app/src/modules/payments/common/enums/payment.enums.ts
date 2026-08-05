@@ -70,3 +70,14 @@ export enum PlanChangeDirection {
   LATERAL = 'lateral',
   SAME = 'same',
 }
+
+export enum CouponDiscountType {
+  PERCENTAGE = 'PERCENTAGE',
+  FIXED = 'FIXED',
+}
+
+export enum CouponDuration {
+  ONCE = 'ONCE',
+  REPEATING = 'REPEATING',
+  FOREVER = 'FOREVER',
+}

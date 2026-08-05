@@ -10,6 +10,8 @@ import { Payment } from '../../payments-record/entities/payment.entity';
 import { PaymentMethod } from '../../payment-methods/entities/payment-method.entity';
 import { Invoice } from '../../invoices/entities/invoice.entity';
 import { WebhookEvent } from '../../webhooks/entities/webhook-event.entity';
+import { Coupon } from '../../coupons/entities/coupon.entity';
+import { CouponRedemption } from '../../coupons/entities/coupon-redemption.entity';
 
 export const PAYMENTS_ENTITIES = [
   PaymentProvider,
@@ -21,4 +23,6 @@ export const PAYMENTS_ENTITIES = [
   PaymentMethod,
   Invoice,
   WebhookEvent,
+  Coupon,
+  CouponRedemption,
 ];

@@ -63,11 +63,23 @@ export default function InvoiceTable({
     {
       key: 'amount',
       label: 'Amount',
-      render: (row: Invoice) =>
-        formatMoney(
-          row.invoiceStatus === 'PAID' ? row.amountPaid : row.amountDue,
-          row.currency,
-        ),
+      render: (row: Invoice) => (
+        <div>
+          <span className="font-medium text-heading">
+            {formatMoney(
+              row.invoiceStatus === 'PAID' ? row.amountPaid : row.amountDue,
+              row.currency,
+            )}
+          </span>
+          {typeof row.discountAmount === 'number' && row.discountAmount > 0 && (
+            <p className="mt-0.5 text-xs text-[#0d9488]">
+              Discount
+              {row.discountLabel ? ` (${row.discountLabel})` : ''}: -
+              {formatMoney(row.discountAmount, row.currency)}
+            </p>
+          )}
+        </div>
+      ),
     },
     {
       key: 'status',

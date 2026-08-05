@@ -19,17 +19,19 @@ import {
   resolveBillingPeriod,
   type BillingPeriod,
 } from '../../utils/billingFormat';
-import type { Price } from '../../types/billing';
+import type { Price, ValidatedCoupon } from '../../types/billing';
 
 async function createCheckoutForPrice(
   priceId: string,
   email: string,
   name?: string,
+  couponCode?: string,
 ) {
   return billingService.createCheckoutSession({
     priceId,
     email,
     name,
+    ...(couponCode ? { couponCode } : {}),
   });
 }
 
@@ -50,6 +52,7 @@ export default function CheckoutPage() {
   const [providerSubscriptionId, setProviderSubscriptionId] = useState<string | null>(
     null,
   );
+  const [amountDueToday, setAmountDueToday] = useState<number | null>(null);
   const [stripePromise, setStripePromise] = useState<Promise<Stripe | null> | null>(
     null,
   );
@@ -57,6 +60,9 @@ export default function CheckoutPage() {
   const [periodSwitching, setPeriodSwitching] = useState(false);
   const [periodSwitchError, setPeriodSwitchError] = useState('');
   const [error, setError] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState<ValidatedCoupon | null>(null);
+  const [couponApplying, setCouponApplying] = useState(false);
+  const [couponError, setCouponError] = useState('');
 
   const availablePeriods = useMemo(
     () =>
@@ -65,6 +71,13 @@ export default function CheckoutPage() {
       ),
     [productPrices],
   );
+
+  const discountAmount = useMemo(() => {
+    if (!price || amountDueToday == null) {
+      return 0;
+    }
+    return Math.max(price.amount - amountDueToday, 0);
+  }, [amountDueToday, price]);
 
   const applyCheckoutSession = useCallback(
     (loadedPrice: Price, checkoutSession: Awaited<ReturnType<typeof createCheckoutForPrice>>) => {
@@ -76,6 +89,11 @@ export default function CheckoutPage() {
       setClientSecret(checkoutSession.clientSecret);
       setProviderSubscriptionId(checkoutSession.providerSubscriptionId);
       setStripePromise(loadStripe(checkoutSession.publishableKey));
+      setAmountDueToday(
+        typeof checkoutSession.amountDue === 'number'
+          ? checkoutSession.amountDue
+          : loadedPrice.amount,
+      );
 
       const period = resolveBillingPeriod(
         loadedPrice.interval,
@@ -137,6 +155,23 @@ export default function CheckoutPage() {
     };
   }, [applyCheckoutSession, navigate, priceId, user]);
 
+  const recreateCheckout = async (
+    nextPrice: Price,
+    coupon?: ValidatedCoupon | null,
+  ) => {
+    if (!user?.email) {
+      return;
+    }
+
+    const checkoutSession = await createCheckoutForPrice(
+      nextPrice.id,
+      user.email,
+      user.name ?? undefined,
+      coupon?.promotionCode,
+    );
+    applyCheckoutSession(nextPrice, checkoutSession);
+  };
+
   const handleBillingPeriodChange = async (period: BillingPeriod) => {
     if (!user?.email || period === billingPeriod || periodSwitching) {
       return;
@@ -153,16 +188,49 @@ export default function CheckoutPage() {
     setPeriodSwitchError('');
 
     try {
-      const [loadedPrice, checkoutSession] = await Promise.all([
-        billingService.getPrice(nextPrice.id),
-        createCheckoutForPrice(nextPrice.id, user.email, user.name ?? undefined),
-      ]);
-
-      applyCheckoutSession(loadedPrice, checkoutSession);
+      const loadedPrice = await billingService.getPrice(nextPrice.id);
+      await recreateCheckout(loadedPrice, appliedCoupon);
     } catch (err) {
       setPeriodSwitchError(toUserErrorMessage(err, 'Failed to update billing period'));
     } finally {
       setPeriodSwitching(false);
+    }
+  };
+
+  const handleApplyCoupon = async (code: string) => {
+    if (!price || couponApplying) {
+      return;
+    }
+
+    setCouponApplying(true);
+    setCouponError('');
+
+    try {
+      const validated = await billingService.validateCoupon(code);
+      await recreateCheckout(price, validated);
+      setAppliedCoupon(validated);
+    } catch (err) {
+      setCouponError(toUserErrorMessage(err, 'Coupon code is not available'));
+    } finally {
+      setCouponApplying(false);
+    }
+  };
+
+  const handleRemoveCoupon = async () => {
+    if (!price || couponApplying) {
+      return;
+    }
+
+    setCouponApplying(true);
+    setCouponError('');
+
+    try {
+      await recreateCheckout(price, null);
+      setAppliedCoupon(null);
+    } catch (err) {
+      setCouponError(toUserErrorMessage(err, 'Failed to remove coupon'));
+    } finally {
+      setCouponApplying(false);
     }
   };
 
@@ -187,10 +255,18 @@ export default function CheckoutPage() {
         <CheckoutOrderSummary
           product={price.product}
           price={price}
+          amountDueToday={amountDueToday ?? price.amount}
+          discountAmount={discountAmount}
+          discountLabel={appliedCoupon?.promotionCode ?? null}
           billingPeriod={billingPeriod}
           availablePeriods={availablePeriods}
           onBillingPeriodChange={handleBillingPeriodChange}
           periodSwitching={periodSwitching}
+          appliedCoupon={appliedCoupon}
+          couponApplying={couponApplying}
+          couponError={couponError}
+          onApplyCoupon={handleApplyCoupon}
+          onRemoveCoupon={handleRemoveCoupon}
         />
         <Elements key={clientSecret} stripe={stripePromise}>
           <CheckoutPaymentForm
@@ -199,6 +275,7 @@ export default function CheckoutPage() {
             name={name}
             clientSecret={clientSecret}
             providerSubscriptionId={providerSubscriptionId}
+            payAmount={amountDueToday ?? price.amount}
             switchError={periodSwitchError}
             onEmailChange={setEmail}
             onNameChange={setName}

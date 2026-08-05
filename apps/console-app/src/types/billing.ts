@@ -119,6 +119,8 @@ export interface Invoice {
   receiptUrl: string | null;
   paidAt: string | null;
   createdAt: string;
+  discountAmount: number | null;
+  discountLabel: string | null;
   metadata: Record<string, unknown> | null;
 }
 
@@ -147,6 +149,8 @@ export interface PlanChangePreview {
     netProrationAmount: number;
     estimatedAmountPayable: number;
     currentPeriodEnd: string;
+    discountAmount?: number;
+    discountLabel?: string | null;
   };
 }
 
@@ -155,11 +159,25 @@ export interface CheckoutSessionResponse {
   sessionId: string;
   providerSubscriptionId: string;
   publishableKey: string;
+  amountDue?: number;
+  currency?: string;
 }
 
 export interface UpgradeCheckoutSessionResponse extends CheckoutSessionResponse {
   amountDue: number;
   currency: string;
+}
+
+export interface ValidatedCoupon {
+  id: string;
+  name: string;
+  promotionCode: string;
+  discountType: 'PERCENTAGE' | 'FIXED';
+  discountValue: number;
+  duration: string;
+  expiresAt: string | null;
+  timesRedeemed?: number;
+  maximumRedemptions?: number | null;
 }
 
 export interface CheckoutSessionStatusResponse {

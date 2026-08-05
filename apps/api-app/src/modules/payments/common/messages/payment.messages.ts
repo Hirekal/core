@@ -84,6 +84,13 @@ export const ERROR_MESSAGES = {
     MISSING_PUBLISHABLE_KEY:
       'Stripe publishable key is not configured (STRIPE_PUBLISHABLE_KEY)',
   },
+  COUPON: {
+    NOT_AVAILABLE: 'Coupon code is not available',
+    EXPIRED: 'Coupon code has expired',
+    INVALID: 'Coupon code is invalid',
+    MAX_REDEMPTIONS_REACHED:
+      'Coupon code has already been fully redeemed',
+  },
 } as const;
 
 export const SUCCESS_MESSAGES = {

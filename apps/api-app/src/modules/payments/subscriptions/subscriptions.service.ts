@@ -44,6 +44,7 @@ import { rethrowStripeError } from '../common/utils/stripe-error.util';
 import { toIsoString } from '../common/utils/date.util';
 import { StripeService } from '../providers/stripe/stripe.service';
 import { ProviderUpgradeCheckoutSessionResult } from '../providers/payment-provider.interface';
+import { CouponsService } from '../coupons/coupons.service';
 
 @Injectable()
 export class SubscriptionsService {
@@ -57,6 +58,7 @@ export class SubscriptionsService {
     private readonly paymentProvidersService: PaymentProvidersService,
     private readonly paymentProviderRegistry: PaymentProviderRegistry,
     private readonly stripeService: StripeService,
+    private readonly couponsService: CouponsService,
   ) {}
 
   /*
@@ -208,6 +210,7 @@ export class SubscriptionsService {
     organizationId: string,
     subscriptionId: string,
     newPriceId: string,
+    couponCode?: string,
   ): Promise<ProviderUpgradeCheckoutSessionResult & { publishableKey: string }> {
     try {
       const subscription = await this.loadChangeableSubscription(
@@ -238,6 +241,9 @@ export class SubscriptionsService {
         );
       }
 
+      const stripeDiscount =
+        await this.couponsService.resolveStripeDiscountRef(couponCode);
+
       const session = await paymentProvider.createUpgradeCheckoutSession({
         providerCustomerId: subscription.customer.providerCustomerId,
         providerSubscriptionId: subscription.providerSubscriptionId,
@@ -251,7 +257,11 @@ export class SubscriptionsService {
           [SUBSCRIPTION_METADATA_KEYS.PREVIOUS_PRICE_ID]: currentPrice.id,
           [SUBSCRIPTION_METADATA_KEYS.PREVIOUS_PROVIDER_PRICE_ID]:
             currentPrice.providerPriceId,
+          ...(couponCode
+            ? { couponCode: couponCode.trim().toUpperCase() }
+            : {}),
         },
+        providerCouponId: stripeDiscount?.id ?? null,
       });
 
       await this.subscriptionsRepository.update(subscription.id, {
@@ -263,6 +273,9 @@ export class SubscriptionsService {
           [SUBSCRIPTION_METADATA_KEYS.PREVIOUS_PRICE_ID]: currentPrice.id,
           [SUBSCRIPTION_METADATA_KEYS.PREVIOUS_PROVIDER_PRICE_ID]:
             currentPrice.providerPriceId,
+          ...(couponCode?.trim()
+            ? { couponCode: couponCode.trim().toUpperCase() }
+            : {}),
         },
       });
 
@@ -347,6 +360,7 @@ export class SubscriptionsService {
     id: string,
     newPriceId: string,
     organizationId?: string,
+    couponCode?: string,
   ): Promise<{
     currentPlan: Price;
     newPlan: Price;
@@ -373,11 +387,15 @@ export class SubscriptionsService {
         provider.code,
       );
 
+      const stripeDiscount =
+        await this.couponsService.resolveStripeDiscountRef(couponCode);
+
       const planChangePreviewResult =
         await paymentProvider.previewSubscriptionPlanChange({
           providerCustomerId: subscription.customer.providerCustomerId,
           providerSubscriptionId: subscription.providerSubscriptionId,
           providerPriceId: newPrice.providerPriceId,
+          providerCouponId: stripeDiscount?.id ?? null,
         });
 
       return {

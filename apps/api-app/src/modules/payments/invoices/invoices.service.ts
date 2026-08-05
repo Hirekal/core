@@ -44,6 +44,8 @@ export interface InvoiceResponse {
   invoicePdf: string | null;
   paidAt: string | null;
   createdAt: string;
+  discountAmount: number | null;
+  discountLabel: string | null;
   metadata: Record<string, unknown> | null;
 }
 
@@ -297,6 +299,14 @@ export class InvoicesService {
       invoicePdf: invoice.invoicePdf,
       paidAt: invoice.paidAt?.toISOString() ?? null,
       createdAt: invoice.createdAt.toISOString(),
+      discountAmount:
+        typeof metadata.discountAmount === 'number'
+          ? metadata.discountAmount
+          : null,
+      discountLabel:
+        typeof metadata.discountLabel === 'string'
+          ? metadata.discountLabel
+          : null,
       metadata: invoice.metadata,
     };
   }
@@ -327,6 +337,15 @@ export class InvoicesService {
     }
     if (providerResult.invoiceNumber) {
       metadata.invoiceNumber = providerResult.invoiceNumber;
+    }
+    if (
+      typeof providerResult.discountAmount === 'number' &&
+      providerResult.discountAmount > 0
+    ) {
+      metadata.discountAmount = providerResult.discountAmount;
+    }
+    if (providerResult.discountLabel) {
+      metadata.discountLabel = providerResult.discountLabel;
     }
 
     return metadata;

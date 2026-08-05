@@ -21,12 +21,36 @@ const STRIPE_CODE_MESSAGES: Record<string, string> = {
 
 function mapStripeInvalidRequestMessage(error: StripeLikeError): string {
   const code = error.code ?? '';
+  const param = (error.param ?? '').toLowerCase();
+  const message = error.message.toLowerCase();
+
+  if (
+    message.includes('promotion code') &&
+    (message.includes('maximum') ||
+      message.includes('redeem') ||
+      message.includes('inactive') ||
+      message.includes('expired'))
+  ) {
+    if (message.includes('expired')) {
+      return ERROR_MESSAGES.COUPON.EXPIRED;
+    }
+    return ERROR_MESSAGES.COUPON.MAX_REDEMPTIONS_REACHED;
+  }
+
+  if (
+    code === 'resource_missing' &&
+    (param.includes('promotion_code') ||
+      param.includes('coupon') ||
+      param.includes('discount'))
+  ) {
+    return ERROR_MESSAGES.COUPON.NOT_AVAILABLE;
+  }
+
   const mapped = STRIPE_CODE_MESSAGES[code];
   if (mapped) {
     return mapped;
   }
 
-  const message = error.message.toLowerCase();
   if (message.includes('canceled subscription')) {
     return ERROR_MESSAGES.SUBSCRIPTION.NOT_CHANGEABLE;
   }

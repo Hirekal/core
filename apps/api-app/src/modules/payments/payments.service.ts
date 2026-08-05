@@ -35,6 +35,7 @@ import { StripeService } from './providers/stripe/stripe.service';
 import type { Subscription } from './subscriptions/entities/subscription.entity';
 import { SyncCheckoutSubscriptionDto } from './common/dto/sync-checkout-subscription.dto';
 import { resolveStripeResourceId } from './common/utils/payment-mapper.util';
+import { CouponsService } from './coupons/coupons.service';
 
 @Injectable()
 export class PaymentsService {
@@ -53,6 +54,7 @@ export class PaymentsService {
     private readonly stripeService: StripeService,
     private readonly paymentsRecordService: PaymentsRecordService,
     private readonly stripeProvider: StripeProvider,
+    private readonly couponsService: CouponsService,
   ) {}
 
   /*
@@ -141,10 +143,20 @@ export class PaymentsService {
         },
       );
 
+      const stripeDiscount =
+        await this.couponsService.resolveStripeDiscountRef(dto.couponCode);
+
       const session = await client.createCheckoutSession({
         providerCustomerId: customer.providerCustomerId,
         providerPriceId: price.providerPriceId,
-        metadata: { organizationId, priceId: price.id },
+        metadata: {
+          organizationId,
+          priceId: price.id,
+          ...(dto.couponCode
+            ? { couponCode: dto.couponCode.trim().toUpperCase() }
+            : {}),
+        },
+        providerCouponId: stripeDiscount?.id ?? null,
       });
 
       return {
@@ -242,6 +254,20 @@ export class PaymentsService {
         providerSubscriptionId,
         dto.providerPaymentId,
       );
+
+      const couponCode =
+        typeof metadata.couponCode === 'string' ? metadata.couponCode : null;
+      const latestInvoiceId = resolveStripeResourceId(
+        stripeSubscription.latest_invoice,
+      );
+      if (couponCode && latestInvoiceId) {
+        await this.couponsService.recordSuccessfulRedemption({
+          promotionCode: couponCode,
+          organizationId,
+          providerInvoiceId: latestInvoiceId,
+          providerSubscriptionId,
+        });
+      }
 
       return subscription;
     } catch (error) {

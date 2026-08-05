@@ -10,10 +10,11 @@ import { PaymentsRecordService } from '../../payments-record/payments-record.ser
 import { InvoicesService } from '../../invoices/invoices.service';
 import { PaymentMethodsService } from '../../payment-methods/payment-methods.service';
 import { PricesService } from '../../prices/prices.service';
-import { PaymentProviderCode } from '../../common/enums/payment.enums';
+import { PaymentProviderCode, InvoiceStatus } from '../../common/enums/payment.enums';
 import { STRIPE_WEBHOOK_EVENTS } from '../../common/constants/payment.constants';
 import { resolveStripeResourceId } from '../../common/utils/payment-mapper.util';
 import { LOG_MESSAGES } from '../../common/messages/payment.messages';
+import { CouponsService } from '../../coupons/coupons.service';
 
 @Injectable()
 export class StripeWebhookHandler {
@@ -27,6 +28,7 @@ export class StripeWebhookHandler {
     private readonly invoicesService: InvoicesService,
     private readonly paymentMethodsService: PaymentMethodsService,
     private readonly pricesService: PricesService,
+    private readonly couponsService: CouponsService,
   ) {}
 
   /*
@@ -354,6 +356,23 @@ export class StripeWebhookHandler {
       existingSubscription,
       providerSubscription,
     );
+
+    const couponCode =
+      (typeof existingSubscription.metadata?.couponCode === 'string'
+        ? existingSubscription.metadata.couponCode
+        : null) ??
+      (typeof mappedInvoice.discountLabel === 'string'
+        ? mappedInvoice.discountLabel
+        : null);
+
+    if (couponCode && mappedInvoice.invoiceStatus === InvoiceStatus.PAID) {
+      await this.couponsService.recordSuccessfulRedemption({
+        promotionCode: couponCode,
+        organizationId: customer.organizationId,
+        providerInvoiceId: mappedInvoice.providerInvoiceId,
+        providerSubscriptionId,
+      });
+    }
   }
 
   /*

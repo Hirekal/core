@@ -182,6 +182,7 @@ export class SubscriptionsController {
           id,
           dto.priceId,
           user.organizationId,
+          dto.couponCode,
         );
       return {
         currentPlan: planChangePreview.currentPlan,
@@ -245,6 +246,7 @@ export class SubscriptionsController {
         user.organizationId,
         id,
         dto.priceId,
+        dto.couponCode,
       );
     } catch (error) {
       this.logger.error(`createUpgradeCheckout failed for subscription ${id}`, error);
