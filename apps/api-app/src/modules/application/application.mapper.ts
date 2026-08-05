@@ -70,6 +70,9 @@ function mapTranscript(
       language: transcription.transcriptLanguage,
       duration: transcription.transcriptDuration,
       segments: transcription.transcriptSegments,
+      speech: transcription.speechMetrics,
+      assessment: transcription.assessment,
+      communicationMetrics: transcription.communicationMetrics,
       isPending:
         transcription.status === TranscriptionJobStatus.PENDING ||
         transcription.status === TranscriptionJobStatus.SENT,

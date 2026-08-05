@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     temp_cleanup_interval_hours: float = 1.0
     transcript_callback_url: Optional[str] = None
     transcript_callback_timeout_seconds: float = 30.0
+    pronunciation_model: str = "facebook/wav2vec2-base-960h"
+    pronunciation_enabled: bool = True
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -22,6 +22,11 @@ export function toUserErrorMessage(error, fallback = 'Something went wrong. Plea
     normalized.includes('networkerror') ||
     normalized.includes('network request failed') ||
     normalized.includes('load failed') ||
+    normalized.includes('econnrefused') ||
+    normalized.includes('enotfound') ||
+    normalized.includes('econnreset') ||
+    normalized.includes('etimedout') ||
+    normalized.includes('socket hang up') ||
     error?.name === 'TypeError'
   ) {
     return 'Unable to reach the server. Check your connection and try again.';

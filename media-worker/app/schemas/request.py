@@ -16,3 +16,10 @@ class TranscribeRequest(BaseModel):
         default="auto",
         description='Language code (e.g. "en") or "auto" for detection',
     )
+    reference_text: str | None = Field(
+        default=None,
+        description=(
+            "Expected spoken script for pronunciation scoring. "
+            "When omitted, the Whisper transcript is used (English only)."
+        ),
+    )
