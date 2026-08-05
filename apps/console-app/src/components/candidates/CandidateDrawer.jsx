@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
     X, Star, Trash2, Play, Mail, Phone, Clock, Video, Plus, StickyNote, FileText, FormInput,
+    MessageSquare, Sparkles, Gauge, AudioLines, Info,
 } from 'lucide-react';
 import Button from '../common/Button';
 import Badge from '../common/Badge';
@@ -61,27 +62,334 @@ function getAnswerSummary(answer) {
         if (answer.transcript?.isPending) {
             return 'Transcription in progress...';
         }
+        if (answer.transcript?.isFailed) {
+            return formatTranscriptErrorMessage(answer.transcript.errorMessage);
+        }
         return resolveVideoUrl(answer) ? 'Video response recorded' : 'No video recorded';
     }
     return answer.answer?.trim() || 'No answer provided';
 }
 
-function TranscriptBlock({ transcript }) {
+function formatMetricValue(metric, key) {
+    if (!metric) return null;
+    if (key === 'speakingPace') {
+        const wpm = Number(metric.wpm);
+        if (!Number.isFinite(wpm)) return null;
+        return `${Math.round(wpm)}`;
+    }
+    const score = Number(metric.score);
+    if (!Number.isFinite(score)) return null;
+    return Number.isInteger(score) ? String(score) : score.toFixed(1);
+}
+
+function metricBarPercent(metric, key) {
+    if (!metric) return 0;
+    if (key === 'speakingPace') {
+        const wpm = Number(metric.wpm);
+        if (!Number.isFinite(wpm)) return 0;
+        // Ideal band is 120–160; map 0–200 WPM into a 0–100 bar for visual context.
+        return Math.max(0, Math.min(100, Math.round((wpm / 200) * 100)));
+    }
+    const score = Number(metric.score);
+    if (!Number.isFinite(score)) return 0;
+    return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+function metricLabelStyle(label) {
+    const normalized = String(label || '').toLowerCase();
+
+    if (normalized === 'excellent' || normalized === 'ideal') {
+        return {
+            badge: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+            bar: 'bg-emerald-500',
+        };
+    }
+
+    if (normalized === 'good') {
+        return {
+            badge: 'bg-green-50 text-green-700 border-green-200',
+            bar: 'bg-green-500',
+        };
+    }
+
+    if (
+        normalized === 'fair'
+        || normalized === 'slow'
+        || normalized === 'fast'
+        || normalized === 'too slow'
+        || normalized === 'too fast'
+    ) {
+        return {
+            badge: 'bg-amber-50 text-amber-800 border-amber-200',
+            bar: 'bg-amber-500',
+        };
+    }
+
+    if (normalized === 'needs improvement') {
+        return {
+            badge: 'bg-red-50 text-red-700 border-red-200',
+            bar: 'bg-red-500',
+        };
+    }
+
+    return {
+        badge: 'bg-hover text-muted border-border',
+        bar: 'bg-muted',
+    };
+}
+
+const SCORE_LABEL_BANDS = [
+    { range: '95–100', label: 'Excellent' },
+    { range: '85–94', label: 'Good' },
+    { range: '70–84', label: 'Fair' },
+    { range: '0–69', label: 'Needs Improvement' },
+];
+
+const PACE_LABEL_BANDS = [
+    { range: '< 100', label: 'Too Slow' },
+    { range: '100–119', label: 'Slow' },
+    { range: '120–160', label: 'Ideal' },
+    { range: '161–180', label: 'Fast' },
+    { range: '181+', label: 'Too Fast' },
+];
+
+function MetricLabelTooltip({ bands, title = 'Label guide', activeLabel }) {
+    const normalizedActive = String(activeLabel || '').trim().toLowerCase();
+
+    return (
+        <span className="group/tooltip relative inline-flex">
+            <span
+                className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full text-muted transition-colors group-hover/tooltip:text-accent"
+                aria-label={title}
+            >
+                <Info size={12} />
+            </span>
+            <span
+                role="tooltip"
+                className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 w-48 -translate-x-1/2 rounded-lg border border-border bg-card px-2.5 py-2 text-left opacity-0 shadow-lg ring-1 ring-border/40 transition-opacity duration-150 group-hover/tooltip:opacity-100"
+            >
+                <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wide text-muted">
+                    {title}
+                </span>
+                <span className="block space-y-0.5">
+                    {bands.map((row) => {
+                        const isActive = normalizedActive === row.label.toLowerCase();
+                        return (
+                            <span
+                                key={`${row.range}-${row.label}`}
+                                className={`flex items-center justify-between gap-2 rounded-md px-1.5 py-1 text-[11px] leading-tight ${
+                                    isActive ? 'bg-accent/10' : ''
+                                }`}
+                            >
+                                <span className={`tabular-nums ${isActive ? 'text-heading' : 'text-muted'}`}>
+                                    {row.range}
+                                </span>
+                                <span className={`font-medium ${isActive ? 'text-accent' : 'text-heading'}`}>
+                                    {row.label}
+                                </span>
+                            </span>
+                        );
+                    })}
+                </span>
+            </span>
+        </span>
+    );
+}
+
+function CommunicationMetricsBlock({ metrics }) {
+    if (!metrics) return null;
+
+    const items = [
+        {
+            key: 'communicationScore',
+            title: 'Communication Score',
+            metric: metrics.communicationScore,
+            icon: MessageSquare,
+            featured: true,
+            bands: SCORE_LABEL_BANDS,
+            tooltipTitle: 'Score labels',
+        },
+        {
+            key: 'speechClarity',
+            title: 'Speech Clarity',
+            metric: metrics.speechClarity,
+            icon: Sparkles,
+            bands: SCORE_LABEL_BANDS,
+            tooltipTitle: 'Score labels',
+        },
+        {
+            key: 'speakingPace',
+            title: 'Speaking Pace',
+            metric: metrics.speakingPace,
+            icon: Gauge,
+            unit: 'WPM',
+            bands: PACE_LABEL_BANDS,
+            tooltipTitle: 'Pace labels',
+        },
+        {
+            key: 'fluency',
+            title: 'Fluency',
+            metric: metrics.fluency,
+            icon: AudioLines,
+            bands: SCORE_LABEL_BANDS,
+            tooltipTitle: 'Score labels',
+        },
+    ].filter((item) => item.metric != null);
+
+    if (items.length === 0) return null;
+
+    const featured = items.find((item) => item.featured) || items[0];
+    const supporting = items.filter((item) => item.key !== featured.key);
+    const featuredValue = formatMetricValue(featured.metric, featured.key);
+    const featuredStyles = metricLabelStyle(featured.metric.label);
+    const featuredPercent = metricBarPercent(featured.metric, featured.key);
+
+    return (
+        <div className="mt-4 overflow-visible rounded-xl border border-border bg-card shadow-sm ring-1 ring-border/40">
+            <div className="border-b border-border bg-hover/30 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                    Communication Metrics
+                </p>
+                <p className="mt-0.5 text-xs text-muted">
+                    Derived from speech and pronunciation analysis
+                </p>
+            </div>
+
+            <div className="p-4">
+                <div className="rounded-xl border border-border/70 bg-hover/20 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-2.5">
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent">
+                                <featured.icon size={18} />
+                            </span>
+                            <div>
+                                <p className="flex items-center gap-1.5 text-sm font-medium text-heading">
+                                    {featured.title}
+                                    <MetricLabelTooltip
+                                        bands={featured.bands}
+                                        title={featured.tooltipTitle}
+                                        activeLabel={featured.metric.label}
+                                    />
+                                </p>
+                                {featured.metric.label ? (
+                                    <span
+                                        className={`mt-1 inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${featuredStyles.badge}`}
+                                    >
+                                        {featured.metric.label}
+                                    </span>
+                                ) : null}
+                            </div>
+                        </div>
+                        <div className="text-right">
+                            <p className="text-3xl font-semibold tabular-nums tracking-tight text-heading">
+                                {featuredValue}
+                            </p>
+                            <p className="text-[11px] text-muted">out of 100</p>
+                        </div>
+                    </div>
+                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-border/60">
+                        <div
+                            className={`h-full rounded-full transition-all duration-500 ${featuredStyles.bar}`}
+                            style={{ width: `${featuredPercent}%` }}
+                        />
+                    </div>
+                </div>
+
+                {supporting.length > 0 ? (
+                    <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                        {supporting.map(({
+                            key, title, metric, icon: Icon, unit, bands, tooltipTitle,
+                        }) => {
+                            const value = formatMetricValue(metric, key);
+                            if (!value) return null;
+                            const styles = metricLabelStyle(metric.label);
+                            const percent = metricBarPercent(metric, key);
+
+                            return (
+                                <div
+                                    key={key}
+                                    className="rounded-xl border border-border/70 bg-hover/20 p-3.5"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent">
+                                            <Icon size={15} />
+                                        </span>
+                                        <p className="flex items-center gap-1 text-xs font-medium text-muted">
+                                            {title}
+                                            <MetricLabelTooltip
+                                                bands={bands}
+                                                title={tooltipTitle}
+                                                activeLabel={metric.label}
+                                            />
+                                        </p>
+                                    </div>
+                                    <div className="mt-3 flex items-end justify-between gap-2">
+                                        <p className="text-xl font-semibold tabular-nums text-heading">
+                                            {value}
+                                            {unit ? (
+                                                <span className="ml-1 text-xs font-medium text-muted">{unit}</span>
+                                            ) : null}
+                                        </p>
+                                        {metric.label ? (
+                                            <span
+                                                className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${styles.badge}`}
+                                            >
+                                                {metric.label}
+                                            </span>
+                                        ) : null}
+                                    </div>
+                                    <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-border/60">
+                                        <div
+                                            className={`h-full rounded-full transition-all duration-500 ${styles.bar}`}
+                                            style={{ width: `${percent}%` }}
+                                        />
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                ) : null}
+            </div>
+        </div>
+    );
+}
+
+function formatTranscriptErrorMessage(errorMessage) {
+    const raw = String(errorMessage || '').trim();
+    const normalized = raw.toLowerCase();
+    if (
+        !raw
+        || normalized.includes('econnrefused')
+        || normalized.includes('enotfound')
+        || normalized.includes('econnreset')
+        || normalized.includes('etimedout')
+        || normalized.includes('socket hang up')
+        || normalized.includes('127.0.0.1')
+        || normalized.includes('localhost')
+    ) {
+        return 'Transcription is temporarily unavailable. Please try again later.';
+    }
+    return raw;
+}
+
+function TranscriptTextBlock({ transcript }) {
     if (!transcript) return null;
 
     if (transcript.isPending) {
         return (
-            <p className="mt-3 text-sm text-muted italic">
-                Transcribing video response...
-            </p>
+            <Card className="!p-5">
+                <p className="text-sm text-muted italic">Transcribing video response...</p>
+            </Card>
         );
     }
 
     if (transcript.isFailed) {
         return (
-            <p className="mt-3 text-sm text-red-500">
-                {transcript.errorMessage || 'Transcription failed'}
-            </p>
+            <Card className="!p-5">
+                <p className="text-sm text-red-500">
+                    {formatTranscriptErrorMessage(transcript.errorMessage)}
+                </p>
+            </Card>
         );
     }
 
@@ -90,7 +398,7 @@ function TranscriptBlock({ transcript }) {
     }
 
     return (
-        <div className="mt-4 rounded-lg border border-border bg-hover/30 px-4 py-3">
+        <Card className="!p-5">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
                 Transcript
                 {transcript.language ? ` · ${transcript.language}` : ''}
@@ -98,7 +406,7 @@ function TranscriptBlock({ transcript }) {
             <p className="text-sm leading-relaxed text-heading whitespace-pre-wrap">
                 {transcript.text}
             </p>
-        </div>
+        </Card>
     );
 }
 
@@ -283,6 +591,13 @@ export default function CandidateDrawer({
     const mainVideoAnswer = answers.find((a) => a.type === 'video');
     const mainVideoThumbnail = displayCandidate.videoThumbnail || mainVideoAnswer?.videoThumbnail;
     const mainVideoUrl = displayCandidate.videoUrl || resolveVideoUrl(mainVideoAnswer);
+    const mainVideoTranscript = mainVideoAnswer?.transcript;
+    const otherAnswers = answers.filter((answer) => {
+        if (!mainVideoAnswer) return true;
+        const answerKey = answer.questionId || answer.question;
+        const mainKey = mainVideoAnswer.questionId || mainVideoAnswer.question;
+        return answerKey !== mainKey;
+    });
     const fieldValues = Array.isArray(displayCandidate.fieldValues)
         ? displayCandidate.fieldValues
         : [];
@@ -295,6 +610,18 @@ export default function CandidateDrawer({
         }
         return '—';
     };
+
+    const visibleFieldValues = fieldValues.filter((fv) => {
+        const type = String(fv.type || '').toUpperCase();
+        const isFile =
+            type === 'FILE'
+            || (fv.value && typeof fv.value === 'object' && fv.value.url);
+        if (isFile) {
+            return Boolean(fv.value && typeof fv.value === 'object' && fv.value.url);
+        }
+        const display = formatFieldDisplayValue(fv);
+        return display != null && display !== '' && display !== '—';
+    });
 
     return (
         <>
@@ -363,13 +690,13 @@ export default function CandidateDrawer({
                                 </div>
                             </Card>
 
-                            {fieldValues.length > 0 && (
+                            {visibleFieldValues.length > 0 && (
                                 <Card className="!p-5">
                                     <h3 className="mb-4 text-sm font-semibold text-heading">
                                         Application Fields
                                     </h3>
                                     <div className="grid gap-4 sm:grid-cols-2">
-                                        {fieldValues.map((fv) => {
+                                        {visibleFieldValues.map((fv) => {
                                             const type = String(fv.type || '').toUpperCase();
                                             const isFile =
                                                 type === 'FILE'
@@ -393,18 +720,14 @@ export default function CandidateDrawer({
                                                                 {fv.label || 'Resume'}
                                                                 {fv.required ? ' *' : ''}
                                                             </p>
-                                                            {fileMeta?.url ? (
-                                                                <a
-                                                                    href={fileMeta.url}
-                                                                    target="_blank"
-                                                                    rel="noreferrer"
-                                                                    className="mt-0.5 inline-flex text-sm font-medium text-accent hover:underline"
-                                                                >
-                                                                    {fileMeta.fileName || 'View PDF'}
-                                                                </a>
-                                                            ) : (
-                                                                <p className="mt-0.5 text-sm font-medium text-heading">—</p>
-                                                            )}
+                                                            <a
+                                                                href={fileMeta.url}
+                                                                target="_blank"
+                                                                rel="noreferrer"
+                                                                className="mt-0.5 inline-flex text-sm font-medium text-accent hover:underline"
+                                                            >
+                                                                {fileMeta.fileName || 'View PDF'}
+                                                            </a>
                                                         </div>
                                                     </div>
                                                 );
@@ -426,6 +749,60 @@ export default function CandidateDrawer({
                                     </div>
                                 </Card>
                             )}
+
+                            {otherAnswers.length > 0 && (
+                                <Card className="!p-5">
+                                    <div className="mb-4 flex items-center gap-2">
+                                        <Video size={18} className="text-accent" />
+                                        <h3 className="text-sm font-semibold text-heading">Question Responses</h3>
+                                    </div>
+                                    <div className="space-y-5">
+                                        {otherAnswers.map((answer) => {
+                                            const answerKey = answer.questionId || answer.question;
+                                            const isVideo = answer.type === 'video';
+                                            const videoUrl = resolveVideoUrl(answer);
+
+                                            return (
+                                                <div key={answerKey} className="overflow-hidden rounded-xl border border-border">
+                                                    <div className="border-b border-border bg-hover/40 px-4 py-3">
+                                                        <p className="text-sm font-medium text-heading">
+                                                            {answer.question || 'Untitled question'}
+                                                        </p>
+                                                        <span className="mt-1 inline-flex items-center gap-1 text-xs capitalize text-muted">
+                                                            {isVideo && <Video size={12} />}
+                                                            {isVideo ? 'video' : 'text'}
+                                                            {answer.timestamp ? ` · ${formatDateTime(answer.timestamp)}` : ''}
+                                                        </span>
+                                                    </div>
+                                                    <div className="p-4">
+                                                        {isVideo ? (
+                                                            videoUrl ? (
+                                                                <VideoPreview
+                                                                    thumbnail={answer.videoThumbnail || mainVideoThumbnail}
+                                                                    videoUrl={videoUrl}
+                                                                    label="Play video response"
+                                                                />
+                                                            ) : (
+                                                                <p className="text-sm text-muted">No video recorded</p>
+                                                            )
+                                                        ) : (
+                                                            <p className="text-sm leading-relaxed text-heading whitespace-pre-wrap">
+                                                                {answer.answer?.trim() || 'No answer provided'}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </Card>
+                            )}
+
+                            {mainVideoTranscript?.communicationMetrics ? (
+                                <CommunicationMetricsBlock metrics={mainVideoTranscript.communicationMetrics} />
+                            ) : null}
+
+                            <TranscriptTextBlock transcript={mainVideoTranscript} />
 
                             <div className="grid gap-6 lg:grid-cols-2">
                                 <Card className="!p-5">
@@ -565,62 +942,6 @@ export default function CandidateDrawer({
                                     </div>
                                 </div>
                             </Card>
-
-                            <Card className="!p-5">
-                                <div className="mb-4 flex items-center gap-2">
-                                    <Video size={18} className="text-accent" />
-                                    <h3 className="text-sm font-semibold text-heading">Question Responses</h3>
-                                </div>
-
-                                {loading ? (
-                                    <p className="text-sm text-muted">Loading responses...</p>
-                                ) : answers.length === 0 ? (
-                                    <p className="text-sm text-muted">No responses recorded yet.</p>
-                                ) : (
-                                    <div className="space-y-5">
-                                        {answers.map((answer) => {
-                                            const videoUrl = resolveVideoUrl(answer);
-                                            const answerKey = answer.questionId || answer.question;
-                                            const isVideo = answer.type === 'video';
-
-                                            return (
-                                                <div key={answerKey} className="overflow-hidden rounded-xl border border-border">
-                                                    <div className="border-b border-border bg-hover/40 px-4 py-3">
-                                                        <p className="text-sm font-medium text-heading">
-                                                            {answer.question || 'Untitled question'}
-                                                        </p>
-                                                        <span className="mt-1 inline-flex items-center gap-1 text-xs capitalize text-muted">
-                                                            {isVideo && <Video size={12} />}
-                                                            {isVideo ? 'video' : 'text'}
-                                                            {answer.timestamp ? ` · ${formatDateTime(answer.timestamp)}` : ''}
-                                                        </span>
-                                                    </div>
-                                                    <div className="p-4">
-                                                        {isVideo ? (
-                                                            videoUrl || mainVideoUrl ? (
-                                                                <>
-                                                                    <VideoPreview
-                                                                        thumbnail={answer.videoThumbnail || mainVideoThumbnail}
-                                                                        videoUrl={videoUrl || mainVideoUrl}
-                                                                        label="Play video response"
-                                                                    />
-                                                                    <TranscriptBlock transcript={answer.transcript} />
-                                                                </>
-                                                            ) : (
-                                                                <p className="text-sm text-muted">No video recorded</p>
-                                                            )
-                                                        ) : (
-                                                            <p className="text-sm leading-relaxed text-heading whitespace-pre-wrap">
-                                                                {answer.answer?.trim() || 'No answer provided'}
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                            </Card>
                         </div>
                     )}
 
@@ -673,6 +994,10 @@ export default function CandidateDrawer({
  * @returns The contact item.
  */
 function ContactItem({ icon: Icon, label, value, className = '' }) {
+    if (value == null || value === '' || value === '—') {
+        return null;
+    }
+
     return (
         <div className={`flex items-start gap-3 ${className}`}>
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent">
@@ -680,7 +1005,7 @@ function ContactItem({ icon: Icon, label, value, className = '' }) {
             </div>
             <div className="min-w-0">
                 <p className="text-xs font-medium uppercase tracking-wide text-muted">{label}</p>
-                <p className="mt-0.5 break-all text-sm font-medium text-heading">{value || '—'}</p>
+                <p className="mt-0.5 break-all text-sm font-medium text-heading">{value}</p>
             </div>
         </div>
     );

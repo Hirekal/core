@@ -19,10 +19,10 @@ class CallbackService:
         return bool(self._url)
 
     async def deliver(self, payload: TranscribeResponse) -> None:
-        await self._post(payload.job_id, payload.model_dump())
+        await self._post(payload.job_id, payload.model_dump(exclude_none=True))
 
     async def deliver_failure(self, payload: TranscribeFailedCallback) -> None:
-        await self._post(payload.job_id, payload.model_dump())
+        await self._post(payload.job_id, payload.model_dump(exclude_none=True))
 
     async def _post(self, job_id: str, body: dict) -> None:
         if not self._url:
