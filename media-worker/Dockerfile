@@ -15,9 +15,9 @@ RUN apt-get update \
 
 COPY requirements.txt .
 
-# CPU-only PyTorch — single pip resolve avoids duplicate transitive wheels (e.g. filelock).
-ARG TORCH_VERSION=2.2.2
-ARG TORCHAUDIO_VERSION=2.2.2
+# CPU-only PyTorch — transformers>=4.46 needs torch>=2.4 for Wav2Vec2 pronunciation.
+ARG TORCH_VERSION=2.5.1
+ARG TORCHAUDIO_VERSION=2.5.1
 ARG PYTORCH_CPU_INDEX=https://download.pytorch.org/whl/cpu
 
 RUN pip install --upgrade pip \
@@ -40,8 +40,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-ARG TORCH_VERSION=2.2.2
-ARG TORCHAUDIO_VERSION=2.2.2
+ARG TORCH_VERSION=2.5.1
+ARG TORCHAUDIO_VERSION=2.5.1
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \

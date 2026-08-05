@@ -16,9 +16,19 @@ import {
   TranscriptionJobStatus,
 } from '../enums/application.enums';
 import { WebhookDeliveryService } from '../webhook-delivery/webhook-delivery.service';
-import { MediaWorkerCallbackDto } from './dto/media-worker.dto';
+import {
+  MediaWorkerAssessmentDto,
+  MediaWorkerCallbackDto,
+  MediaWorkerSpeechMetricsDto,
+  MediaWorkerTranscriptSegmentDto,
+} from './dto/media-worker.dto';
 import { TranscriptionJob } from './entities/transcription-job.entity';
 import { TranscriptionJobRepository } from './repositories/transcription-job.repository';
+import {
+  AssessmentInput,
+  buildCommunicationMetrics,
+  SpeechMetricsInput,
+} from './utils/communication-metrics.util';
 import { mapTranscriptionLanguage } from './utils/transcription-language.util';
 import { isMediaQuestion } from './utils/media-question.util';
 
@@ -147,21 +157,28 @@ export class TranscriptionJobsService {
     payload: MediaWorkerCallbackDto,
   ): Promise<{ success: true }> {
     try {
+      const callbackPayload = this.stripBulkyAssessmentDetails(
+        this.toPlainCallbackPayload(payload),
+      );
+
+      this.logger.log(
+        `Media worker callback received job_id=${payload.job_id} status=${payload.status ?? 'success'} ` +
+          `hasTranscript=${Boolean(payload.transcript) || payload.text != null} ` +
+          `hasSpeech=${Boolean(payload.speech)} hasAssessment=${Boolean(payload.assessment)} ` +
+          `payloadBytes≈${Buffer.byteLength(JSON.stringify(callbackPayload), 'utf8')}`,
+      );
+
       if (payload.status === MediaWorkerPayloadStatus.FAILED) {
         await this.applyWorkerFailure(
           payload.job_id,
           payload.error ?? ApplicationErrors.TRANSCRIPTION_FAILED,
-          { ...payload },
+          callbackPayload,
         );
         return { success: true };
       }
 
-      if (
-        payload.language == null ||
-        payload.duration == null ||
-        payload.text == null ||
-        payload.segments == null
-      ) {
+      const transcript = this.resolveTranscriptResult(payload);
+      if (!transcript) {
         throw new BadRequestException(
           ApplicationErrors.INVALID_MEDIA_WORKER_CALLBACK,
         );
@@ -169,13 +186,10 @@ export class TranscriptionJobsService {
 
       await this.applyWorkerResult(
         payload.job_id,
-        {
-          language: payload.language,
-          duration: payload.duration,
-          text: payload.text,
-          segments: payload.segments,
-        },
-        { ...payload },
+        transcript,
+        payload.speech ?? null,
+        payload.assessment ?? null,
+        callbackPayload,
       );
       return { success: true };
     } catch (error) {
@@ -295,9 +309,11 @@ export class TranscriptionJobsService {
           language,
         );
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = this.toSafeTranscriptionErrorMessage(error);
         this.logger.error(
-          `Transcription dispatch failed jobId=${transcriptionJob.id}: ${message}`,
+          `Transcription dispatch failed jobId=${transcriptionJob.id}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
         );
         await this.transcriptionJobRepository.update(transcriptionJob.id, {
           status: TranscriptionJobStatus.FAILED,
@@ -315,7 +331,7 @@ export class TranscriptionJobsService {
       try {
         await this.transcriptionJobRepository.update(transcriptionJob.id, {
           status: TranscriptionJobStatus.FAILED,
-          errorMessage: (error as Error).message,
+          errorMessage: this.toSafeTranscriptionErrorMessage(error),
         });
         await this.webhookDeliveryService.markNewApplicationReadyIfSettled(
           transcriptionJob.applicationId,
@@ -333,6 +349,8 @@ export class TranscriptionJobsService {
    * Applies a successful worker transcript to the transcription job row.
    * @param transcriptionJobId - The transcriptionJobs.id (worker job_id).
    * @param result - Transcript language, duration, text, and segments.
+   * @param speech - Optional SpeechBrain metrics from the worker.
+   * @param assessment - Optional pronunciation assessment from the worker.
    * @param callbackPayload - Raw callback payload for audit storage.
    * @returns void
    */
@@ -342,8 +360,10 @@ export class TranscriptionJobsService {
       language: string;
       duration: number;
       text: string;
-      segments: MediaWorkerCallbackDto['segments'];
+      segments: MediaWorkerTranscriptSegmentDto[];
     },
+    speech: MediaWorkerSpeechMetricsDto | null,
+    assessment: MediaWorkerAssessmentDto | null,
     callbackPayload: Record<string, unknown>,
   ): Promise<void> {
     try {
@@ -362,6 +382,32 @@ export class TranscriptionJobsService {
         return;
       }
 
+      const speechMetrics = speech
+        ? (this.toPlainCallbackPayload(speech) as SpeechMetricsInput &
+            Record<string, unknown>)
+        : null;
+      const assessmentPayload = assessment
+        ? this.stripBulkyAssessmentDetails(
+            this.toPlainCallbackPayload(assessment),
+          )
+        : null;
+      const communicationMetrics = buildCommunicationMetrics(
+        speechMetrics,
+        assessmentPayload as AssessmentInput | null,
+      );
+
+      this.logger.log(
+        `Storing media worker result job_id=${transcriptionJobId} ` +
+          `language=${result.language} duration=${result.duration} ` +
+          `textLength=${result.text?.length ?? 0} segments=${result.segments?.length ?? 0} ` +
+          `speechKeys=${speechMetrics ? Object.keys(speechMetrics).join(',') : 'none'} ` +
+          `hasAssessment=${Boolean(assessmentPayload)} ` +
+          `communicationScore=${communicationMetrics?.communicationScore?.score ?? 'n/a'} ` +
+          `speechClarity=${communicationMetrics?.speechClarity?.score ?? 'n/a'} ` +
+          `speakingPace=${communicationMetrics?.speakingPace?.wpm ?? 'n/a'} ` +
+          `fluency=${communicationMetrics?.fluency?.score ?? 'n/a'}`,
+      );
+
       await this.transcriptionJobRepository.update(transcriptionJobId, {
         status: TranscriptionJobStatus.COMPLETED,
         completedAt: new Date(),
@@ -370,6 +416,14 @@ export class TranscriptionJobsService {
         transcriptDuration: result.duration,
         transcriptSegments: result.segments,
         callbackPayload,
+        speechMetrics,
+        assessment: assessmentPayload,
+        communicationMetrics,
+        communicationScore:
+          communicationMetrics?.communicationScore?.score ?? null,
+        speechClarity: communicationMetrics?.speechClarity?.score ?? null,
+        speakingPaceWpm: communicationMetrics?.speakingPace?.wpm ?? null,
+        fluencyScore: communicationMetrics?.fluency?.score ?? null,
         errorMessage: null,
       });
 
@@ -383,6 +437,77 @@ export class TranscriptionJobsService {
       );
       throw error;
     }
+  }
+
+  /**
+   * Resolves nested or legacy-flat transcript fields from a success callback.
+   */
+  private resolveTranscriptResult(payload: MediaWorkerCallbackDto): {
+    language: string;
+    duration: number;
+    text: string;
+    segments: MediaWorkerTranscriptSegmentDto[];
+  } | null {
+    if (payload.transcript) {
+      return {
+        language: payload.transcript.language,
+        duration: payload.transcript.duration,
+        text: payload.transcript.text,
+        segments: payload.transcript.segments,
+      };
+    }
+
+    if (
+      payload.language == null ||
+      payload.duration == null ||
+      payload.text == null ||
+      payload.segments == null
+    ) {
+      return null;
+    }
+
+    return {
+      language: payload.language,
+      duration: payload.duration,
+      text: payload.text,
+      segments: payload.segments,
+    };
+  }
+
+  /**
+   * Converts a class-validator DTO instance into a plain JSON-safe object.
+   */
+  private toPlainCallbackPayload(value: unknown): Record<string, unknown> {
+    return JSON.parse(JSON.stringify(value)) as Record<string, unknown>;
+  }
+
+  /**
+   * Removes bulky phoneme/word arrays from assessment payloads before DB storage.
+   * Score fields (pronunciation, fluency, prosody, etc.) are kept.
+   */
+  private stripBulkyAssessmentDetails(
+    value: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const cloned = { ...value };
+
+    if (
+      cloned.assessment &&
+      typeof cloned.assessment === 'object' &&
+      !Array.isArray(cloned.assessment)
+    ) {
+      const assessment = {
+        ...(cloned.assessment as Record<string, unknown>),
+      };
+      delete assessment.phonemes;
+      delete assessment.words;
+      cloned.assessment = assessment;
+    }
+
+    // When the assessment object itself is passed (not the full callback).
+    delete cloned.phonemes;
+    delete cloned.words;
+
+    return cloned;
   }
 
   /**
@@ -503,14 +628,46 @@ export class TranscriptionJobsService {
         this.logger.error(
           `dispatchToMediaWorker failed jobId=${jobId}: ${detail}`,
         );
-        throw new Error(detail);
+        throw new Error(this.toSafeTranscriptionErrorMessage(error));
       }
 
       this.logger.error(
         `dispatchToMediaWorker failed jobId=${jobId}: ${(error as Error).message}`,
       );
-      throw error;
+      throw new Error(this.toSafeTranscriptionErrorMessage(error));
     }
+  }
+
+  /**
+   * Maps media-worker / network failures to a safe UI-facing error string.
+   */
+  private toSafeTranscriptionErrorMessage(error: unknown): string {
+    const raw =
+      error instanceof Error
+        ? error.message
+        : typeof error === 'string'
+          ? error
+          : '';
+    const normalized = raw.toLowerCase();
+
+    if (
+      normalized.includes('econnrefused') ||
+      normalized.includes('enotfound') ||
+      normalized.includes('econnreset') ||
+      normalized.includes('etimedout') ||
+      normalized.includes('timeout') ||
+      normalized.includes('network') ||
+      normalized.includes('socket hang up') ||
+      (axios.isAxiosError(error) && !error.response)
+    ) {
+      return ApplicationErrors.MEDIA_WORKER_UNAVAILABLE;
+    }
+
+    if (raw && raw.length <= 180 && !normalized.includes('exception')) {
+      return raw;
+    }
+
+    return ApplicationErrors.TRANSCRIPTION_FAILED;
   }
 
   /**

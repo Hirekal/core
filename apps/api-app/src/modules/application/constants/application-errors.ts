@@ -37,4 +37,6 @@ export const ApplicationErrors = {
   TRANSCRIPTION_FAILED: 'Transcription failed',
   NO_VIDEO_URL_FOR_TRANSCRIPTION: 'No accessible video URL for transcription',
   MEDIA_WORKER_RETURNED: (status: number) => `Media worker returned ${status}`,
+  MEDIA_WORKER_UNAVAILABLE:
+    'Transcription is temporarily unavailable. Please try again later.',
 } as const;

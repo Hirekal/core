@@ -1,5 +1,6 @@
 import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
 import { TranscriptionJobStatus } from '../../enums/application.enums';
+import { CommunicationMetrics } from '../utils/communication-metrics.util';
 
 export interface TranscriptSegmentRecord {
   start: number;
@@ -57,6 +58,31 @@ export class TranscriptionJob {
 
   @Column({ type: 'jsonb', nullable: true })
   callbackPayload!: Record<string, unknown> | null;
+
+  /** Raw SpeechBrain metrics from the media worker (snake_case keys). */
+  @Column({ type: 'jsonb', nullable: true })
+  speechMetrics!: Record<string, unknown> | null;
+
+  /** Raw pronunciation assessment from the media worker (snake_case keys). */
+  @Column({ type: 'jsonb', nullable: true })
+  assessment!: Record<string, unknown> | null;
+
+  /** Derived recruiter metrics computed in the API (camelCase). */
+  @Column({ type: 'jsonb', nullable: true })
+  communicationMetrics!: CommunicationMetrics | null;
+
+  /** Individual score columns for querying / reporting. */
+  @Column({ type: 'float', nullable: true })
+  communicationScore!: number | null;
+
+  @Column({ type: 'float', nullable: true })
+  speechClarity!: number | null;
+
+  @Column({ type: 'float', nullable: true })
+  speakingPaceWpm!: number | null;
+
+  @Column({ type: 'float', nullable: true })
+  fluencyScore!: number | null;
 
   @Column({ type: 'text', nullable: true })
   errorMessage!: string | null;

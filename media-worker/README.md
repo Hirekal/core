@@ -65,7 +65,7 @@ media-worker/
 
 - Python 3.9+ (macOS system `python3` works; Docker uses 3.12)
 - FFmpeg (must be installed and available on `PATH`)
-- NumPy 1.x (pinned in `requirements.txt` as `numpy>=1.26,<2`) — PyTorch 2.2.x (used by SpeechBrain in Docker) is incompatible with NumPy 2.x; without this pin, `/transcribe` may return 200 but SpeechBrain metrics fail with `RuntimeError: Numpy is not available`
+- NumPy 1.x (pinned in `requirements.txt` as `numpy>=1.26,<2`) — keeps SpeechBrain/torch stack stable in Docker; without this pin, `/transcribe` may return 200 but SpeechBrain metrics can fail with `RuntimeError: Numpy is not available`
 
 ### No Homebrew / no Python 3.12?
 
@@ -353,7 +353,7 @@ SpeechBrain analysis completed | ... metrics=[]
 
 The HTTP response may still be **200** with a transcript, but language/VAD metrics from SpeechBrain are empty.
 
-**Cause:** NumPy 2.x was installed alongside PyTorch 2.2.x. `torch.from_numpy()` does not work with that combination.
+**Cause:** NumPy 2.x was installed alongside an older PyTorch build. `torch.from_numpy()` does not work with that combination.
 
 **Fix:**
 

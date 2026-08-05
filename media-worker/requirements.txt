@@ -4,7 +4,8 @@ httpx==0.28.1
 pydantic==2.11.3
 pydantic-settings==2.8.1
 faster-whisper==1.1.1
-requests>=2.3numpy>=1.26,<2
+requests>=2.31.0
+numpy>=1.26,<2
 speechbrain>=1.0.2
 transformers>=4.46.0
 librosa>=0.10.2
