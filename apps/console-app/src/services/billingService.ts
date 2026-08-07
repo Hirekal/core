@@ -449,6 +449,7 @@ export async function createCheckoutSession(input: {
   email: string;
   name?: string;
   couponCode?: string;
+  previousProviderSubscriptionId?: string;
 }): Promise<CheckoutSessionResponse> {
   return withBillingErrorHandling(() =>
     apiRequest('/payments/checkout', {

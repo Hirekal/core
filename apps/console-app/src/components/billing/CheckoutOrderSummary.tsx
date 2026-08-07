@@ -3,7 +3,7 @@
  */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Tag } from 'lucide-react';
 import { formatIntervalShort, formatMoney, type BillingPeriod } from '../../utils/billingFormat';
 import type { Price, Product, ValidatedCoupon } from '../../types/billing';
 import BillingPeriodToggle from './BillingPeriodToggle';
@@ -57,6 +57,12 @@ export default function CheckoutOrderSummary({
     totalDue == null ? null : Math.max(totalDue + discount, 0);
   const formatAmount = (amount: number | null) =>
     amount == null ? 'Calculating…' : formatMoney(amount, price.currency);
+  const couponDiscountLabel =
+    appliedCoupon == null
+      ? null
+      : appliedCoupon.discountType === 'PERCENTAGE'
+        ? `${appliedCoupon.discountValue}% off`
+        : `${formatMoney(appliedCoupon.discountValue, price.currency)} off`;
 
   const [couponInput, setCouponInput] = useState('');
   const [showCouponField, setShowCouponField] = useState(Boolean(appliedCoupon));
@@ -161,24 +167,44 @@ export default function CheckoutOrderSummary({
               Add promotion code
             </button>
           ) : appliedCoupon ? (
-            <div className="flex items-center justify-between gap-3 text-sm">
-              <div>
-                <p className="font-medium text-heading">{appliedCoupon.promotionCode}</p>
-                <p className="text-muted">
-                  {appliedCoupon.discountType === 'PERCENTAGE'
-                    ? `${appliedCoupon.discountValue}% off`
-                    : `${formatMoney(appliedCoupon.discountValue, price.currency)} off`}
-                </p>
+            <div className="rounded-md border border-[#99f6e4] bg-[#f0fdfa] px-3 py-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-start gap-2.5">
+                  <CheckCircle2
+                    size={18}
+                    className="mt-0.5 shrink-0 text-[#0d9488]"
+                    aria-hidden
+                  />
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-[#0f766e]">
+                      Coupon applied
+                    </p>
+                    <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-heading">
+                      <span className="inline-flex items-center gap-1 font-medium">
+                        <Tag size={13} className="text-[#0d9488]" aria-hidden />
+                        {appliedCoupon.promotionCode}
+                      </span>
+                      {couponDiscountLabel && (
+                        <span className="text-muted">· {couponDiscountLabel}</span>
+                      )}
+                    </p>
+                    {discount > 0 && (
+                      <p className="mt-1 text-sm font-medium text-[#0d9488]">
+                        You save {formatMoney(discount, price.currency)} today
+                      </p>
+                    )}
+                  </div>
+                </div>
+                {onRemoveCoupon && (
+                  <button
+                    type="button"
+                    className="shrink-0 text-sm text-muted hover:text-heading"
+                    onClick={onRemoveCoupon}
+                  >
+                    Remove
+                  </button>
+                )}
               </div>
-              {onRemoveCoupon && (
-                <button
-                  type="button"
-                  className="text-sm text-muted hover:text-heading"
-                  onClick={onRemoveCoupon}
-                >
-                  Remove
-                </button>
-              )}
             </div>
           ) : (
             <div className="space-y-2">

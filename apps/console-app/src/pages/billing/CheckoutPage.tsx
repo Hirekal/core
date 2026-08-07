@@ -26,12 +26,16 @@ async function createCheckoutForPrice(
   email: string,
   name?: string,
   couponCode?: string,
+  previousProviderSubscriptionId?: string,
 ) {
   return billingService.createCheckoutSession({
     priceId,
     email,
     name,
     ...(couponCode ? { couponCode } : {}),
+    ...(previousProviderSubscriptionId
+      ? { previousProviderSubscriptionId }
+      : {}),
   });
 }
 
@@ -194,6 +198,7 @@ export default function CheckoutPage() {
       user.email,
       user.name ?? undefined,
       coupon?.promotionCode,
+      providerSubscriptionId ?? undefined,
     );
     applyCheckoutSession(nextPrice, checkoutSession);
   };

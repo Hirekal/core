@@ -30,4 +30,9 @@ export class CreateCheckoutSessionDto {
   @IsString()
   @MaxLength(100)
   couponCode?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  previousProviderSubscriptionId?: string;
 }

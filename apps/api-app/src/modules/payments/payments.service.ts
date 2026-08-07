@@ -147,6 +147,20 @@ export class PaymentsService {
       const stripeDiscount =
         await this.couponsService.resolveStripeDiscountRef(dto.couponCode);
 
+      if (dto.previousProviderSubscriptionId) {
+        try {
+          await client.cancelSubscription(
+            dto.previousProviderSubscriptionId,
+            false,
+          );
+        } catch (error) {
+          this.logger.warn(
+            `Failed to cancel previous incomplete checkout ${dto.previousProviderSubscriptionId}`,
+            error instanceof Error ? error.message : error,
+          );
+        }
+      }
+
       const session = await client.createCheckoutSession({
         providerCustomerId: customer.providerCustomerId,
         providerPriceId: price.providerPriceId,

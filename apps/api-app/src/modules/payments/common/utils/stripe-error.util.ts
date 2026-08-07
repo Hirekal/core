@@ -25,11 +25,13 @@ function mapStripeInvalidRequestMessage(error: StripeLikeError): string {
   const message = error.message.toLowerCase();
 
   if (
-    message.includes('promotion code') &&
+    (message.includes('promotion code') || message.includes('coupon')) &&
     (message.includes('maximum') ||
       message.includes('redeem') ||
       message.includes('inactive') ||
-      message.includes('expired'))
+      message.includes('expired') ||
+      message.includes('no longer valid') ||
+      message.includes('not valid'))
   ) {
     if (message.includes('expired')) {
       return ERROR_MESSAGES.COUPON.EXPIRED;

@@ -55,8 +55,8 @@ export class CouponsService {
     promotionCode: string,
   ): Promise<ValidatedCouponResponse> {
     const coupon = await this.findActiveByPromotionCode(promotionCode);
+    await this.assertCouponRedeemable(coupon);
     const livePromotionCode = await this.tryResolveLivePromotionCode(coupon);
-    this.assertCouponRedeemable(coupon, livePromotionCode);
 
     return this.toValidatedResponse(coupon, livePromotionCode);
   }
@@ -77,12 +77,15 @@ export class CouponsService {
         ? await this.findActiveByPromotionCode(promotionCodeOrCoupon)
         : promotionCodeOrCoupon;
 
-    const livePromotionCode = await this.tryResolveLivePromotionCode(coupon);
-    this.assertCouponRedeemable(coupon, livePromotionCode);
+    await this.assertCouponRedeemable(coupon);
 
     if (!coupon.providerCouponId) {
       throw new BadRequestException(ERROR_MESSAGES.COUPON.INVALID);
     }
+
+    // Ensure the Stripe coupon itself is still attachable. Limited Stripe
+    // max_redemptions would be consumed by incomplete checkouts.
+    await this.assertStripeCouponAttachable(coupon.providerCouponId);
 
     return { kind: 'coupon', id: coupon.providerCouponId };
   }
@@ -170,19 +173,36 @@ export class CouponsService {
   }
 
   /*
-   * Loads Stripe promotion code stats when available (does not require active).
+   * Loads the best matching live Stripe promotion code for display/metadata.
    */
   private async tryResolveLivePromotionCode(
     coupon: Coupon,
   ): Promise<Stripe.PromotionCode | null> {
     const stripe = this.stripeService.getClient();
 
+    if (coupon.providerPromotionCodeId) {
+      try {
+        const stored = await stripe.promotionCodes.retrieve(
+          coupon.providerPromotionCodeId,
+        );
+        if (stored?.id) {
+          return stored;
+        }
+      } catch (error) {
+        this.logger.warn(
+          `Stored promotion code ${coupon.providerPromotionCodeId} is invalid for ${coupon.promotionCode}`,
+          error instanceof Error ? error.message : error,
+        );
+      }
+    }
+
     try {
       const listed = await stripe.promotionCodes.list({
         code: coupon.promotionCode,
-        limit: 1,
+        limit: 10,
       });
-      const livePromotionCode = listed.data[0];
+      const livePromotionCode =
+        listed.data.find((entry) => entry.active) ?? listed.data[0] ?? null;
       if (livePromotionCode?.id) {
         if (livePromotionCode.id !== coupon.providerPromotionCodeId) {
           await this.couponRepository.update(coupon.id, {
@@ -199,39 +219,25 @@ export class CouponsService {
       );
     }
 
-    if (coupon.providerPromotionCodeId) {
-      try {
-        return await stripe.promotionCodes.retrieve(
-          coupon.providerPromotionCodeId,
-        );
-      } catch (error) {
-        this.logger.warn(
-          `Stored promotion code ${coupon.providerPromotionCodeId} is invalid for ${coupon.promotionCode}`,
-          error instanceof Error ? error.message : error,
-        );
-      }
-    }
-
     return null;
   }
 
   /*
-   * Enforces max redemptions using successful local redemptions and Stripe stats.
+   * Enforces max redemptions from successful local redemptions only.
+   * Stripe incomplete-checkout attaches must not consume limited promo counters.
    */
-  private assertCouponRedeemable(
-    coupon: Coupon,
-    promotionCode: Stripe.PromotionCode | null,
-  ): void {
-    const localRedeemed = coupon.timesRedeemed ?? 0;
-    const stripeRedeemed = promotionCode?.times_redeemed ?? 0;
-    const timesRedeemed = Math.max(localRedeemed, stripeRedeemed);
-
-    const stripeMax = promotionCode?.max_redemptions ?? null;
-    const localMax = coupon.maximumRedemptions ?? null;
-    const maxRedemptions =
-      stripeMax != null && localMax != null
-        ? Math.min(stripeMax, localMax)
-        : (stripeMax ?? localMax);
+  private async assertCouponRedeemable(coupon: Coupon): Promise<void> {
+    const successfulRedemptions = await this.couponRedemptionRepository.count({
+      where: {
+        couponId: coupon.id,
+        status: RecordStatus.ACTIVE,
+      },
+    });
+    const timesRedeemed = Math.max(
+      coupon.timesRedeemed ?? 0,
+      successfulRedemptions,
+    );
+    const maxRedemptions = coupon.maximumRedemptions ?? null;
 
     if (maxRedemptions != null && timesRedeemed >= maxRedemptions) {
       throw new BadRequestException(
@@ -239,11 +245,36 @@ export class CouponsService {
       );
     }
 
-    if (
-      promotionCode?.expires_at &&
-      promotionCode.expires_at * 1000 < now().valueOf()
-    ) {
+    if (coupon.expiresAt && coupon.expiresAt.getTime() < now().valueOf()) {
       throw new BadRequestException(ERROR_MESSAGES.COUPON.EXPIRED);
+    }
+  }
+
+  /*
+   * Confirms the Stripe coupon object can still be attached to a checkout.
+   */
+  private async assertStripeCouponAttachable(
+    providerCouponId: string,
+  ): Promise<void> {
+    try {
+      const stripeCoupon = await this.stripeService
+        .getClient()
+        .coupons.retrieve(providerCouponId);
+
+      if (!stripeCoupon.valid) {
+        throw new BadRequestException(
+          ERROR_MESSAGES.COUPON.MAX_REDEMPTIONS_REACHED,
+        );
+      }
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      this.logger.warn(
+        `Failed to retrieve Stripe coupon ${providerCouponId}`,
+        error instanceof Error ? error.message : error,
+      );
+      throw new NotFoundException(ERROR_MESSAGES.COUPON.NOT_AVAILABLE);
     }
   }
 
@@ -251,11 +282,6 @@ export class CouponsService {
     coupon: Coupon,
     promotionCode: Stripe.PromotionCode | null,
   ): ValidatedCouponResponse {
-    const timesRedeemed = Math.max(
-      coupon.timesRedeemed ?? 0,
-      promotionCode?.times_redeemed ?? 0,
-    );
-
     return {
       id: coupon.id,
       name: coupon.name,
@@ -264,9 +290,9 @@ export class CouponsService {
       discountValue: coupon.discountValue,
       duration: coupon.duration,
       expiresAt: coupon.expiresAt?.toISOString() ?? null,
-      timesRedeemed,
+      timesRedeemed: coupon.timesRedeemed ?? 0,
       maximumRedemptions:
-        promotionCode?.max_redemptions ?? coupon.maximumRedemptions,
+        coupon.maximumRedemptions ?? promotionCode?.max_redemptions ?? null,
     };
   }
 }
