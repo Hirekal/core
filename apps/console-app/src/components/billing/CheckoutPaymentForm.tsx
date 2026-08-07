@@ -235,9 +235,10 @@ export default function CheckoutPaymentForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="flex h-full flex-col px-6 py-8 sm:px-10 lg:px-12"
+      className="flex h-full min-h-screen flex-col bg-white px-6 py-12 sm:px-8 sm:py-14 lg:px-10 lg:py-16 xl:px-12"
       aria-busy={disabled || processing}
     >
+      <div className="mx-auto w-full max-w-xl lg:ml-0 lg:mr-auto lg:max-w-2xl">
       <section>
         <h2 className="text-base font-semibold text-heading">Billing information</h2>
 
@@ -388,6 +389,7 @@ export default function CheckoutPaymentForm({
               ? 'Updating checkout…'
               : `Pay ${formatMoney(payAmount ?? price.amount, price.currency)}`}
         </Button>
+      </div>
       </div>
     </form>
   );

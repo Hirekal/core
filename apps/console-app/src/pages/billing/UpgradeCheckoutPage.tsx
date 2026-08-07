@@ -422,11 +422,13 @@ export default function UpgradeCheckoutPage() {
     amountDue === null
   ) {
     return (
-      <div className="mx-auto w-full max-w-3xl space-y-4">
-        <BillingErrorState message={error || 'Unable to load upgrade checkout.'} />
-        <Button variant="secondary" onClick={() => navigate('/billing/plans')}>
-          Back to plans
-        </Button>
+      <div className="flex min-h-screen items-center justify-center px-4">
+        <div className="mx-auto w-full max-w-3xl space-y-4">
+          <BillingErrorState message={error || 'Unable to load upgrade checkout.'} />
+          <Button variant="secondary" onClick={() => navigate('/billing/plans')}>
+            Back to plans
+          </Button>
+        </div>
       </div>
     );
   }
@@ -436,8 +438,8 @@ export default function UpgradeCheckoutPage() {
     amountDue <= 0 && upgradeDirection === 'upgrade';
 
   return (
-    <div className="mx-auto w-full max-w-6xl">
-      <div className="overflow-hidden rounded-xl border border-[#e6ebf1] bg-white shadow-sm lg:grid lg:grid-cols-2">
+    <div className="min-h-screen lg:grid lg:grid-cols-2">
+      <div className="border-[#e6ebf1] shadow-[4px_0_24px_rgba(15,23,42,0.04)] lg:border-r">
         <CheckoutOrderSummary
           product={price.product}
           price={price}
@@ -456,6 +458,8 @@ export default function UpgradeCheckoutPage() {
           onApplyCoupon={handleApplyCoupon}
           onRemoveCoupon={handleRemoveCoupon}
         />
+      </div>
+      <div className="bg-white">
         <Elements stripe={stripePromise}>
           <CheckoutPaymentForm
             price={price}

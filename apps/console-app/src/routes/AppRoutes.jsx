@@ -41,13 +41,7 @@ function AppLayout({ children }) {
 }
 
 function CheckoutLayout({ children }) {
-  return (
-    <div className="flex min-h-screen flex-col bg-surface">
-      <div className="flex flex-1 flex-col justify-center px-4 py-8">
-        {children}
-      </div>
-    </div>
-  );
+  return <div className="min-h-screen bg-white">{children}</div>;
 }
 
 export default function AppRoutes() {

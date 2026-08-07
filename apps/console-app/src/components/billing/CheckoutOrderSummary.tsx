@@ -3,8 +3,13 @@
  */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, Loader2 } from 'lucide-react';
-import { formatIntervalShort, formatMoney, type BillingPeriod } from '../../utils/billingFormat';
+import { ArrowLeft, Check, CheckCircle2, Loader2 } from 'lucide-react';
+import {
+  formatIntervalShort,
+  formatMoney,
+  getProductFeatures,
+  type BillingPeriod,
+} from '../../utils/billingFormat';
 import type { Price, Product, ValidatedCoupon } from '../../types/billing';
 import BillingPeriodToggle from './BillingPeriodToggle';
 import Button from '../common/Button';
@@ -66,6 +71,7 @@ export default function CheckoutOrderSummary({
 
   const [couponInput, setCouponInput] = useState('');
   const [showCouponField, setShowCouponField] = useState(Boolean(appliedCoupon));
+  const features = getProductFeatures(product.metadata);
 
   const handleApply = async () => {
     if (!onApplyCoupon || !couponInput.trim()) {
@@ -75,11 +81,12 @@ export default function CheckoutOrderSummary({
   };
 
   return (
-    <div className="flex h-full flex-col bg-[#f6f9fc] px-5 py-5 text-base sm:px-8 lg:px-10">
-      <div className="flex items-center gap-2.5">
+    <div className="flex h-full min-h-screen flex-col bg-[#f6f9fc] px-6 py-12 text-base sm:px-8 sm:py-14 lg:px-10 lg:py-16 xl:px-12">
+      <div className="mx-auto flex w-full max-w-xl flex-1 flex-col lg:ml-auto lg:mr-0 lg:max-w-2xl">
+      <div className="relative flex items-center gap-2.5">
         <Link
           to="/billing/plans"
-          className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted transition-colors hover:bg-black/5 hover:text-heading"
+          className="absolute right-full top-1/2 mr-1 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-muted transition-colors hover:bg-black/5 hover:text-heading"
           aria-label="Back to plans"
         >
           <ArrowLeft size={18} />
@@ -140,6 +147,20 @@ export default function CheckoutOrderSummary({
           </p>
         </div>
       </div>
+
+      {features.length > 0 && (
+        <div className="mt-4 border-t border-black/10 pt-4">
+          <p className="text-sm font-semibold text-heading">What's included</p>
+          <ul className="mt-3 space-y-2">
+            {features.map((feature) => (
+              <li key={feature} className="flex items-start gap-2 text-sm text-muted">
+                <Check size={16} className="mt-0.5 shrink-0 text-[#635bff]" aria-hidden />
+                <span>{feature}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {onApplyCoupon && (
         <div className="mt-4 space-y-2 border-t border-black/10 pt-4">
@@ -286,6 +307,29 @@ export default function CheckoutOrderSummary({
           <span>Total due today</span>
           <span>{formatAmount(totalDue)}</span>
         </div>
+      </div>
+
+      <p className="mt-auto pt-10 text-xs text-muted">
+        Powered by{' '}
+        <span className="font-medium text-heading">stripe</span>
+        <span className="mx-2 text-[#c7cdd6]">|</span>
+        <a
+          href="https://stripe.com/legal/consumer"
+          target="_blank"
+          rel="noreferrer"
+          className="hover:text-heading"
+        >
+          Terms
+        </a>{' '}
+        <a
+          href="https://stripe.com/privacy"
+          target="_blank"
+          rel="noreferrer"
+          className="hover:text-heading"
+        >
+          Privacy
+        </a>
+      </p>
       </div>
     </div>
   );
