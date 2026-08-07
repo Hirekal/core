@@ -838,6 +838,7 @@ export class SubscriptionsService {
 
   /*
    * Returns the organization's latest subscription regardless of status.
+   * Reads local DB state only — provider sync happens via webhooks / mutations.
    */
   async findLatestByOrganizationId(
     organizationId: string,
@@ -846,19 +847,7 @@ export class SubscriptionsService {
       const activeSubscription =
         await this.findActiveByOrganizationId(organizationId);
       if (activeSubscription) {
-        const refreshedSubscription =
-          await this.refreshFromProvider(activeSubscription);
-        const restoredSubscription =
-          await this.revertUnpaidUpgradeCheckout(refreshedSubscription);
-        if (
-          CHANGEABLE_SUBSCRIPTION_STATUSES.includes(
-            restoredSubscription.subscriptionStatus as (typeof CHANGEABLE_SUBSCRIPTION_STATUSES)[number],
-          ) ||
-          restoredSubscription.subscriptionStatus ===
-            SubscriptionStatus.PAST_DUE
-        ) {
-          return restoredSubscription;
-        }
+        return activeSubscription;
       }
 
       const subscription = await this.subscriptionsRepository.findOne({

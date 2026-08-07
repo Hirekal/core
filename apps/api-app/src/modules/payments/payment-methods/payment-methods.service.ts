@@ -85,13 +85,20 @@ export class PaymentMethodsService {
   }
 
   /*
-   * Lists invoices stored locally for a payment customer.
+   * Lists payment methods stored locally for a payment customer.
    */
-  async listByCustomer(customerId: string): Promise<PaymentMethod[]> {
+  async listByCustomer(
+    customerId: string,
+    paymentProviderId?: string,
+  ): Promise<PaymentMethod[]> {
     try {
       return this.paymentMethodsRepository.find({
-        where: { customerId },
-        order: { createdAt: 'DESC' },
+        where: {
+          customerId,
+          status: RecordStatus.ACTIVE,
+          ...(paymentProviderId ? { paymentProviderId } : {}),
+        },
+        order: { isDefault: 'DESC', createdAt: 'DESC' },
       });
     } catch (error) {
       this.logger.error(

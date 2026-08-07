@@ -269,7 +269,7 @@ export class PaymentsService {
       }
 
       try {
-        await this.listPaymentMethods(
+        await this.syncPaymentMethodsFromProvider(
           organizationId,
           subscription.paymentProviderId,
         );
@@ -480,9 +480,42 @@ export class PaymentsService {
   }
 
   /*
-   * Lists payment methods for a provider customer.
+   * Lists payment methods stored locally for a provider customer.
+   * Provider sync happens via webhooks / attach / checkout — not on every list.
    */
   async listPaymentMethods(organizationId: string, paymentProviderId: string) {
+    try {
+      const customer =
+        await this.paymentCustomersService.findByOrganizationAndPaymentProviderId(
+          organizationId,
+          paymentProviderId,
+        );
+      if (!customer) {
+        return [];
+      }
+
+      return this.paymentMethodsService.listByCustomer(
+        customer.id,
+        paymentProviderId,
+      );
+    } catch (error) {
+      this.logger.error(
+        LOG_MESSAGES.PAYMENT_METHOD.SYNC_FAILED(
+          `${organizationId}:${paymentProviderId}`,
+        ),
+        error,
+      );
+      throw error;
+    }
+  }
+
+  /*
+   * Pulls payment methods from the provider and upserts them locally.
+   */
+  async syncPaymentMethodsFromProvider(
+    organizationId: string,
+    paymentProviderId: string,
+  ) {
     try {
       const { client } = await this.resolveProviderClient(paymentProviderId);
       const customer =

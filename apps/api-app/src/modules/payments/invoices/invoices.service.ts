@@ -9,7 +9,6 @@ import { PaymentProvidersService } from '../payment-providers/payment-providers.
 import { PaymentCustomersService } from '../payment-customers/payment-customers.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { PaymentsRecordService } from '../payments-record/payments-record.service';
-import { PaymentProviderRegistry } from '../providers/payment-provider.registry';
 import { BaseRepository } from '../common/repositories/base.repository';
 import {
   ERROR_MESSAGES,
@@ -60,7 +59,6 @@ export class InvoicesService {
     private readonly paymentCustomersService: PaymentCustomersService,
     private readonly subscriptionsService: SubscriptionsService,
     private readonly paymentsRecordService: PaymentsRecordService,
-    private readonly paymentProviderRegistry: PaymentProviderRegistry,
     private readonly pricesService: PricesService,
     private readonly stripeProvider: StripeProvider,
   ) {}
@@ -83,6 +81,7 @@ export class InvoicesService {
 
   /*
    * Lists invoices stored locally for a payment customer.
+   * Provider sync happens via webhooks — not on every list.
    */
   async listByCustomer(
     customerId: string,
@@ -92,22 +91,6 @@ export class InvoicesService {
       const customer = await this.paymentCustomersService.findOne(customerId);
       const provider =
         await this.paymentProvidersService.findById(paymentProviderId);
-      const paymentProvider = this.paymentProviderRegistry.resolve(
-        provider.code,
-      );
-      const providerInvoices = await paymentProvider.listInvoices(
-        customer.providerCustomerId,
-      );
-
-      await Promise.all(
-        providerInvoices.map((providerInvoice) =>
-          this.syncFromProviderResult(
-            paymentProviderId,
-            customer.organizationId,
-            providerInvoice,
-          ),
-        ),
-      );
 
       await this.backfillPaymentSubscriptions(customer.organizationId);
 
@@ -117,6 +100,9 @@ export class InvoicesService {
         .createQueryBuilder('invoice')
         .where('invoice.organizationId = :organizationId', {
           organizationId: customer.organizationId,
+        })
+        .andWhere('invoice.paymentProviderId = :paymentProviderId', {
+          paymentProviderId,
         })
         .andWhere('invoice.invoiceStatus = :paidStatus', {
           paidStatus: InvoiceStatus.PAID,

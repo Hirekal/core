@@ -16,7 +16,6 @@ import * as billingService from '../../services/billingService';
 import { persistSubscriptionSession } from '../../utils/billingStorage';
 import {
   comparePriceTier,
-  formatMoney,
   getBillingPeriodLabel,
   getScheduledPlanChangeAt,
   getScheduledPlanPriceId,
@@ -27,7 +26,7 @@ import {
 } from '../../utils/billingFormat';
 import { formatDate } from '../../utils/formatDate';
 import { toUserErrorMessage } from '../../utils/errorMessage';
-import type { BillingPlan, PaymentMethod, PlanChangePreview, Subscription } from '../../types/billing';
+import type { BillingPlan, PaymentMethod, Subscription } from '../../types/billing';
 
 /**
  * Displays catalog plans and handles plan change actions.
@@ -50,8 +49,6 @@ export default function PricingPlansPage() {
   const [actionPriceId, setActionPriceId] = useState<string | null>(null);
   const [confirmDowngradePlan, setConfirmDowngradePlan] = useState<BillingPlan | null>(null);
   const [confirmUpgradePlan, setConfirmUpgradePlan] = useState<BillingPlan | null>(null);
-  const [upgradePreview, setUpgradePreview] = useState<PlanChangePreview | null>(null);
-  const [upgradePreviewLoading, setUpgradePreviewLoading] = useState(false);
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly');
   const [cancelOpen, setCancelOpen] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -163,48 +160,6 @@ export default function PricingPlansPage() {
       subscriptionPeriodSyncedRef.current = true;
     }
   }, [subscription?.priceId, subscription?.price, currentPlan?.price]);
-
-  useEffect(() => {
-    if (!confirmUpgradePlan || !subscription) {
-      setUpgradePreview(null);
-      return;
-    }
-
-    let cancelled = false;
-    setUpgradePreviewLoading(true);
-    billingService
-      .previewPlanChange(subscription.id, confirmUpgradePlan.price.id)
-      .then((preview) => {
-        if (!cancelled) {
-          setUpgradePreview(preview);
-        }
-      })
-      .catch(async (err) => {
-        if (cancelled) {
-          return;
-        }
-        setUpgradePreview(null);
-        setConfirmUpgradePlan(null);
-        showError(
-          err,
-          'Unable to upgrade this subscription. Subscribe to a new plan instead.',
-        );
-        try {
-          await loadData();
-        } catch {
-          // Keep the existing page state if reload fails.
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setUpgradePreviewLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [confirmUpgradePlan, subscription, loadData, showError]);
 
   const visiblePlans = useMemo(
     () =>
@@ -321,7 +276,6 @@ export default function PricingPlansPage() {
     if (!confirmUpgradePlan) return;
     const priceId = confirmUpgradePlan.price.id;
     setConfirmUpgradePlan(null);
-    setUpgradePreview(null);
     navigate(`/billing/upgrade/checkout/${priceId}`);
   };
 
@@ -330,15 +284,8 @@ export default function PricingPlansPage() {
       return '';
     }
 
-    const chargeText = upgradePreview?.preview
-      ? `Your card will be charged ${formatMoney(
-          upgradePreview.preview.estimatedAmountPayable,
-          upgradePreview.preview.currency,
-        )} today for the prorated difference.`
-      : 'Your card will be charged a prorated amount today.';
-
-    return `You're upgrading from ${currentPlan.product.name} to ${confirmUpgradePlan.product.name}. ${chargeText} You'll enter your card details on the next step to complete the upgrade.`;
-  }, [confirmUpgradePlan, currentPlan, upgradePreview]);
+    return `You're upgrading from ${currentPlan.product.name} to ${confirmUpgradePlan.product.name}. Continue to checkout to review the prorated charge and enter your card details.`;
+  }, [confirmUpgradePlan, currentPlan]);
 
   const handleCancel = async () => {
     if (!subscription) return;
@@ -499,12 +446,8 @@ export default function PricingPlansPage() {
         message={upgradeConfirmMessage}
         confirmLabel="Continue to checkout"
         confirmVariant="primary"
-        loading={upgradePreviewLoading}
         onConfirm={handleConfirmUpgrade}
-        onClose={() => {
-          setConfirmUpgradePlan(null);
-          setUpgradePreview(null);
-        }}
+        onClose={() => setConfirmUpgradePlan(null)}
       />
 
       <ConfirmationModal

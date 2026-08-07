@@ -103,12 +103,12 @@ export default function InvoicesPage() {
         <PageHeader
           title="Payments"
           description="View and download your payment history"
-          breadcrumbs={[{ label: 'Payments' }]}
+          breadcrumbs={[
+            { to: '/billing/plans', label: 'Billing' },
+            { label: 'Payments' },
+          ]}
         />
         <Card padding={false}>
-          <div className="border-b border-border px-5 py-4">
-            <h3 className="text-sm font-semibold text-heading">Payment history</h3>
-          </div>
           <div className="p-5">
             <InvoiceTable
               invoices={[]}
@@ -130,15 +130,15 @@ export default function InvoicesPage() {
       <PageHeader
         title="Payments"
         description="View and download your payment history"
-        breadcrumbs={[{ label: 'Payments' }]}
+        breadcrumbs={[
+          { to: '/billing/plans', label: 'Billing' },
+          { label: 'Payments' },
+        ]}
       />
 
       {error && <BillingErrorState message={error} onRetry={loadInvoices} />}
 
       <Card padding={false}>
-        <div className="border-b border-border px-5 py-4">
-          <h3 className="text-sm font-semibold text-heading">Payment history</h3>
-        </div>
         <div className="p-5">
           <InvoiceTable
             invoices={invoices}
