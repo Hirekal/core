@@ -54,7 +54,6 @@ export default function CheckoutPage() {
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly');
   const [email, setEmail] = useState(user?.email ?? '');
   const [name, setName] = useState(user?.name ?? '');
-  const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [providerSubscriptionId, setProviderSubscriptionId] = useState<string | null>(
     null,
   );
@@ -87,16 +86,13 @@ export default function CheckoutPage() {
     return Math.max(price.amount - amountDueToday, 0);
   }, [amountDueToday, price]);
 
-  const applyCheckoutSession = useCallback(
-    (loadedPrice: Price, checkoutSession: Awaited<ReturnType<typeof createCheckoutForPrice>>) => {
-      if (!checkoutSession.clientSecret || !checkoutSession.publishableKey) {
-        throw new Error('Checkout is missing required Stripe configuration');
-      }
-
+  const applyCheckoutTotals = useCallback(
+    (
+      loadedPrice: Price,
+      checkoutSession: Awaited<ReturnType<typeof createCheckoutForPrice>>,
+    ) => {
       setPrice(loadedPrice);
-      setClientSecret(checkoutSession.clientSecret);
       setProviderSubscriptionId(checkoutSession.providerSubscriptionId);
-      setStripePromise(loadStripe(checkoutSession.publishableKey));
       setAmountDueToday(
         typeof checkoutSession.amountDue === 'number'
           ? checkoutSession.amountDue
@@ -142,6 +138,8 @@ export default function CheckoutPage() {
             ? Promise.resolve(locationPrice)
             : billingService.getPrice(priceId);
 
+        // Prefetch may already have started a session — use it for initial totals.
+        // Payment confirmation always creates/refreshes the session on Pay.
         const sessionPromise =
           prefetch?.sessionPromise ??
           createCheckoutForPrice(priceId, user.email, user.name ?? undefined);
@@ -152,11 +150,19 @@ export default function CheckoutPage() {
             billingService.getPrices(loadedPrice.productId),
           );
 
-        const [loadedPrice, checkoutSession, siblingPrices] = await Promise.all([
-          loadedPricePromise,
-          sessionPromise,
-          siblingPricesPromise.catch(() => [] as Price[]),
-        ]);
+        const configPromise = billingService.getCheckoutConfig();
+
+        const [loadedPrice, checkoutSession, siblingPrices, checkoutConfig] =
+          await Promise.all([
+            loadedPricePromise,
+            sessionPromise,
+            siblingPricesPromise.catch(() => [] as Price[]),
+            configPromise,
+          ]);
+
+        if (!checkoutConfig.publishableKey) {
+          throw new Error('Checkout is missing required Stripe configuration');
+        }
 
         if (cancelled) {
           return;
@@ -165,7 +171,8 @@ export default function CheckoutPage() {
         setEmail(user.email);
         setName(user.name ?? '');
         setProductPrices(siblingPrices);
-        applyCheckoutSession(loadedPrice, checkoutSession);
+        setStripePromise(loadStripe(checkoutConfig.publishableKey));
+        applyCheckoutTotals(loadedPrice, checkoutSession);
         billingService.clearSubscribeCheckoutPrefetch(priceId, user.email);
       } catch (err) {
         if (!cancelled) {
@@ -183,9 +190,13 @@ export default function CheckoutPage() {
     return () => {
       cancelled = true;
     };
-  }, [applyCheckoutSession, locationPrice, navigate, priceId, user]);
+  }, [applyCheckoutTotals, locationPrice, navigate, priceId, user]);
 
-  const recreateCheckout = async (
+  /*
+   * Refreshes checkout session totals for period/coupon changes (calculation only).
+   * Payment confirmation creates the charged session on Pay.
+   */
+  const refreshCheckoutTotals = async (
     nextPrice: Price,
     coupon?: ValidatedCoupon | null,
   ) => {
@@ -200,11 +211,11 @@ export default function CheckoutPage() {
       coupon?.promotionCode,
       providerSubscriptionId ?? undefined,
     );
-    applyCheckoutSession(nextPrice, checkoutSession);
+    applyCheckoutTotals(nextPrice, checkoutSession);
   };
 
   const handleBillingPeriodChange = async (period: BillingPeriod) => {
-    if (!user?.email || period === billingPeriod || periodSwitching) {
+    if (!user?.email || period === billingPeriod || periodSwitching || couponApplying) {
       return;
     }
 
@@ -219,7 +230,7 @@ export default function CheckoutPage() {
     setPeriodSwitchError('');
 
     try {
-      await recreateCheckout(nextPrice, appliedCoupon);
+      await refreshCheckoutTotals(nextPrice, appliedCoupon);
     } catch (err) {
       setPeriodSwitchError(toUserErrorMessage(err, 'Failed to update billing period'));
     } finally {
@@ -228,7 +239,7 @@ export default function CheckoutPage() {
   };
 
   const handleApplyCoupon = async (code: string) => {
-    if (!price || couponApplying) {
+    if (!price || couponApplying || periodSwitching) {
       return;
     }
 
@@ -237,7 +248,7 @@ export default function CheckoutPage() {
 
     try {
       const validated = await billingService.validateCoupon(code);
-      await recreateCheckout(price, validated);
+      await refreshCheckoutTotals(price, validated);
       setAppliedCoupon(validated);
     } catch (err) {
       setCouponError(toUserErrorMessage(err, 'Coupon code is not available'));
@@ -247,7 +258,7 @@ export default function CheckoutPage() {
   };
 
   const handleRemoveCoupon = async () => {
-    if (!price || couponApplying) {
+    if (!price || couponApplying || periodSwitching) {
       return;
     }
 
@@ -255,7 +266,7 @@ export default function CheckoutPage() {
     setCouponError('');
 
     try {
-      await recreateCheckout(price, null);
+      await refreshCheckoutTotals(price, null);
       setAppliedCoupon(null);
     } catch (err) {
       setCouponError(toUserErrorMessage(err, 'Failed to remove coupon'));
@@ -268,9 +279,9 @@ export default function CheckoutPage() {
     return <CheckoutSkeleton />;
   }
 
-  if (error || !price?.product || !clientSecret || !stripePromise || !providerSubscriptionId) {
+  if (error || !price?.product || !stripePromise) {
     return (
-      <div className="mx-auto max-w-3xl space-y-4 px-4 py-8">
+      <div className="mx-auto w-full max-w-3xl space-y-4">
         <BillingErrorState message={error || 'Unable to load checkout.'} />
         <Button variant="secondary" onClick={() => navigate('/billing/plans')}>
           Back to plans
@@ -280,7 +291,7 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-6">
+    <div className="mx-auto w-full max-w-6xl">
       <div className="overflow-hidden rounded-xl border border-[#e6ebf1] bg-white shadow-sm lg:grid lg:grid-cols-2">
         <CheckoutOrderSummary
           product={price.product}
@@ -298,15 +309,46 @@ export default function CheckoutPage() {
           onApplyCoupon={handleApplyCoupon}
           onRemoveCoupon={handleRemoveCoupon}
         />
-        <Elements key={clientSecret} stripe={stripePromise}>
+        <Elements stripe={stripePromise}>
           <CheckoutPaymentForm
             price={price}
             email={email}
             name={name}
-            clientSecret={clientSecret}
-            providerSubscriptionId={providerSubscriptionId}
             payAmount={amountDueToday ?? price.amount}
             switchError={periodSwitchError}
+            disabled={couponApplying || periodSwitching}
+            prepareCheckout={async () => {
+              if (!user?.email) {
+                throw new Error('You need to be signed in to complete checkout.');
+              }
+
+              // Pay owns the full payment session: create (with coupon) then confirm.
+              const checkoutSession = await createCheckoutForPrice(
+                price.id,
+                email.trim() || user.email,
+                name.trim() || user.name || undefined,
+                appliedCoupon?.promotionCode,
+                providerSubscriptionId ?? undefined,
+              );
+
+              if (
+                !checkoutSession.clientSecret ||
+                !checkoutSession.providerSubscriptionId
+              ) {
+                throw new Error('Checkout is missing required Stripe configuration');
+              }
+
+              applyCheckoutTotals(price, checkoutSession);
+
+              return {
+                clientSecret: checkoutSession.clientSecret,
+                providerSubscriptionId: checkoutSession.providerSubscriptionId,
+              };
+            }}
+            onCheckoutFailed={async () => {
+              // Incomplete payment session is abandoned; next Pay creates a fresh one.
+              setProviderSubscriptionId(null);
+            }}
             onEmailChange={setEmail}
             onNameChange={setName}
           />

@@ -341,7 +341,7 @@ export default function UpgradeCheckoutPage() {
   };
 
   const handleBillingPeriodChange = async (period: BillingPeriod) => {
-    if (!currentPrice || period === billingPeriod || periodSwitching) {
+    if (!currentPrice || period === billingPeriod || periodSwitching || couponApplying) {
       return;
     }
 
@@ -372,7 +372,7 @@ export default function UpgradeCheckoutPage() {
   };
 
   const handleApplyCoupon = async (code: string) => {
-    if (!price || couponApplying) {
+    if (!price || couponApplying || periodSwitching) {
       return;
     }
 
@@ -391,7 +391,7 @@ export default function UpgradeCheckoutPage() {
   };
 
   const handleRemoveCoupon = async () => {
-    if (!price || couponApplying) {
+    if (!price || couponApplying || periodSwitching) {
       return;
     }
 
@@ -422,7 +422,7 @@ export default function UpgradeCheckoutPage() {
     amountDue === null
   ) {
     return (
-      <div className="mx-auto max-w-3xl space-y-4 px-4 py-8">
+      <div className="mx-auto w-full max-w-3xl space-y-4">
         <BillingErrorState message={error || 'Unable to load upgrade checkout.'} />
         <Button variant="secondary" onClick={() => navigate('/billing/plans')}>
           Back to plans
@@ -436,7 +436,7 @@ export default function UpgradeCheckoutPage() {
     amountDue <= 0 && upgradeDirection === 'upgrade';
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-6">
+    <div className="mx-auto w-full max-w-6xl">
       <div className="overflow-hidden rounded-xl border border-[#e6ebf1] bg-white shadow-sm lg:grid lg:grid-cols-2">
         <CheckoutOrderSummary
           product={price.product}
@@ -470,6 +470,7 @@ export default function UpgradeCheckoutPage() {
                 ? 'Unable to calculate the upgrade charge for this billing period. Try another period or refresh the page.'
                 : '')
             }
+            disabled={couponApplying || periodSwitching}
             prepareCheckout={async () => {
               if (
                 !isPayableUpgradePeriod(currentPrice, price, unusedCreditEstimate)

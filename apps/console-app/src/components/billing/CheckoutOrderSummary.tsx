@@ -3,7 +3,7 @@
  */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, Tag } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Loader2 } from 'lucide-react';
 import { formatIntervalShort, formatMoney, type BillingPeriod } from '../../utils/billingFormat';
 import type { Price, Product, ValidatedCoupon } from '../../types/billing';
 import BillingPeriodToggle from './BillingPeriodToggle';
@@ -75,8 +75,8 @@ export default function CheckoutOrderSummary({
   };
 
   return (
-    <div className="flex h-full flex-col bg-[#f6f9fc] px-6 py-8 sm:px-10 lg:px-12">
-      <div className="flex items-center gap-3">
+    <div className="flex h-full flex-col bg-[#f6f9fc] px-5 py-5 text-base sm:px-8 lg:px-10">
+      <div className="flex items-center gap-2.5">
         <Link
           to="/billing/plans"
           className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted transition-colors hover:bg-black/5 hover:text-heading"
@@ -84,142 +84,148 @@ export default function CheckoutOrderSummary({
         >
           <ArrowLeft size={18} />
         </Link>
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#1a1f36] text-sm font-semibold text-white">
+        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#1a1f36] text-base font-semibold text-white">
           H
         </div>
-        <span className="text-base font-semibold text-heading">Hirekal</span>
+        <span className="text-lg font-semibold text-heading">Hirekal</span>
       </div>
 
-      <div className="mt-10">
-        {isUpgrade ? (
-          <>
-            <p className="text-sm text-muted">Upgrade to</p>
-            <p className="mt-1 text-3xl font-semibold tracking-tight text-heading sm:text-4xl">
-              {product.name}
-            </p>
-            <p className="mt-2 text-sm text-muted">
-              {formatMoney(price.amount, price.currency)}{' '}
-              {formatIntervalShort(price.interval, price.intervalCount ?? 1)
-                .replace(/^Per /i, '')
-                .toLowerCase()}
-              , billed going forward
-            </p>
-          </>
-        ) : (
-          <>
-            <p className="text-sm text-muted">Subscribe to</p>
-            <p className="mt-1 text-3xl font-semibold tracking-tight text-heading sm:text-4xl">
-              {formatMoney(totalDue ?? price.amount, price.currency)}
-            </p>
-            <p className="mt-1 text-sm text-muted">
-              per{' '}
-              {formatIntervalShort(price.interval, price.intervalCount ?? 1)
-                .replace(/^Per /i, '')
-                .toLowerCase()}
-            </p>
-          </>
-        )}
-      </div>
+      {isUpgrade ? (
+        <div className="mt-5">
+          <p className="text-sm text-muted">Upgrade to</p>
+          <p className="mt-0.5 text-3xl font-semibold tracking-tight text-heading">
+            {product.name}
+          </p>
+          <p className="mt-1 text-base text-muted">
+            {formatMoney(price.amount, price.currency)}{' '}
+            {formatIntervalShort(price.interval, price.intervalCount ?? 1)
+              .replace(/^Per /i, '')
+              .toLowerCase()}
+            , billed going forward
+          </p>
+        </div>
+      ) : null}
 
       {onBillingPeriodChange &&
         billingPeriod &&
         availablePeriods &&
         availablePeriods.length > 0 && (
-        <div className="mt-6">
+        <div className={isUpgrade ? 'mt-4' : 'mt-5'}>
           <BillingPeriodToggle
             variant="radio"
             value={billingPeriod}
             periods={availablePeriods}
             onChange={onBillingPeriodChange}
-            disabled={periodSwitching}
+            disabled={periodSwitching || couponApplying}
           />
         </div>
       )}
 
-      <div className="mt-10 space-y-4 border-t border-black/10 pt-6">
+      <div className="mt-5 space-y-2 border-t border-black/10 pt-4">
         {isUpgrade && currentProductName && (
-          <div className="flex items-start justify-between gap-4 text-sm">
+          <div className="flex items-start justify-between gap-4 text-base">
             <span className="text-muted">Current plan</span>
             <span className="font-medium text-heading">{currentProductName}</span>
           </div>
         )}
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="font-medium text-heading">{product.name}</p>
-            <p className="mt-1 text-sm text-muted">
+            <p className="text-base font-medium text-heading">{product.name}</p>
+            <p className="mt-0.5 text-sm text-muted">
               {formatIntervalShort(price.interval, price.intervalCount ?? 1)} subscription
             </p>
           </div>
-          <p className="text-sm font-medium text-heading">
+          <p className="text-base font-medium text-heading">
             {formatMoney(price.amount, price.currency)}
           </p>
         </div>
       </div>
 
       {onApplyCoupon && (
-        <div className="mt-6 space-y-3 border-t border-black/10 pt-6">
+        <div className="mt-4 space-y-2 border-t border-black/10 pt-4">
           {!showCouponField && !appliedCoupon ? (
             <button
               type="button"
-              className="text-sm font-medium text-[#635bff] hover:underline"
+              className="text-base font-medium text-[#635bff] hover:underline"
               onClick={() => setShowCouponField(true)}
             >
               Add promotion code
             </button>
           ) : appliedCoupon ? (
-            <div className="rounded-md border border-[#99f6e4] bg-[#f0fdfa] px-3 py-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex min-w-0 items-start gap-2.5">
-                  <CheckCircle2
-                    size={18}
-                    className="mt-0.5 shrink-0 text-[#0d9488]"
-                    aria-hidden
-                  />
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-[#0f766e]">
-                      Coupon applied
-                    </p>
-                    <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-heading">
-                      <span className="inline-flex items-center gap-1 font-medium">
-                        <Tag size={13} className="text-[#0d9488]" aria-hidden />
-                        {appliedCoupon.promotionCode}
-                      </span>
-                      {couponDiscountLabel && (
-                        <span className="text-muted">· {couponDiscountLabel}</span>
-                      )}
-                    </p>
-                    {discount > 0 && (
-                      <p className="mt-1 text-sm font-medium text-[#0d9488]">
-                        You save {formatMoney(discount, price.currency)} today
+            <div className="space-y-2">
+              <div
+                className={`rounded-md border border-[#99f6e4] bg-[#f0fdfa] px-3 py-2.5 ${
+                  couponApplying ? 'opacity-70' : ''
+                }`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <CheckCircle2
+                      size={18}
+                      className="shrink-0 text-[#0d9488]"
+                      aria-hidden
+                    />
+                    <div className="min-w-0">
+                      <p className="text-base font-semibold text-[#0f766e]">
+                        Coupon applied
+                        <span className="ml-1.5 font-medium text-heading">
+                          {appliedCoupon.promotionCode}
+                        </span>
+                        {couponDiscountLabel && (
+                          <span className="ml-1 font-normal text-muted">
+                            · {couponDiscountLabel}
+                          </span>
+                        )}
                       </p>
-                    )}
+                      {discount > 0 && (
+                        <p className="mt-0.5 text-sm font-medium text-[#0d9488]">
+                          You save {formatMoney(discount, price.currency)} today
+                        </p>
+                      )}
+                    </div>
                   </div>
+                  {onRemoveCoupon && (
+                    <button
+                      type="button"
+                      className="inline-flex shrink-0 items-center gap-1.5 text-base text-muted hover:text-heading disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={couponApplying}
+                      onClick={onRemoveCoupon}
+                    >
+                      {couponApplying ? (
+                        <>
+                          <Loader2 size={16} className="animate-spin" aria-hidden />
+                          Removing…
+                        </>
+                      ) : (
+                        'Remove'
+                      )}
+                    </button>
+                  )}
                 </div>
-                {onRemoveCoupon && (
-                  <button
-                    type="button"
-                    className="shrink-0 text-sm text-muted hover:text-heading"
-                    onClick={onRemoveCoupon}
-                  >
-                    Remove
-                  </button>
-                )}
               </div>
+              {couponError && (
+                <p className="text-base text-[#df1b41]">{couponError}</p>
+              )}
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <div className="flex gap-2">
                 <input
                   type="text"
                   value={couponInput}
                   onChange={(event) => setCouponInput(event.target.value.toUpperCase())}
                   placeholder="Promotion code"
-                  className="min-w-0 flex-1 rounded-md border border-[#e6ebf1] bg-white px-3 py-2 text-sm text-heading placeholder:text-[#8898aa] focus:border-[#635bff] focus:outline-none"
+                  className="min-w-0 flex-1 rounded-md border border-[#e6ebf1] bg-white px-3 py-2.5 text-base text-heading placeholder:text-[#8898aa] focus:border-[#635bff] focus:outline-none"
                   disabled={couponApplying}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter') {
                       event.preventDefault();
                       void handleApply();
+                    }
+                    if (event.key === 'Escape') {
+                      event.preventDefault();
+                      setCouponInput('');
+                      setShowCouponField(false);
                     }
                   }}
                 />
@@ -230,18 +236,37 @@ export default function CheckoutOrderSummary({
                   disabled={couponApplying || !couponInput.trim()}
                   onClick={() => void handleApply()}
                 >
-                  {couponApplying ? 'Applying…' : 'Apply'}
+                  {couponApplying ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" aria-hidden />
+                      Applying…
+                    </>
+                  ) : (
+                    'Apply'
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={couponApplying}
+                  onClick={() => {
+                    setCouponInput('');
+                    setShowCouponField(false);
+                  }}
+                >
+                  Cancel
                 </Button>
               </div>
               {couponError && (
-                <p className="text-sm text-[#df1b41]">{couponError}</p>
+                <p className="text-base text-[#df1b41]">{couponError}</p>
               )}
             </div>
           )}
         </div>
       )}
 
-      <div className="mt-6 space-y-3 border-t border-black/10 pt-6 text-sm">
+      <div className="mt-4 space-y-1.5 border-t border-black/10 pt-4 text-base">
         <div className="flex items-center justify-between gap-4">
           <span className="text-muted">{isUpgrade ? 'Prorated charge' : 'Subtotal'}</span>
           <span className="text-heading">{formatAmount(lineSubtotal)}</span>
@@ -257,15 +282,11 @@ export default function CheckoutOrderSummary({
             <span>-{formatMoney(discount, price.currency)}</span>
           </div>
         )}
-        <div className="flex items-center justify-between gap-4 font-semibold text-heading">
+        <div className="flex items-center justify-between gap-4 pt-1 text-lg font-semibold text-heading">
           <span>Total due today</span>
           <span>{formatAmount(totalDue)}</span>
         </div>
       </div>
-
-      <p className="mt-auto pt-8 text-xs text-muted">
-        Powered by <span className="font-medium text-heading">stripe</span>
-      </p>
     </div>
   );
 }

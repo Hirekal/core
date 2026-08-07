@@ -40,6 +40,16 @@ function AppLayout({ children }) {
   );
 }
 
+function CheckoutLayout({ children }) {
+  return (
+    <div className="flex min-h-screen flex-col bg-surface">
+      <div className="flex flex-1 flex-col justify-center px-4 py-8">
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export default function AppRoutes() {
   return (
     <Routes>
@@ -145,7 +155,7 @@ export default function AppRoutes() {
         path="/billing/upgrade/checkout/:priceId"
         element={
           <AdminRoute>
-            <AppLayout><UpgradeCheckoutPage /></AppLayout>
+            <CheckoutLayout><UpgradeCheckoutPage /></CheckoutLayout>
           </AdminRoute>
         }
       />
@@ -161,7 +171,7 @@ export default function AppRoutes() {
         path="/billing/checkout/:priceId"
         element={
           <AdminRoute>
-            <AppLayout><CheckoutPage /></AppLayout>
+            <CheckoutLayout><CheckoutPage /></CheckoutLayout>
           </AdminRoute>
         }
       />

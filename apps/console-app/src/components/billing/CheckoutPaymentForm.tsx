@@ -69,6 +69,7 @@ interface CheckoutPaymentFormProps {
   onCheckoutFailed?: () => Promise<void>;
   onCheckoutSucceeded?: () => void;
   switchError?: string;
+  disabled?: boolean;
   onEmailChange: (value: string) => void;
   onNameChange: (value: string) => void;
 }
@@ -89,6 +90,7 @@ export default function CheckoutPaymentForm({
   onCheckoutFailed,
   onCheckoutSucceeded,
   switchError = '',
+  disabled = false,
   onEmailChange,
   onNameChange,
 }: CheckoutPaymentFormProps) {
@@ -99,7 +101,7 @@ export default function CheckoutPaymentForm({
 
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
-  const [billingName, setBillingName] = useState('');
+  const [billingName, setBillingName] = useState(name ?? '');
   const [billingCountry, setBillingCountry] = useState('');
   const [billingAddress, setBillingAddress] = useState('');
   const [showManualAddress, setShowManualAddress] = useState(false);
@@ -107,11 +109,17 @@ export default function CheckoutPaymentForm({
   const [billingState, setBillingState] = useState('');
   const [billingPostal, setBillingPostal] = useState('');
 
+  const formLocked = disabled || processing;
+  const cardOptions: StripeCardElementOptions = {
+    ...cardElementOptions,
+    disabled: formLocked,
+  };
+
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setError('');
 
-    if (!stripe || !elements) {
+    if (disabled || !stripe || !elements) {
       return;
     }
 
@@ -225,28 +233,36 @@ export default function CheckoutPaymentForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex h-full flex-col px-6 py-8 sm:px-10 lg:px-12">
-      <div className="space-y-6">
-        <div>
-          <h2 className="text-sm font-medium text-heading">Contact information</h2>
-          <div className={`mt-3 ${checkoutBoxClass}`}>
+    <form
+      onSubmit={handleSubmit}
+      className="flex h-full flex-col px-6 py-8 sm:px-10 lg:px-12"
+      aria-busy={disabled || processing}
+    >
+      <section>
+        <h2 className="text-base font-semibold text-heading">Billing information</h2>
+
+        <div className="mt-5">
+          <label htmlFor="checkout-email" className="block text-sm text-muted">
+            Email
+          </label>
+          <div className={`mt-2 ${checkoutBoxClass}`}>
             <input
+              id="checkout-email"
               type="email"
               value={email}
               onChange={(event) => onEmailChange(event.target.value)}
               placeholder="Email"
               required
-              className={checkoutFieldClass}
+              disabled={formLocked}
+              autoComplete="email"
+              className={`${checkoutFieldClass} disabled:cursor-not-allowed disabled:opacity-100`}
             />
           </div>
         </div>
 
-        <div>
-          <h2 className="text-sm font-medium text-heading">
-            Billing address{' '}
-            <span className="font-normal text-muted">(optional)</span>
-          </h2>
-          <div className={`mt-3 ${checkoutBoxClass}`}>
+        <div className="mt-5">
+          <p className="text-sm text-muted">Billing address</p>
+          <div className={`mt-2 ${checkoutBoxClass}`}>
             <input
               type="text"
               value={billingName}
@@ -256,13 +272,16 @@ export default function CheckoutPaymentForm({
               }}
               placeholder="Name"
               autoComplete="name"
-              className={`${checkoutFieldClass} border-b border-[#e6ebf1]`}
+              disabled={formLocked}
+              className={`${checkoutFieldClass} border-b border-[#e6ebf1] disabled:cursor-not-allowed disabled:opacity-100`}
             />
             <div className="relative border-b border-[#e6ebf1]">
               <select
                 value={billingCountry}
                 onChange={(event) => setBillingCountry(event.target.value)}
-                className={`${checkoutFieldClass} appearance-none pr-10 ${
+                disabled={formLocked}
+                aria-label="Country or region"
+                className={`${checkoutFieldClass} appearance-none pr-10 disabled:cursor-not-allowed disabled:opacity-100 ${
                   billingCountry ? 'text-heading' : 'text-[#8898aa]'
                 }`}
               >
@@ -283,7 +302,8 @@ export default function CheckoutPaymentForm({
               onChange={(event) => setBillingAddress(event.target.value)}
               placeholder="Address"
               autoComplete="street-address"
-              className={checkoutFieldClass}
+              disabled={formLocked}
+              className={`${checkoutFieldClass} disabled:cursor-not-allowed disabled:opacity-100`}
             />
             {showManualAddress && (
               <>
@@ -293,7 +313,8 @@ export default function CheckoutPaymentForm({
                   onChange={(event) => setBillingCity(event.target.value)}
                   placeholder="City"
                   autoComplete="address-level2"
-                  className={`${checkoutFieldClass} border-t border-[#e6ebf1]`}
+                  disabled={formLocked}
+                  className={`${checkoutFieldClass} border-t border-[#e6ebf1] disabled:cursor-not-allowed disabled:opacity-100`}
                 />
                 <div className="grid grid-cols-2 border-t border-[#e6ebf1]">
                   <input
@@ -302,7 +323,8 @@ export default function CheckoutPaymentForm({
                     onChange={(event) => setBillingState(event.target.value)}
                     placeholder="State"
                     autoComplete="address-level1"
-                    className={`${checkoutFieldClass} border-r border-[#e6ebf1]`}
+                    disabled={formLocked}
+                    className={`${checkoutFieldClass} border-r border-[#e6ebf1] disabled:cursor-not-allowed disabled:opacity-100`}
                   />
                   <input
                     type="text"
@@ -310,7 +332,8 @@ export default function CheckoutPaymentForm({
                     onChange={(event) => setBillingPostal(event.target.value)}
                     placeholder="ZIP"
                     autoComplete="postal-code"
-                    className={checkoutFieldClass}
+                    disabled={formLocked}
+                    className={`${checkoutFieldClass} disabled:cursor-not-allowed disabled:opacity-100`}
                   />
                 </div>
               </>
@@ -320,35 +343,35 @@ export default function CheckoutPaymentForm({
             <button
               type="button"
               onClick={() => setShowManualAddress(true)}
-              className="mt-2 text-sm text-muted underline underline-offset-2 hover:text-heading"
+              disabled={formLocked}
+              className="mt-2 text-sm text-muted underline underline-offset-2 hover:text-heading disabled:cursor-not-allowed disabled:opacity-100 disabled:no-underline"
             >
               Enter address manually
             </button>
           )}
         </div>
+      </section>
 
-        <div>
-          <h2 className="text-sm font-medium text-heading">Payment details</h2>
-          <p className="mt-1 text-sm text-muted">Card information</p>
-
-          <div className={`mt-3 ${checkoutBoxClass}`}>
-            <div className="border-b border-[#e6ebf1] px-3 py-3">
-              <CardNumberElement options={cardElementOptions} />
+      <section className="mt-10">
+        <h2 className="text-base font-semibold text-heading">Payment details</h2>
+        <p className="mt-5 text-sm text-muted">Card information</p>
+        <div className={`mt-2 ${checkoutBoxClass}`}>
+          <div className="border-b border-[#e6ebf1] px-3 py-3">
+            <CardNumberElement options={cardOptions} />
+          </div>
+          <div className="grid grid-cols-2">
+            <div className="border-r border-[#e6ebf1] px-3 py-3">
+              <CardExpiryElement options={cardOptions} />
             </div>
-            <div className="grid grid-cols-2">
-              <div className="border-r border-[#e6ebf1] px-3 py-3">
-                <CardExpiryElement options={cardElementOptions} />
-              </div>
-              <div className="px-3 py-3">
-                <CardCvcElement options={cardElementOptions} />
-              </div>
+            <div className="px-3 py-3">
+              <CardCvcElement options={cardOptions} />
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
       {(error || switchError) && (
-        <div className="mt-4">
+        <div className="mt-5">
           <BillingErrorState message={error || switchError} />
         </div>
       )}
@@ -356,12 +379,14 @@ export default function CheckoutPaymentForm({
       <div className="mt-8">
         <Button
           type="submit"
-          className="w-full !rounded-md !bg-[#1a1f36] !py-3.5 text-base font-medium hover:!bg-[#111527]"
-          disabled={processing || !stripe || !elements}
+          className="w-full !rounded-md !bg-[#1a1f36] !py-3.5 text-base font-medium hover:!bg-[#111527] disabled:!opacity-100 disabled:!cursor-not-allowed"
+          disabled={formLocked || !stripe || !elements}
         >
           {processing
             ? 'Processing…'
-            : `Pay ${formatMoney(payAmount ?? price.amount, price.currency)}`}
+            : disabled
+              ? 'Updating checkout…'
+              : `Pay ${formatMoney(payAmount ?? price.amount, price.currency)}`}
         </Button>
       </div>
     </form>

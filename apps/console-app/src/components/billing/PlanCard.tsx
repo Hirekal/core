@@ -98,7 +98,7 @@ export default function PlanCard({
       <div className="mt-8">
         <Button
           className="w-full"
-          variant={recommended && !isCurrent && !isScheduled ? 'primary' : 'secondary'}
+          variant="secondary"
           disabled={isCurrent || isScheduled || actionDisabled}
           onClick={onAction}
         >
