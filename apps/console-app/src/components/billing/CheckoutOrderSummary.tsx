@@ -111,7 +111,7 @@ export default function CheckoutOrderSummary({
         )}
       </div>
 
-      {!isUpgrade && onBillingPeriodChange && billingPeriod && availablePeriods && (
+      {onBillingPeriodChange && billingPeriod && availablePeriods && availablePeriods.length > 0 && (
         <div className="mt-6">
           <BillingPeriodToggle
             variant="radio"

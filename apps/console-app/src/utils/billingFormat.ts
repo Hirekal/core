@@ -152,7 +152,61 @@ export function getProductSortOrder(metadata: Record<string, unknown> | null): n
 }
 
 /**
+ * Converts a recurring price into a comparable monthly amount.
+ */
+export function normalizeMonthlyAmount(
+  price: Pick<Price, 'amount' | 'interval' | 'intervalCount'>,
+): number {
+  const count = price.intervalCount ?? 1;
+  let months = Number.NaN;
+
+  if (price.interval === 'MONTH') {
+    months = count;
+  } else if (price.interval === 'YEAR') {
+    months = count * 12;
+  } else if (price.interval === 'WEEK') {
+    months = (count * 7) / 30.4375;
+  } else if (price.interval === 'DAY') {
+    months = count / 30.4375;
+  }
+
+  if (!Number.isFinite(months) || months <= 0) {
+    return Number.NaN;
+  }
+
+  return price.amount / months;
+}
+
+/**
+ * Compares two prices for upgrade/downgrade direction using normalized monthly amount.
+ */
+export function comparePlanDirection(
+  current: Pick<Price, 'id' | 'amount' | 'interval' | 'intervalCount'>,
+  next: Pick<Price, 'id' | 'amount' | 'interval' | 'intervalCount'>,
+): 'upgrade' | 'downgrade' | 'lateral' | 'same' {
+  if (current.id === next.id) {
+    return 'same';
+  }
+
+  const currentNormalized = normalizeMonthlyAmount(current);
+  const nextNormalized = normalizeMonthlyAmount(next);
+
+  if (!Number.isFinite(currentNormalized) || !Number.isFinite(nextNormalized)) {
+    return 'lateral';
+  }
+
+  if (nextNormalized > currentNormalized) {
+    return 'upgrade';
+  }
+  if (nextNormalized < currentNormalized) {
+    return 'downgrade';
+  }
+  return 'lateral';
+}
+
+/**
  * Compares two prices for upgrade/downgrade direction using amount.
+ * Prefer comparePlanDirection when intervals may differ.
  */
 export function comparePriceTier(current: Price, next: Price): 'upgrade' | 'downgrade' | 'same' {
   if (next.amount > current.amount) return 'upgrade';

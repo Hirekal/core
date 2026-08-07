@@ -303,28 +303,51 @@ export class StripeProvider implements PaymentProvider {
 
       for (const invoiceLine of invoicePreview.lines.data) {
         const amount = toMajorAmount(invoiceLine.amount, currency);
-        const isProrationLine = this.isInvoiceLineProration(invoiceLine);
         if (amount < 0) {
           prorationCredit += Math.abs(amount);
-        } else if (isProrationLine) {
+          continue;
+        }
+        if (amount <= 0) {
+          continue;
+        }
+
+        const isProrationLine = this.isInvoiceLineProration(invoiceLine);
+        // Same-interval upgrades: only proration deltas are due today.
+        // Interval reset (billing_cycle_anchor=now): the new period charge is
+        // also due immediately and is often not flagged as a proration line.
+        if (isProrationLine || intervalChange) {
           prorationCharge += amount;
         }
       }
 
       const netProrationAmount = Math.max(prorationCharge - prorationCredit, 0);
       const discount = this.resolveInvoiceDiscount(invoicePreview, currency);
-      const discountAmount = this.resolveProrationDiscountAmount(
+      let discountAmount = this.resolveProrationDiscountAmount(
         netProrationAmount,
         discount,
         invoicePreview,
         currency,
       );
-      // amount_due on preview invoices often includes the next full billing
-      // period plus prorations. Charge-today for upgrades is proration only.
-      const estimatedAmountPayable = Math.max(
+
+      // When the billing cycle resets, Stripe's amount_due is the charge today
+      // (new period minus unused-time credit, after discounts). Prefer it.
+      // Same-interval upgrades must not use amount_due — it can include the
+      // next full period in addition to prorations.
+      const amountDueToday = Math.max(
+        toMajorAmount(invoicePreview.amount_due ?? 0, currency),
+        0,
+      );
+
+      let estimatedAmountPayable = Math.max(
         netProrationAmount - discountAmount,
         0,
       );
+
+      if (intervalChange && amountDueToday > 0) {
+        estimatedAmountPayable = amountDueToday;
+        // Keep discount display consistent with Stripe's settled amount.
+        discountAmount = Math.max(netProrationAmount - amountDueToday, 0);
+      }
 
       return {
         currency,
