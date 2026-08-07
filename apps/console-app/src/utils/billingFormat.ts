@@ -178,14 +178,51 @@ export function normalizeMonthlyAmount(
 }
 
 /**
- * Compares two prices for upgrade/downgrade direction using normalized monthly amount.
+ * Returns the billing period length in months for ranking commitment length.
+ */
+function intervalToMonths(
+  interval: PriceInterval | null,
+  intervalCount: number | null = 1,
+): number {
+  const count = intervalCount ?? 1;
+  if (interval === 'MONTH') return count;
+  if (interval === 'YEAR') return count * 12;
+  if (interval === 'WEEK') return (count * 7) / 30.4375;
+  if (interval === 'DAY') return count / 30.4375;
+  return Number.NaN;
+}
+
+/**
+ * Compares two prices for upgrade/downgrade direction.
+ *
+ * Same-product period changes use commitment length (quarterly → yearly is an
+ * upgrade even when yearly is cheaper per month). Cross-product changes use
+ * normalized monthly amount.
  */
 export function comparePlanDirection(
-  current: Pick<Price, 'id' | 'amount' | 'interval' | 'intervalCount'>,
-  next: Pick<Price, 'id' | 'amount' | 'interval' | 'intervalCount'>,
+  current: Pick<Price, 'id' | 'amount' | 'interval' | 'intervalCount' | 'productId'>,
+  next: Pick<Price, 'id' | 'amount' | 'interval' | 'intervalCount' | 'productId'>,
 ): 'upgrade' | 'downgrade' | 'lateral' | 'same' {
   if (current.id === next.id) {
     return 'same';
+  }
+
+  const sameProduct =
+    Boolean(current.productId) &&
+    Boolean(next.productId) &&
+    current.productId === next.productId;
+
+  if (sameProduct) {
+    const currentMonths = intervalToMonths(current.interval, current.intervalCount);
+    const nextMonths = intervalToMonths(next.interval, next.intervalCount);
+
+    if (
+      Number.isFinite(currentMonths) &&
+      Number.isFinite(nextMonths) &&
+      currentMonths !== nextMonths
+    ) {
+      return nextMonths > currentMonths ? 'upgrade' : 'downgrade';
+    }
   }
 
   const currentNormalized = normalizeMonthlyAmount(current);
@@ -205,12 +242,52 @@ export function comparePlanDirection(
 }
 
 /**
- * Compares two prices for upgrade/downgrade direction using amount.
- * Prefer comparePlanDirection when intervals may differ.
+ * Returns true when two prices use different billing intervals or cadences.
+ */
+export function isBillingIntervalChange(
+  current: Pick<Price, 'interval' | 'intervalCount'>,
+  next: Pick<Price, 'interval' | 'intervalCount'>,
+): boolean {
+  return (
+    current.interval !== next.interval ||
+    (current.intervalCount ?? 1) !== (next.intervalCount ?? 1)
+  );
+}
+
+/**
+ * Returns true when a target price is a valid upgrade-checkout period option.
+ *
+ * Hides downgrades and interval switches that would settle underpaid ($0 due)
+ * because unused-time credit covers the new period charge.
+ */
+export function isPayableUpgradePeriod(
+  current: Pick<Price, 'id' | 'amount' | 'interval' | 'intervalCount' | 'productId'>,
+  next: Pick<Price, 'id' | 'amount' | 'interval' | 'intervalCount' | 'productId'>,
+  unusedCreditEstimate = 0,
+): boolean {
+  const direction = comparePlanDirection(current, next);
+  if (direction !== 'upgrade' && direction !== 'lateral') {
+    return false;
+  }
+
+  if (!isBillingIntervalChange(current, next)) {
+    return true;
+  }
+
+  const credit = Math.max(unusedCreditEstimate, 0);
+  // Interval resets invoice the new period minus unused credit. If credit covers
+  // the new period, Stripe settles $0 / underpaid — treat as unavailable here.
+  return next.amount > credit;
+}
+
+/**
+ * Compares two prices for upgrade/downgrade direction.
+ * Prefer comparePlanDirection; this maps lateral to same for simple CTAs.
  */
 export function comparePriceTier(current: Price, next: Price): 'upgrade' | 'downgrade' | 'same' {
-  if (next.amount > current.amount) return 'upgrade';
-  if (next.amount < current.amount) return 'downgrade';
+  const direction = comparePlanDirection(current, next);
+  if (direction === 'upgrade') return 'upgrade';
+  if (direction === 'downgrade') return 'downgrade';
   return 'same';
 }
 

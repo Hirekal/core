@@ -16,6 +16,7 @@ import { toUserErrorMessage } from '../../utils/errorMessage';
 import {
   BILLING_PERIODS,
   comparePlanDirection,
+  isPayableUpgradePeriod,
   matchesBillingPeriod,
   resolveBillingPeriod,
   type BillingPeriod,
@@ -42,6 +43,7 @@ export default function UpgradeCheckoutPage() {
   const [currentPrice, setCurrentPrice] = useState<Price | null>(null);
   const [productPrices, setProductPrices] = useState<Price[]>([]);
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly');
+  const [unusedCreditEstimate, setUnusedCreditEstimate] = useState(0);
   const [currentProductName, setCurrentProductName] = useState<string | null>(
     locationState?.currentProductName ?? null,
   );
@@ -81,11 +83,14 @@ export default function UpgradeCheckoutPage() {
         if (!matchesBillingPeriod(productPrice, period)) {
           return false;
         }
-        const direction = comparePlanDirection(currentPrice, productPrice);
-        return direction === 'upgrade' || direction === 'lateral';
+        return isPayableUpgradePeriod(
+          currentPrice,
+          productPrice,
+          unusedCreditEstimate,
+        );
       }),
     );
-  }, [currentPrice, productPrices]);
+  }, [currentPrice, productPrices, unusedCreditEstimate]);
 
   const applyPreview = useCallback(
     (
@@ -104,6 +109,9 @@ export default function UpgradeCheckoutPage() {
       setDiscountLabel(
         planChangePreview.preview.discountLabel ?? coupon?.promotionCode ?? null,
       );
+      setUnusedCreditEstimate(
+        Math.max(planChangePreview.preview.prorationCredit ?? 0, 0),
+      );
 
       const period = resolveBillingPeriod(
         loadedPrice.interval,
@@ -112,6 +120,42 @@ export default function UpgradeCheckoutPage() {
       if (period) {
         setBillingPeriod(period);
       }
+    },
+    [],
+  );
+
+  const findPayableSiblingPrice = useCallback(
+    (
+      activeCurrentPrice: Price,
+      prices: Price[],
+      credit: number,
+      preferredPriceId?: string | null,
+    ): Price | null => {
+      const payable = prices.filter((productPrice) =>
+        isPayableUpgradePeriod(activeCurrentPrice, productPrice, credit),
+      );
+      if (payable.length === 0) {
+        return null;
+      }
+
+      if (preferredPriceId) {
+        const preferred = payable.find((productPrice) => productPrice.id === preferredPriceId);
+        if (preferred) {
+          return preferred;
+        }
+      }
+
+      return (
+        payable.find((productPrice) => {
+          const period = resolveBillingPeriod(
+            productPrice.interval,
+            productPrice.intervalCount,
+          );
+          return period === 'yearly';
+        }) ??
+        payable[payable.length - 1] ??
+        null
+      );
     },
     [],
   );
@@ -187,21 +231,62 @@ export default function UpgradeCheckoutPage() {
           return;
         }
 
+        const activePrices = siblingPrices.filter(
+          (productPrice) => productPrice.status === 'ACTIVE',
+        );
+        const activeCurrentPrice = planChangePreview.currentPlan;
+        const credit = Math.max(planChangePreview.preview.prorationCredit ?? 0, 0);
+
+        let checkoutPrice = loadedPrice;
+        let checkoutPreview = planChangePreview;
+
+        const selectedIsPayable = isPayableUpgradePeriod(
+          activeCurrentPrice,
+          loadedPrice,
+          credit,
+        );
+        const selectedLooksUnderpaid =
+          planChangePreview.direction === 'upgrade' &&
+          planChangePreview.preview.estimatedAmountPayable <= 0;
+
+        if (!selectedIsPayable || selectedLooksUnderpaid) {
+          const fallbackPrice = findPayableSiblingPrice(
+            activeCurrentPrice,
+            activePrices,
+            credit,
+            null,
+          );
+          if (!fallbackPrice) {
+            throw new Error(
+              'No payable upgrade billing period is available for your current plan. Try a higher plan or period from the plans page.',
+            );
+          }
+          if (fallbackPrice.id !== loadedPrice.id) {
+            checkoutPrice = fallbackPrice;
+            checkoutPreview = await billingService.previewPlanChange(
+              resolvedSubscriptionId,
+              fallbackPrice.id,
+            );
+          }
+        }
+
+        if (cancelled) {
+          return;
+        }
+
         setSubscriptionId(resolvedSubscriptionId);
         setEmail(user.email);
         setName(user.name ?? '');
         setStripePromise(loadStripe(checkoutConfig.publishableKey));
-        setCurrentPrice(planChangePreview.currentPlan);
-        setProductPrices(
-          siblingPrices.filter((productPrice) => productPrice.status === 'ACTIVE'),
-        );
+        setCurrentPrice(activeCurrentPrice);
+        setProductPrices(activePrices);
         setCurrentProductName(
-          planChangePreview.currentPlan.product?.name ??
+          checkoutPreview.currentPlan.product?.name ??
             locationState?.currentProductName ??
             subscription?.price?.product?.name ??
             null,
         );
-        applyPreview(loadedPrice, planChangePreview);
+        applyPreview(checkoutPrice, checkoutPreview);
         billingService.clearUpgradeCheckoutPrefetch(
           resolvedSubscriptionId,
           priceId,
@@ -232,7 +317,7 @@ export default function UpgradeCheckoutPage() {
           .catch(() => undefined);
       }
     };
-  }, [applyPreview, locationState, navigate, priceId, user]);
+  }, [applyPreview, findPayableSiblingPrice, locationState, navigate, priceId, user]);
 
   const refreshPreview = async (
     nextPrice: Price,
@@ -242,8 +327,7 @@ export default function UpgradeCheckoutPage() {
       return;
     }
 
-    const direction = comparePlanDirection(currentPrice, nextPrice);
-    if (direction !== 'upgrade' && direction !== 'lateral') {
+    if (!isPayableUpgradePeriod(currentPrice, nextPrice, unusedCreditEstimate)) {
       throw new Error('Selected billing period is not available for this upgrade.');
     }
 
@@ -268,8 +352,7 @@ export default function UpgradeCheckoutPage() {
       return;
     }
 
-    const direction = comparePlanDirection(currentPrice, nextPrice);
-    if (direction !== 'upgrade' && direction !== 'lateral') {
+    if (!isPayableUpgradePeriod(currentPrice, nextPrice, unusedCreditEstimate)) {
       setPeriodSwitchError(
         'That billing period is not available for an upgrade from your current plan.',
       );
@@ -388,13 +471,15 @@ export default function UpgradeCheckoutPage() {
                 : '')
             }
             prepareCheckout={async () => {
-              const direction = comparePlanDirection(currentPrice, price);
-              if (direction !== 'upgrade' && direction !== 'lateral') {
+              if (
+                !isPayableUpgradePeriod(currentPrice, price, unusedCreditEstimate)
+              ) {
                 throw new Error(
                   'Selected billing period is not available for an upgrade from your current plan.',
                 );
               }
 
+              const direction = comparePlanDirection(currentPrice, price);
               if (amountDue <= 0 && direction === 'upgrade') {
                 throw new Error(
                   'Unable to calculate the upgrade charge. Please try another billing period.',

@@ -95,26 +95,25 @@ export default function PlanCard({
       </div>
 
       {!hideAction && (
-      <div className="mt-8 space-y-2">
+      <div className="mt-8">
         <Button
           className="w-full"
-          variant={isCurrent || isScheduled ? 'ghost' : recommended ? 'primary' : 'secondary'}
+          variant={recommended && !isCurrent && !isScheduled ? 'primary' : 'secondary'}
           disabled={isCurrent || isScheduled || actionDisabled}
           onClick={onAction}
         >
           {actionLoading
             ? 'Processing…'
             : isCurrent
-              ? 'Your active plan'
+              ? 'Subscribed'
               : isScheduled
                 ? 'Scheduled'
                 : actionLabel}
         </Button>
-        {isCurrent && (
-          <p className="text-center text-xs text-muted">You are subscribed to this plan</p>
-        )}
         {isScheduled && (
-          <p className="text-center text-xs text-muted">This plan starts on the scheduled date</p>
+          <p className="mt-2 text-center text-xs text-muted">
+            This plan starts on the scheduled date
+          </p>
         )}
       </div>
       )}

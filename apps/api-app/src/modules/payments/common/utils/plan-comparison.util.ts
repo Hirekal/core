@@ -12,6 +12,7 @@ export interface PlanComparablePrice {
   interval: PriceInterval | null;
   intervalCount: number | null;
   paymentProviderId: string;
+  productId?: string;
 }
 
 const DAYS_PER_MONTH = 30.4375;
@@ -50,6 +51,10 @@ export function normalizePlanAmount(price: PlanComparablePrice): number {
 
 /*
  * Compares two prices and returns upgrade, downgrade, lateral, or same direction.
+ *
+ * Same-product billing-period changes use commitment length (quarterly → yearly
+ * is an upgrade even when the yearly plan is cheaper per month). Cross-product
+ * changes use normalized monthly amount.
  */
 export function comparePlans(
   current: PlanComparablePrice,
@@ -57,6 +62,29 @@ export function comparePlans(
 ): PlanChangeDirection {
   if (current.id === target.id) {
     return PlanChangeDirection.SAME;
+  }
+
+  const sameProduct =
+    Boolean(current.productId) &&
+    Boolean(target.productId) &&
+    current.productId === target.productId;
+
+  if (sameProduct) {
+    const currentMonths = intervalToMonths(
+      current.interval,
+      current.intervalCount,
+    );
+    const targetMonths = intervalToMonths(target.interval, target.intervalCount);
+
+    if (
+      Number.isFinite(currentMonths) &&
+      Number.isFinite(targetMonths) &&
+      currentMonths !== targetMonths
+    ) {
+      return targetMonths > currentMonths
+        ? PlanChangeDirection.UPGRADE
+        : PlanChangeDirection.DOWNGRADE;
+    }
   }
 
   const currentNormalized = normalizePlanAmount(current);

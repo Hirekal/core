@@ -15,7 +15,7 @@ import { useToast } from '../../context/ToastContext';
 import * as billingService from '../../services/billingService';
 import { persistSubscriptionSession } from '../../utils/billingStorage';
 import {
-  comparePriceTier,
+  comparePlanDirection,
   getBillingPeriodLabel,
   getScheduledPlanChangeAt,
   getScheduledPlanPriceId,
@@ -218,8 +218,8 @@ export default function PricingPlansPage() {
   const getActionLabel = useCallback(
     (plan: BillingPlan): string => {
       if (!currentPlan?.price) return 'Subscribe';
-      const direction = comparePriceTier(currentPlan.price, plan.price);
-      if (direction === 'upgrade') return 'Upgrade';
+      const direction = comparePlanDirection(currentPlan.price, plan.price);
+      if (direction === 'upgrade' || direction === 'lateral') return 'Upgrade';
       if (direction === 'downgrade') return 'Downgrade';
       return 'Subscribe';
     },
@@ -234,7 +234,7 @@ export default function PricingPlansPage() {
 
     setActionPriceId(plan.price.id);
     try {
-      const direction = comparePriceTier(currentPlan.price, plan.price);
+      const direction = comparePlanDirection(currentPlan.price, plan.price);
       if (direction === 'downgrade') {
         const updated = await billingService.downgradeSubscription(
           subscription.id,
@@ -279,8 +279,8 @@ export default function PricingPlansPage() {
       const activePrice = currentPlan?.price ?? subscription.price;
       if (!activePrice) return;
 
-      const direction = comparePriceTier(activePrice, plan.price);
-      if (direction === 'upgrade') {
+      const direction = comparePlanDirection(activePrice, plan.price);
+      if (direction === 'upgrade' || direction === 'lateral') {
         setConfirmUpgradePlan(plan);
         return;
       }
