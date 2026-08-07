@@ -389,7 +389,8 @@ export default function PricingPlansPage() {
     scheduledPlan?.product.name ??
     'your current plan';
 
-  const shouldShowPlans = !subscription || showChangePlans;
+  const shouldShowPlans =
+    !subscription || (showChangePlans && !subscription.cancelAtPeriodEnd);
   const hidePlanActions = Boolean(subscription?.cancelAtPeriodEnd);
 
   const handleChangePlan = () => {
@@ -436,7 +437,11 @@ export default function PricingPlansPage() {
           manageable
           processing={processing}
           changePlansVisible={showChangePlans}
-          onChangePlan={subscription ? handleChangePlan : undefined}
+          onChangePlan={
+            subscription && !subscription.cancelAtPeriodEnd
+              ? handleChangePlan
+              : undefined
+          }
           onCancel={() => setCancelOpen(true)}
           onCancelScheduledChange={handleCancelScheduledChange}
         />

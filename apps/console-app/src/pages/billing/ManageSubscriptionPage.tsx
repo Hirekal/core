@@ -293,11 +293,11 @@ export default function ManageSubscriptionPage() {
           <Button variant="secondary" onClick={() => navigate('/billing/plans')}>
             Subscribe again
           </Button>
-        ) : (
+        ) : !subscription.cancelAtPeriodEnd ? (
           <Button variant="secondary" onClick={() => navigate('/billing/plans')}>
-            Change plan
+            {scheduledPlan ? 'Show plans' : 'Change plan'}
           </Button>
-        )}
+        ) : null}
         {!isEnded && !subscription.cancelAtPeriodEnd && (
             <Button variant="danger" disabled={processing} onClick={() => setCancelOpen(true)}>
               Cancel subscription

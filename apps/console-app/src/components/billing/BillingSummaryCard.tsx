@@ -55,8 +55,13 @@ export default function BillingSummaryCard({
   const paymentMethodLabel = paymentMethod
     ? `${paymentMethod.brand?.toUpperCase() ?? 'CARD'} ···· ${paymentMethod.last4 ?? '****'}`
     : 'No payment method';
-  const showChangePlan = Boolean(onChangePlan);
+  const showChangePlan = Boolean(onChangePlan) && !subscription.cancelAtPeriodEnd;
   const changePlanDisabled = processing;
+  const changePlanLabel = changePlansVisible
+    ? 'Hide plans'
+    : scheduledPlan
+      ? 'Show plans'
+      : 'Change plan';
   const showCancelSchedule = Boolean(hasScheduledDowngrade && onCancelScheduledChange);
   const showCancel = Boolean(!subscription.cancelAtPeriodEnd && onCancel);
   const showActions = manageable && (showChangePlan || showCancelSchedule || showCancel);
@@ -112,7 +117,7 @@ export default function BillingSummaryCard({
                 disabled={changePlanDisabled}
                 onClick={onChangePlan}
               >
-                {changePlansVisible ? 'Hide plans' : 'Change plan'}
+                {changePlanLabel}
               </Button>
             )}
           </div>
