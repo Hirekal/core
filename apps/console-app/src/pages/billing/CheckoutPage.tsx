@@ -17,6 +17,7 @@ import {
   BILLING_PERIODS,
   matchesBillingPeriod,
   resolveBillingPeriod,
+  buildPeriodSavingsMap,
   type BillingPeriod,
 } from '../../utils/billingFormat';
 import type { Price, ValidatedCoupon } from '../../types/billing';
@@ -76,6 +77,11 @@ export default function CheckoutPage() {
       BILLING_PERIODS.filter((period) =>
         productPrices.some((productPrice) => matchesBillingPeriod(productPrice, period)),
       ),
+    [productPrices],
+  );
+
+  const savingsByPeriod = useMemo(
+    () => buildPeriodSavingsMap(productPrices),
     [productPrices],
   );
 
@@ -303,6 +309,7 @@ export default function CheckoutPage() {
           discountLabel={appliedCoupon?.promotionCode ?? null}
           billingPeriod={billingPeriod}
           availablePeriods={availablePeriods}
+          savingsByPeriod={savingsByPeriod}
           onBillingPeriodChange={handleBillingPeriodChange}
           periodSwitching={periodSwitching}
           appliedCoupon={appliedCoupon}

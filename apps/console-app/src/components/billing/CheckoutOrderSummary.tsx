@@ -24,6 +24,7 @@ interface CheckoutOrderSummaryProps {
   currentProductName?: string | null;
   billingPeriod?: BillingPeriod;
   availablePeriods?: BillingPeriod[];
+  savingsByPeriod?: Partial<Record<BillingPeriod, number>>;
   onBillingPeriodChange?: (period: BillingPeriod) => void;
   periodSwitching?: boolean;
   appliedCoupon?: ValidatedCoupon | null;
@@ -53,6 +54,7 @@ export default function CheckoutOrderSummary({
   couponError = '',
   onApplyCoupon,
   onRemoveCoupon,
+  savingsByPeriod,
 }: CheckoutOrderSummaryProps) {
   const isUpgrade = mode === 'upgrade';
   const totalDue =
@@ -124,6 +126,7 @@ export default function CheckoutOrderSummary({
             periods={availablePeriods}
             onChange={onBillingPeriodChange}
             disabled={periodSwitching || couponApplying}
+            savingsByPeriod={savingsByPeriod}
           />
         </div>
       )}

@@ -178,6 +178,89 @@ export function normalizeMonthlyAmount(
 }
 
 /**
+ * Percent saved vs paying the monthly price for the same commitment length.
+ * Returns null when monthly baseline is missing or there is no positive savings.
+ */
+export function getPeriodSavingsPercent(
+  periodPrice: Pick<Price, 'amount' | 'interval' | 'intervalCount'>,
+  monthlyPrice: Pick<Price, 'amount' | 'interval' | 'intervalCount'>,
+): number | null {
+  const monthlyNormalized = normalizeMonthlyAmount(monthlyPrice);
+  const periodNormalized = normalizeMonthlyAmount(periodPrice);
+
+  if (
+    !Number.isFinite(monthlyNormalized) ||
+    !Number.isFinite(periodNormalized) ||
+    monthlyNormalized <= 0 ||
+    periodNormalized >= monthlyNormalized
+  ) {
+    return null;
+  }
+
+  const percent = Math.round(
+    ((monthlyNormalized - periodNormalized) / monthlyNormalized) * 100,
+  );
+  return percent > 0 ? percent : null;
+}
+
+/**
+ * Builds period → savings% from a product's prices, compared to its monthly price.
+ * When multiple products are passed (plans catalog), uses the lowest savings
+ * for each period so the badge never overclaims.
+ */
+export function buildPeriodSavingsMap(
+  prices: Array<Pick<Price, 'amount' | 'interval' | 'intervalCount' | 'productId'>>,
+): Partial<Record<BillingPeriod, number>> {
+  const byProduct = new Map<string, typeof prices>();
+  for (const price of prices) {
+    const key = price.productId || '__single__';
+    const list = byProduct.get(key) ?? [];
+    list.push(price);
+    byProduct.set(key, list);
+  }
+
+  const savingsByPeriod: Partial<Record<BillingPeriod, number[]>> = {};
+
+  for (const productPrices of byProduct.values()) {
+    const monthly = productPrices.find((price) =>
+      matchesBillingPeriod(price, 'monthly'),
+    );
+    if (!monthly) {
+      continue;
+    }
+
+    for (const period of BILLING_PERIODS) {
+      if (period === 'monthly') {
+        continue;
+      }
+      const periodPrice = productPrices.find((price) =>
+        matchesBillingPeriod(price, period),
+      );
+      if (!periodPrice) {
+        continue;
+      }
+      const savings = getPeriodSavingsPercent(periodPrice, monthly);
+      if (savings == null) {
+        continue;
+      }
+      const list = savingsByPeriod[period] ?? [];
+      list.push(savings);
+      savingsByPeriod[period] = list;
+    }
+  }
+
+  const result: Partial<Record<BillingPeriod, number>> = {};
+  for (const period of BILLING_PERIODS) {
+    const values = savingsByPeriod[period];
+    if (!values?.length) {
+      continue;
+    }
+    result[period] = Math.min(...values);
+  }
+  return result;
+}
+
+/**
  * Returns the billing period length in months for ranking commitment length.
  */
 function intervalToMonths(

@@ -19,6 +19,7 @@ import {
   isPayableUpgradePeriod,
   matchesBillingPeriod,
   resolveBillingPeriod,
+  buildPeriodSavingsMap,
   type BillingPeriod,
 } from '../../utils/billingFormat';
 import type { Price, ValidatedCoupon } from '../../types/billing';
@@ -91,6 +92,11 @@ export default function UpgradeCheckoutPage() {
       }),
     );
   }, [currentPrice, productPrices, unusedCreditEstimate]);
+
+  const savingsByPeriod = useMemo(
+    () => buildPeriodSavingsMap(productPrices),
+    [productPrices],
+  );
 
   const applyPreview = useCallback(
     (
@@ -450,6 +456,7 @@ export default function UpgradeCheckoutPage() {
           currentProductName={currentProductName}
           billingPeriod={billingPeriod}
           availablePeriods={availablePeriods}
+          savingsByPeriod={savingsByPeriod}
           onBillingPeriodChange={handleBillingPeriodChange}
           periodSwitching={periodSwitching}
           appliedCoupon={appliedCoupon}

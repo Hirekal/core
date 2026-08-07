@@ -22,6 +22,7 @@ import {
   isBillableSubscription,
   matchesBillingPeriod,
   resolveBillingPeriod,
+  buildPeriodSavingsMap,
   type BillingPeriod,
 } from '../../utils/billingFormat';
 import { formatDate } from '../../utils/formatDate';
@@ -189,6 +190,11 @@ export default function PricingPlansPage() {
         .filter((plan) => matchesBillingPeriod(plan.price, billingPeriod))
         .sort((a, b) => a.sortOrder - b.sortOrder || a.price.amount - b.price.amount),
     [plans, billingPeriod],
+  );
+
+  const periodSavings = useMemo(
+    () => buildPeriodSavingsMap(plans.map((plan) => plan.price)),
+    [plans],
   );
 
   const subscriptionForDisplay = useMemo(() => {
@@ -441,7 +447,11 @@ export default function PricingPlansPage() {
       ) : shouldShowPlans ? (
         <>
           <div ref={plansSectionRef}>
-            <BillingPeriodToggle value={billingPeriod} onChange={setBillingPeriod} />
+            <BillingPeriodToggle
+              value={billingPeriod}
+              onChange={setBillingPeriod}
+              savingsByPeriod={periodSavings}
+            />
           </div>
 
           {visiblePlans.length === 0 ? (

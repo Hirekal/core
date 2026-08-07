@@ -42,10 +42,8 @@ export default function PlanCard({
   return (
     <Card
       className={`relative flex h-full flex-col ${
-        recommended && !isCurrent && !isScheduled ? 'border-accent/40 ring-1 ring-accent/20' : ''
-      } ${isCurrent ? 'border-accent bg-accent/[0.04] ring-2 ring-accent/30' : ''} ${
-        isScheduled ? 'border-accent/50 bg-accent/[0.03] ring-1 ring-accent/20' : ''
-      }`}
+        isCurrent ? 'border-accent bg-accent/[0.04] ring-2 ring-accent/30' : ''
+      } ${isScheduled ? 'border-accent/50 bg-accent/[0.03] ring-1 ring-accent/20' : ''}`}
     >
       {recommended && !isCurrent && (
         <div className="absolute -top-3 left-1/2 -translate-x-1/2">

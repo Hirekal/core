@@ -14,6 +14,8 @@ interface BillingPeriodToggleProps {
   onChange: (period: BillingPeriod) => void;
   variant?: 'pill' | 'radio';
   disabled?: boolean;
+  /** Actual % saved vs monthly for each period (e.g. { yearly: 17 }). */
+  savingsByPeriod?: Partial<Record<BillingPeriod, number>>;
 }
 
 /**
@@ -25,7 +27,22 @@ export default function BillingPeriodToggle({
   onChange,
   variant = 'pill',
   disabled = false,
+  savingsByPeriod = {},
 }: BillingPeriodToggleProps) {
+  const renderSavingsBadge = (
+    period: BillingPeriod,
+    className: string,
+  ) => {
+    if (period !== 'yearly') {
+      return null;
+    }
+    const savings = savingsByPeriod[period];
+    if (savings == null || savings <= 0) {
+      return null;
+    }
+    return <span className={className}>Save {savings}%</span>;
+  };
+
   if (variant === 'radio') {
     return (
       <div className="overflow-hidden rounded-md border border-[#e6ebf1] bg-white p-3 shadow-sm">
@@ -60,10 +77,9 @@ export default function BillingPeriodToggle({
                 </span>
                 <span className="flex flex-1 items-center gap-2 text-base font-medium text-[#1a1f36]">
                   {getBillingPeriodLabel(period)}
-                  {period === 'yearly' && (
-                    <span className="rounded-md bg-[#1a1f36] px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white">
-                      Save 50%
-                    </span>
+                  {renderSavingsBadge(
+                    period,
+                    'rounded-md bg-[#1a1f36] px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white',
                   )}
                 </span>
               </button>
@@ -101,10 +117,9 @@ export default function BillingPeriodToggle({
                 }`}
               >
                 {getBillingPeriodLabel(period)}
-                {period === 'yearly' && (
-                  <span className="rounded-md bg-gradient-to-r from-[#8b5cf6] to-[#06b6d4] px-2 py-0.5 text-[11px] font-semibold leading-none text-white">
-                    Save 50%
-                  </span>
+                {renderSavingsBadge(
+                  period,
+                  'rounded-md bg-gradient-to-r from-[#8b5cf6] to-[#06b6d4] px-2 py-0.5 text-[11px] font-semibold leading-none text-white',
                 )}
               </button>
             </div>
