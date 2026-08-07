@@ -1,12 +1,12 @@
 /**
  * @fileoverview Paginated invoice history table.
  */
-import { Download } from 'lucide-react';
+import { FileText, MoreHorizontal, Receipt } from 'lucide-react';
 import Table from '../common/Table';
 import Button from '../common/Button';
 import Badge from '../common/Badge';
 import EmptyState from '../common/EmptyState';
-import { FileText } from 'lucide-react';
+import Dropdown from '../common/Dropdown';
 import { formatDate } from '../../utils/formatDate';
 import { formatMoney, invoiceBadgeStatus } from '../../utils/billingFormat';
 import type { Invoice } from '../../types/billing';
@@ -18,7 +18,56 @@ interface InvoiceTableProps {
   pageSize: number;
   onPageChange: (page: number) => void;
   onDownloadInvoice: (invoice: Invoice) => void;
-  // onDownloadReceipt: (invoice: Invoice) => void;
+  onDownloadReceipt: (invoice: Invoice) => void;
+}
+
+interface InvoiceActionsMenuProps {
+  invoice: Invoice;
+  onDownloadInvoice: (invoice: Invoice) => void;
+  onDownloadReceipt: (invoice: Invoice) => void;
+}
+
+/**
+ * Three-dot actions menu with Invoice and Receipt downloads.
+ */
+function InvoiceActionsMenu({
+  invoice,
+  onDownloadInvoice,
+  onDownloadReceipt,
+}: InvoiceActionsMenuProps) {
+  const canInvoice = Boolean(invoice.invoicePdf || invoice.invoiceUrl);
+  const canReceipt = Boolean(
+    invoice.receiptUrl && invoice.receiptUrl.includes('/receipts/'),
+  );
+
+  return (
+    <Dropdown
+      align="right"
+      trigger={
+        <button
+          type="button"
+          className="rounded-lg p-1.5 text-muted transition-colors hover:bg-hover hover:text-heading"
+          aria-label="Payment actions"
+        >
+          <MoreHorizontal size={18} />
+        </button>
+      }
+      items={[
+        {
+          label: 'Invoice',
+          icon: <FileText size={16} />,
+          disabled: !canInvoice,
+          onClick: () => onDownloadInvoice(invoice),
+        },
+        {
+          label: 'Receipt',
+          icon: <Receipt size={16} />,
+          disabled: !canReceipt,
+          onClick: () => onDownloadReceipt(invoice),
+        },
+      ]}
+    />
+  );
 }
 
 /**
@@ -31,7 +80,7 @@ export default function InvoiceTable({
   pageSize,
   onPageChange,
   onDownloadInvoice,
-  // onDownloadReceipt,
+  onDownloadReceipt,
 }: InvoiceTableProps) {
   const totalPages = Math.max(1, Math.ceil(invoices.length / pageSize));
   const start = (page - 1) * pageSize;
@@ -90,40 +139,16 @@ export default function InvoiceTable({
     },
     {
       key: 'actions',
-      label: 'Action',
-      width: '120px',
+      label: 'Actions',
+      width: '80px',
       headerClassName: 'text-left',
       cellClassName: 'text-left',
       render: (row: Invoice) => (
-        <>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="justify-start !px-0"
-            disabled={!row.invoicePdf && !row.invoiceUrl}
-            onClick={(event) => {
-              event.stopPropagation();
-              onDownloadInvoice(row);
-            }}
-          >
-            <Download size={16} />
-            Download
-          </Button>
-          {/* Receipt disabled until Stripe receipt URLs are available.
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={!row.receiptUrl}
-            onClick={(event) => {
-              event.stopPropagation();
-              onDownloadReceipt(row);
-            }}
-          >
-            <Receipt size={16} />
-            Receipt
-          </Button>
-          */}
-        </>
+        <InvoiceActionsMenu
+          invoice={row}
+          onDownloadInvoice={onDownloadInvoice}
+          onDownloadReceipt={onDownloadReceipt}
+        />
       ),
     },
   ];

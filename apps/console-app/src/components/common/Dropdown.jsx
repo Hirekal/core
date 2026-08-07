@@ -2,7 +2,7 @@ import { ChevronDown, Check } from 'lucide-react';
 import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 
-function useMenuPosition(open, triggerRef, menuRef) {
+function useMenuPosition(open, triggerRef, menuRef, align = 'left') {
   const [position, setPosition] = useState(null);
 
   useLayoutEffect(() => {
@@ -16,14 +16,19 @@ function useMenuPosition(open, triggerRef, menuRef) {
       if (!trigger) return;
 
       const rect = trigger.getBoundingClientRect();
+      const menuWidth = menuRef.current?.offsetWidth || 200;
       const menuHeight = menuRef.current?.offsetHeight || 240;
       const gap = 6;
       const spaceBelow = window.innerHeight - rect.bottom - gap;
       const spaceAbove = rect.top - gap;
       const openUpward = spaceBelow < Math.min(menuHeight, 240) && spaceAbove > spaceBelow;
+      const left =
+        align === 'right'
+          ? Math.max(8, rect.right - menuWidth)
+          : rect.left;
 
       setPosition({
-        left: rect.left,
+        left,
         width: rect.width,
         top: openUpward ? rect.top - gap : rect.bottom + gap,
         transform: openUpward ? 'translateY(-100%)' : undefined,
@@ -37,7 +42,7 @@ function useMenuPosition(open, triggerRef, menuRef) {
       window.removeEventListener('scroll', update, true);
       window.removeEventListener('resize', update);
     };
-  }, [open, triggerRef, menuRef]);
+  }, [open, triggerRef, menuRef, align]);
 
   return position;
 }
@@ -47,7 +52,7 @@ export default function Dropdown({ trigger, items, align = 'right' }) {
   const ref = useRef(null);
   const triggerRef = useRef(null);
   const menuRef = useRef(null);
-  const position = useMenuPosition(open, triggerRef, menuRef);
+  const position = useMenuPosition(open, triggerRef, menuRef, align);
 
   useEffect(() => {
     function handleClick(e) {
@@ -59,17 +64,27 @@ export default function Dropdown({ trigger, items, align = 'right' }) {
   }, []);
 
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative inline-flex" ref={ref}>
       <div
         ref={triggerRef}
-        onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+        className="inline-flex"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((current) => !current);
+        }}
       >
         {trigger}
       </div>
       {open && position && createPortal(
         <div
           ref={menuRef}
-          style={{ position: 'fixed', left: position.left, top: position.top, transform: position.transform, zIndex: 9999 }}
+          style={{
+            position: 'fixed',
+            left: position.left,
+            top: position.top,
+            transform: position.transform,
+            zIndex: 9999,
+          }}
           className={`min-w-[200px] overflow-hidden rounded-xl border border-border bg-card py-1 shadow-xl ${
             align === 'right' ? 'origin-top-right' : 'origin-top-left'
           }`}
@@ -81,12 +96,16 @@ export default function Dropdown({ trigger, items, align = 'right' }) {
               <button
                 key={i}
                 type="button"
+                disabled={item.disabled}
                 onClick={() => {
+                  if (item.disabled) return;
                   item.onClick?.();
                   setOpen(false);
                 }}
-                className={`flex w-full items-center gap-2 px-4 py-2.5 text-sm transition-colors ${
-                  item.danger ? 'text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30' : 'text-heading hover:bg-hover'
+                className={`flex w-full items-center gap-2 px-4 py-2.5 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                  item.danger
+                    ? 'text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30'
+                    : 'text-heading hover:bg-hover'
                 }`}
               >
                 {item.icon}

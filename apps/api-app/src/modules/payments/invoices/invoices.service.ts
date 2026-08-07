@@ -344,8 +344,14 @@ export class InvoicesService {
     if (providerResult.providerPaymentId) {
       metadata.providerPaymentId = providerResult.providerPaymentId;
     }
-    if (providerResult.receiptUrl) {
+    if (providerResult.receiptUrl && this.isStripeChargeReceiptUrl(providerResult.receiptUrl)) {
       metadata.receiptUrl = providerResult.receiptUrl;
+    } else if (
+      typeof metadata.receiptUrl === 'string' &&
+      !this.isStripeChargeReceiptUrl(metadata.receiptUrl)
+    ) {
+      // Drop invoice PDF / hosted invoice URLs previously stored as receiptUrl.
+      delete metadata.receiptUrl;
     }
     if (providerResult.invoiceNumber) {
       metadata.invoiceNumber = providerResult.invoiceNumber;
@@ -364,24 +370,37 @@ export class InvoicesService {
   }
 
   /*
-   * Resolves a receipt URL from synced metadata or paid invoice links.
+   * True only for Stripe charge receipt URLs (not invoice PDF / hosted invoice).
+   */
+  private isStripeChargeReceiptUrl(url: string): boolean {
+    try {
+      const parsed = new URL(url);
+      return (
+        /pay\.stripe\.com$/i.test(parsed.hostname) &&
+        parsed.pathname.includes('/receipts/')
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  /*
+   * Resolves a charge receipt URL from synced metadata only.
+   * Never falls back to invoice PDF or hosted invoice URL.
    */
   private resolveReceiptUrlForApi(
-    invoice: Invoice,
+    _invoice: Invoice,
     metadata: Record<string, unknown>,
   ): string | null {
     if (
       typeof metadata.receiptUrl === 'string' &&
-      metadata.receiptUrl.length > 0
+      metadata.receiptUrl.length > 0 &&
+      this.isStripeChargeReceiptUrl(metadata.receiptUrl)
     ) {
       return metadata.receiptUrl;
     }
 
-    if (invoice.invoiceStatus !== InvoiceStatus.PAID) {
-      return null;
-    }
-
-    return invoice.invoiceUrl ?? invoice.invoicePdf ?? null;
+    return null;
   }
 
   /*

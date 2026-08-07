@@ -1064,14 +1064,24 @@ export class StripeProvider implements PaymentProvider {
       // Stripe allows at most 4 expand levels on list responses, so
       // data.lines.data.price.product (5) is rejected. Product names are
       // resolved from line descriptions / local catalog via price IDs.
+      // Charge receipt URLs are not available on list expands — fetched
+      // per paid invoice via charges.retrieve (see fetchChargeReceiptUrl).
       const invoices = await this.stripeService.getClient().invoices.list({
         customer: providerCustomerId,
         limit: 100,
         expand: ['data.lines.data.price'],
       });
 
-      return invoices.data.map((invoice: Stripe.Invoice) =>
-        this.mapInvoice(invoice),
+      return Promise.all(
+        invoices.data.map(async (invoice: Stripe.Invoice) => {
+          const mapped = this.mapInvoice(invoice);
+          if (invoice.status === 'paid' && invoice.amount_paid > 0) {
+            mapped.receiptUrl = await this.fetchChargeReceiptUrl(invoice.id);
+          } else {
+            mapped.receiptUrl = null;
+          }
+          return mapped;
+        }),
       );
     } catch (error) {
       rethrowStripeError(error);
@@ -1384,7 +1394,12 @@ export class StripeProvider implements PaymentProvider {
         ],
       },
     );
-    return this.mapInvoice(invoice);
+    const mapped = this.mapInvoice(invoice);
+    const receiptUrl = await this.resolveInvoiceReceiptUrlAsync(invoice);
+    if (receiptUrl) {
+      mapped.receiptUrl = receiptUrl;
+    }
+    return mapped;
   }
 
   /*
@@ -1687,25 +1702,173 @@ export class StripeProvider implements PaymentProvider {
   }
 
   /*
-   * Resolves the Stripe payment receipt URL when a charge exists.
+   * Converts a Stripe hosted receipt page URL into a direct PDF download URL.
+   * Stripe only exposes receipt_url (HTML); appending /pdf?s=ap triggers the PDF.
    */
-  private resolveInvoiceReceiptUrl(invoice: Stripe.Invoice): string | null {
-    const invoiceWithCharges = invoice as Stripe.Invoice & {
-      latest_charge?: string | Stripe.Charge | null;
-      charge?: string | Stripe.Charge | null;
-    };
+  private toReceiptPdfDownloadUrl(receiptUrl: string): string {
+    try {
+      const parsed = new URL(receiptUrl);
+      if (!this.isStripeChargeReceiptUrl(receiptUrl)) {
+        return receiptUrl;
+      }
 
-    for (const chargeRef of [
-      invoiceWithCharges.latest_charge,
-      invoiceWithCharges.charge,
-    ]) {
-      if (chargeRef && typeof chargeRef === 'object' && chargeRef.receipt_url) {
-        return chargeRef.receipt_url;
+      const path = parsed.pathname.replace(/\/$/, '');
+      parsed.pathname = path.endsWith('/pdf') ? path : `${path}/pdf`;
+      parsed.search = 's=ap';
+      return parsed.toString();
+    } catch {
+      return receiptUrl;
+    }
+  }
+
+  /*
+   * True only for Stripe charge receipt URLs (never invoice PDF / hosted invoice).
+   */
+  private isStripeChargeReceiptUrl(url: string): boolean {
+    try {
+      const parsed = new URL(url);
+      return (
+        /pay\.stripe\.com$/i.test(parsed.hostname) &&
+        parsed.pathname.includes('/receipts/')
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  /*
+   * Collects charge refs already present on an invoice (expanded or ID-only).
+   */
+  private collectInvoiceChargeRefs(
+    invoice: Stripe.Invoice,
+  ): Array<string | Stripe.Charge> {
+    const refs: Array<string | Stripe.Charge> = [];
+
+    const payments = (
+      invoice as Stripe.Invoice & {
+        payments?: {
+          data?: Array<{
+            payment?: {
+              charge?: string | Stripe.Charge | null;
+              payment_intent?: string | Stripe.PaymentIntent | null;
+            } | null;
+          }>;
+        } | null;
+      }
+    ).payments?.data;
+
+    for (const entry of payments ?? []) {
+      const charge = entry.payment?.charge;
+      if (charge) {
+        refs.push(charge);
+      }
+
+      const paymentIntent = entry.payment?.payment_intent;
+      if (paymentIntent && typeof paymentIntent === 'object') {
+        const latestCharge = paymentIntent.latest_charge;
+        if (latestCharge) {
+          refs.push(latestCharge);
+        }
       }
     }
 
-    if (invoice.status === 'paid') {
-      return invoice.hosted_invoice_url ?? invoice.invoice_pdf ?? null;
+    const invoiceWithLegacy = invoice as Stripe.Invoice & {
+      latest_charge?: string | Stripe.Charge | null;
+      charge?: string | Stripe.Charge | null;
+    };
+    if (invoiceWithLegacy.latest_charge) {
+      refs.push(invoiceWithLegacy.latest_charge);
+    }
+    if (invoiceWithLegacy.charge) {
+      refs.push(invoiceWithLegacy.charge);
+    }
+
+    return refs;
+  }
+
+  /*
+   * Resolves a receipt URL from already-expanded charge objects only.
+   */
+  private resolveExpandedChargeReceiptUrl(
+    invoice: Stripe.Invoice,
+  ): string | null {
+    for (const chargeRef of this.collectInvoiceChargeRefs(invoice)) {
+      if (
+        chargeRef &&
+        typeof chargeRef === 'object' &&
+        chargeRef.receipt_url &&
+        this.isStripeChargeReceiptUrl(chargeRef.receipt_url)
+      ) {
+        return this.toReceiptPdfDownloadUrl(chargeRef.receipt_url);
+      }
+    }
+    return null;
+  }
+
+  /*
+   * Resolves the Stripe charge receipt URL only (never invoice PDF / hosted URL).
+   */
+  private resolveInvoiceReceiptUrl(invoice: Stripe.Invoice): string | null {
+    return this.resolveExpandedChargeReceiptUrl(invoice);
+  }
+
+  /*
+   * Loads payment intent + charge for an invoice and returns the charge receipt
+   * PDF URL. Returns null when no charge receipt exists (does not use invoice PDF).
+   */
+  private async fetchChargeReceiptUrl(
+    providerInvoiceId: string,
+  ): Promise<string | null> {
+    try {
+      const invoice = await this.stripeService.getClient().invoices.retrieve(
+        providerInvoiceId,
+        {
+          expand: ['payments.data.payment.payment_intent'],
+        },
+      );
+      return this.resolveInvoiceReceiptUrlAsync(invoice);
+    } catch {
+      return null;
+    }
+  }
+
+  /*
+   * Resolves a charge receipt URL for sync flows, fetching the charge when
+   * only an ID is available on the invoice payment / payment intent.
+   * Never falls back to invoice PDF or hosted invoice URL.
+   */
+  private async resolveInvoiceReceiptUrlAsync(
+    invoice: Stripe.Invoice,
+  ): Promise<string | null> {
+    const fromExpanded = this.resolveExpandedChargeReceiptUrl(invoice);
+    if (fromExpanded) {
+      return fromExpanded;
+    }
+
+    for (const chargeRef of this.collectInvoiceChargeRefs(invoice)) {
+      const chargeId =
+        typeof chargeRef === 'string'
+          ? chargeRef
+          : typeof chargeRef === 'object'
+            ? chargeRef.id
+            : null;
+      if (!chargeId) {
+        continue;
+      }
+
+      try {
+        const charge = await this.stripeService
+          .getClient()
+          .charges.retrieve(chargeId);
+        if (
+          charge.receipt_url &&
+          this.isStripeChargeReceiptUrl(charge.receipt_url)
+        ) {
+          return this.toReceiptPdfDownloadUrl(charge.receipt_url);
+        }
+      } catch {
+        // Keep trying other charge refs.
+      }
     }
 
     return null;

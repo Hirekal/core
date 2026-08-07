@@ -57,19 +57,45 @@ export default function InvoicesPage() {
   };
 
   /*
-   * Opens the Stripe payment receipt in a new browser tab.
+   * Converts a Stripe hosted receipt page into a direct PDF download URL.
+   * Only accepts real charge receipt URLs under /receipts/ (never invoice PDFs).
    */
-  // const handleDownloadReceipt = (invoice: Invoice) => {
-  //   try {
-  //     if (!invoice.receiptUrl) {
-  //       showError(new Error('Receipt download unavailable'), 'Receipt download failed');
-  //       return;
-  //     }
-  //     window.open(invoice.receiptUrl, '_blank', 'noopener,noreferrer');
-  //   } catch (err) {
-  //     showError(err, 'Receipt download failed');
-  //   }
-  // };
+  const toReceiptPdfDownloadUrl = (receiptUrl: string): string | null => {
+    try {
+      const parsed = new URL(receiptUrl);
+      if (
+        !/pay\.stripe\.com$/i.test(parsed.hostname) ||
+        !parsed.pathname.includes('/receipts/')
+      ) {
+        return null;
+      }
+
+      const path = parsed.pathname.replace(/\/$/, '');
+      parsed.pathname = path.endsWith('/pdf') ? path : `${path}/pdf`;
+      parsed.search = 's=ap';
+      return parsed.toString();
+    } catch {
+      return null;
+    }
+  };
+
+  /*
+   * Opens the Stripe payment receipt PDF (not the invoice) in a new browser tab.
+   */
+  const handleDownloadReceipt = (invoice: Invoice) => {
+    try {
+      const receiptPdfUrl = invoice.receiptUrl
+        ? toReceiptPdfDownloadUrl(invoice.receiptUrl)
+        : null;
+      if (!receiptPdfUrl) {
+        showError(new Error('Receipt download unavailable'), 'Receipt download failed');
+        return;
+      }
+      window.open(receiptPdfUrl, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      showError(err, 'Receipt download failed');
+    }
+  };
 
   if (loading) {
     return (
@@ -91,7 +117,7 @@ export default function InvoicesPage() {
               pageSize={PAGE_SIZE}
               onPageChange={setPage}
               onDownloadInvoice={handleDownloadInvoice}
-              // onDownloadReceipt={handleDownloadReceipt}
+              onDownloadReceipt={handleDownloadReceipt}
             />
           </div>
         </Card>
@@ -121,7 +147,7 @@ export default function InvoicesPage() {
             pageSize={PAGE_SIZE}
             onPageChange={setPage}
             onDownloadInvoice={handleDownloadInvoice}
-            // onDownloadReceipt={handleDownloadReceipt}
+            onDownloadReceipt={handleDownloadReceipt}
           />
         </div>
       </Card>
