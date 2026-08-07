@@ -79,6 +79,8 @@ export interface ProviderPlanChangePreviewInput {
   providerSubscriptionId: string;
   providerPriceId: string;
   providerCouponId?: string | null;
+  /** When set, skips Stripe price retrieves to detect interval changes. */
+  resetBillingCycle?: boolean;
 }
 
 export interface ProviderPlanChangePreviewResult {
@@ -118,6 +120,8 @@ export interface ProviderUpgradeCheckoutSessionInput {
   providerPriceId: string;
   metadata?: Record<string, string>;
   providerCouponId?: string | null;
+  /** When set, skips Stripe price retrieves to detect interval changes. */
+  resetBillingCycle?: boolean;
 }
 
 export interface ProviderUpgradeCheckoutSessionResult

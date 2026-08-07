@@ -50,9 +50,13 @@ export default function CheckoutOrderSummary({
   onRemoveCoupon,
 }: CheckoutOrderSummaryProps) {
   const isUpgrade = mode === 'upgrade';
-  const totalDue = amountDueToday ?? price.amount;
+  const totalDue =
+    amountDueToday != null ? amountDueToday : isUpgrade ? null : price.amount;
   const discount = Math.max(discountAmount, 0);
-  const lineSubtotal = totalDue + discount;
+  const lineSubtotal =
+    totalDue == null ? null : Math.max(totalDue + discount, 0);
+  const formatAmount = (amount: number | null) =>
+    amount == null ? 'Calculating…' : formatMoney(amount, price.currency);
 
   const [couponInput, setCouponInput] = useState('');
   const [showCouponField, setShowCouponField] = useState(Boolean(appliedCoupon));
@@ -99,7 +103,7 @@ export default function CheckoutOrderSummary({
           <>
             <p className="text-sm text-muted">Subscribe to</p>
             <p className="mt-1 text-3xl font-semibold tracking-tight text-heading sm:text-4xl">
-              {formatMoney(totalDue, price.currency)}
+              {formatMoney(totalDue ?? price.amount, price.currency)}
             </p>
             <p className="mt-1 text-sm text-muted">
               per{' '}
@@ -211,11 +215,9 @@ export default function CheckoutOrderSummary({
       <div className="mt-6 space-y-3 border-t border-black/10 pt-6 text-sm">
         <div className="flex items-center justify-between gap-4">
           <span className="text-muted">{isUpgrade ? 'Prorated charge' : 'Subtotal'}</span>
-          <span className="text-heading">
-            {formatMoney(lineSubtotal, price.currency)}
-          </span>
+          <span className="text-heading">{formatAmount(lineSubtotal)}</span>
         </div>
-        {discount > 0 && (
+        {discount > 0 && totalDue != null && (
           <div className="flex items-center justify-between gap-4 text-[#0d9488]">
             <span>
               Discount
@@ -228,7 +230,7 @@ export default function CheckoutOrderSummary({
         )}
         <div className="flex items-center justify-between gap-4 font-semibold text-heading">
           <span>Total due today</span>
-          <span>{formatMoney(totalDue, price.currency)}</span>
+          <span>{formatAmount(totalDue)}</span>
         </div>
       </div>
 

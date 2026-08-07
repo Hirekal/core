@@ -277,10 +277,13 @@ export class StripeProvider implements PaymentProvider {
         subscription.start_date;
 
       const currentProviderPriceId = resolveStripeResourceId(subscriptionItem.price);
-      const intervalChange = await this.isBillingIntervalChange(
-        currentProviderPriceId,
-        input.providerPriceId,
-      );
+      const intervalChange =
+        typeof input.resetBillingCycle === 'boolean'
+          ? input.resetBillingCycle
+          : await this.isBillingIntervalChange(
+              currentProviderPriceId,
+              input.providerPriceId,
+            );
 
       const subscriptionDetails: Stripe.InvoiceCreatePreviewParams.SubscriptionDetails =
         {
@@ -745,10 +748,13 @@ export class StripeProvider implements PaymentProvider {
       await this.releaseSubscriptionSchedule(input.providerSubscriptionId);
 
       const currentProviderPriceId = resolveStripeResourceId(subscriptionItem.price);
-      const intervalChange = await this.isBillingIntervalChange(
-        currentProviderPriceId,
-        input.providerPriceId,
-      );
+      const intervalChange =
+        typeof input.resetBillingCycle === 'boolean'
+          ? input.resetBillingCycle
+          : await this.isBillingIntervalChange(
+              currentProviderPriceId,
+              input.providerPriceId,
+            );
 
       const discounts = buildStripeDiscounts(input);
       const updatedSubscription = await stripe.subscriptions.update(

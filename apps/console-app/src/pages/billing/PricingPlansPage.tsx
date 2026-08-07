@@ -122,6 +122,11 @@ export default function PricingPlansPage() {
   );
 
   useEffect(() => {
+    // Warm Stripe.js while the user browses plans so checkout mounts faster.
+    void billingService.warmCheckoutRuntime().catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
     const retrySubscription = Boolean(checkoutState?.subscribed);
     const fallbackSubscription = checkoutState?.subscription ?? null;
 
@@ -140,6 +145,23 @@ export default function PricingPlansPage() {
     if (!subscription?.priceId) return null;
     return plans.find((plan) => plan.price.id === subscription.priceId) ?? null;
   }, [plans, subscription?.priceId]);
+
+  useEffect(() => {
+    if (!confirmUpgradePlan || !subscription) {
+      return;
+    }
+
+    // Start upgrade preview while the confirmation dialog is open.
+    billingService.prefetchUpgradeCheckout({
+      subscriptionId: subscription.id,
+      priceId: confirmUpgradePlan.price.id,
+      price: {
+        ...confirmUpgradePlan.price,
+        product: confirmUpgradePlan.product,
+      },
+      currentProductName: currentPlan?.product.name ?? null,
+    });
+  }, [confirmUpgradePlan, subscription, currentPlan?.product.name]);
 
   useEffect(() => {
     if (subscriptionPeriodSyncedRef.current) {
@@ -240,7 +262,17 @@ export default function PricingPlansPage() {
       if (plan.price.id === currentPriceId) return;
 
       if (!subscription || !isBillableSubscription(subscription)) {
-        navigate(`/billing/checkout/${plan.price.id}`);
+        if (user?.email) {
+          billingService.prefetchSubscribeCheckout({
+            priceId: plan.price.id,
+            email: user.email,
+            name: user.name ?? undefined,
+            price: { ...plan.price, product: plan.product },
+          });
+        }
+        navigate(`/billing/checkout/${plan.price.id}`, {
+          state: { price: { ...plan.price, product: plan.product } },
+        });
         return;
       }
 
@@ -273,10 +305,28 @@ export default function PricingPlansPage() {
   };
 
   const handleConfirmUpgrade = () => {
-    if (!confirmUpgradePlan) return;
+    if (!confirmUpgradePlan || !subscription) return;
     const priceId = confirmUpgradePlan.price.id;
+    const nextPrice = {
+      ...confirmUpgradePlan.price,
+      product: confirmUpgradePlan.product,
+    };
+
+    billingService.prefetchUpgradeCheckout({
+      subscriptionId: subscription.id,
+      priceId,
+      price: nextPrice,
+      currentProductName: currentPlan?.product.name ?? null,
+    });
+
     setConfirmUpgradePlan(null);
-    navigate(`/billing/upgrade/checkout/${priceId}`);
+    navigate(`/billing/upgrade/checkout/${priceId}`, {
+      state: {
+        price: nextPrice,
+        subscriptionId: subscription.id,
+        currentProductName: currentPlan?.product.name ?? null,
+      },
+    });
   };
 
   const upgradeConfirmMessage = useMemo(() => {

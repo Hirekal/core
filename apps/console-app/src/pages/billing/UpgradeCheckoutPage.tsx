@@ -2,14 +2,14 @@
  * @fileoverview Custom checkout for prorated plan upgrades.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Elements } from '@stripe/react-stripe-js';
 import { loadStripe, type Stripe } from '@stripe/stripe-js';
-import LoadingSpinner from '../../components/common/LoadingSpinner';
 import Button from '../../components/common/Button';
 import BillingErrorState from '../../components/billing/BillingErrorState';
 import CheckoutOrderSummary from '../../components/billing/CheckoutOrderSummary';
 import CheckoutPaymentForm from '../../components/billing/CheckoutPaymentForm';
+import CheckoutSkeleton from '../../components/billing/CheckoutSkeleton';
 import { useAuth } from '../../context/AuthContext';
 import * as billingService from '../../services/billingService';
 import { toUserErrorMessage } from '../../utils/errorMessage';
@@ -22,20 +22,32 @@ import {
 } from '../../utils/billingFormat';
 import type { Price, ValidatedCoupon } from '../../types/billing';
 
+type UpgradeLocationState = {
+  price?: Price;
+  subscriptionId?: string;
+  currentProductName?: string | null;
+};
+
 /**
  * Renders upgrade checkout with prorated amount and card entry.
  */
 export default function UpgradeCheckoutPage() {
   const { priceId } = useParams();
+  const location = useLocation();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const locationState = (location.state as UpgradeLocationState | null) ?? null;
 
-  const [price, setPrice] = useState<Price | null>(null);
+  const [price, setPrice] = useState<Price | null>(locationState?.price ?? null);
   const [currentPrice, setCurrentPrice] = useState<Price | null>(null);
   const [productPrices, setProductPrices] = useState<Price[]>([]);
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly');
-  const [currentProductName, setCurrentProductName] = useState<string | null>(null);
-  const [subscriptionId, setSubscriptionId] = useState<string | null>(null);
+  const [currentProductName, setCurrentProductName] = useState<string | null>(
+    locationState?.currentProductName ?? null,
+  );
+  const [subscriptionId, setSubscriptionId] = useState<string | null>(
+    locationState?.subscriptionId ?? null,
+  );
   const [email, setEmail] = useState(user?.email ?? '');
   const [name, setName] = useState(user?.name ?? '');
   const [amountDue, setAmountDue] = useState<number | null>(null);
@@ -52,7 +64,7 @@ export default function UpgradeCheckoutPage() {
   const [couponApplying, setCouponApplying] = useState(false);
   const [couponError, setCouponError] = useState('');
   const upgradePreparedRef = useRef(false);
-  const subscriptionIdRef = useRef<string | null>(null);
+  const subscriptionIdRef = useRef<string | null>(locationState?.subscriptionId ?? null);
   const upgradeSucceededRef = useRef(false);
 
   useEffect(() => {
@@ -123,47 +135,77 @@ export default function UpgradeCheckoutPage() {
         upgradePreparedRef.current = false;
         upgradeSucceededRef.current = false;
 
-        const subscription = await billingService.getMySubscription();
-        if (!subscription) {
+        const subscriptionPromise = locationState?.subscriptionId
+          ? Promise.resolve(null)
+          : billingService.getMySubscription();
+
+        const subscription = await subscriptionPromise;
+        const resolvedSubscriptionId =
+          locationState?.subscriptionId ?? subscription?.id ?? null;
+
+        if (!resolvedSubscriptionId) {
           throw new Error('You need an active subscription before upgrading.');
         }
 
-        // Clear any unpaid upgrade left from a failed/abandoned attempt.
-        try {
-          await billingService.cancelPendingUpgradeCheckout(subscription.id);
-        } catch {
-          // Ignore cleanup failures; preview/create also restore state.
-        }
+        const prefetch = billingService.takeUpgradeCheckoutPrefetch(
+          resolvedSubscriptionId,
+          priceId,
+        );
 
-        const [loadedPrice, planChangePreview, checkoutConfig] = await Promise.all([
-          billingService.getPrice(priceId),
-          billingService.previewPlanChange(subscription.id, priceId),
-          billingService.getCheckoutConfig(),
-        ]);
+        const loadedPricePromise = prefetch?.price
+          ? Promise.resolve(prefetch.price)
+          : locationState?.price && locationState.price.id === priceId
+            ? Promise.resolve(locationState.price)
+            : billingService.getPrice(priceId);
+
+        const previewPromise =
+          prefetch?.previewPromise ??
+          billingService.previewPlanChange(resolvedSubscriptionId, priceId);
+
+        const siblingPricesPromise =
+          prefetch?.siblingPricesPromise ??
+          loadedPricePromise.then((loadedPrice) =>
+            billingService.getPrices(loadedPrice.productId),
+          );
+
+        const configPromise =
+          prefetch?.configPromise ?? billingService.getCheckoutConfig();
+
+        const [loadedPrice, planChangePreview, siblingPrices, checkoutConfig] =
+          await Promise.all([
+            loadedPricePromise,
+            previewPromise,
+            siblingPricesPromise.catch(() => [] as Price[]),
+            configPromise,
+          ]);
 
         if (!checkoutConfig.publishableKey) {
           throw new Error('Checkout is missing required Stripe configuration');
         }
 
-        const siblingPrices = await billingService.getPrices(loadedPrice.productId);
-        const activeSiblingPrices = siblingPrices.filter(
-          (productPrice) => productPrice.status === 'ACTIVE',
-        );
-
-        if (!cancelled) {
-          setCurrentPrice(planChangePreview.currentPlan);
-          setProductPrices(activeSiblingPrices);
-          setCurrentProductName(
-            planChangePreview.currentPlan.product?.name ??
-              subscription.price?.product?.name ??
-              null,
-          );
-          setSubscriptionId(subscription.id);
-          setEmail(user.email);
-          setName(user.name ?? '');
-          setStripePromise(loadStripe(checkoutConfig.publishableKey));
-          applyPreview(loadedPrice, planChangePreview);
+        if (cancelled) {
+          return;
         }
+
+        setSubscriptionId(resolvedSubscriptionId);
+        setEmail(user.email);
+        setName(user.name ?? '');
+        setStripePromise(loadStripe(checkoutConfig.publishableKey));
+        setCurrentPrice(planChangePreview.currentPlan);
+        setProductPrices(
+          siblingPrices.filter((productPrice) => productPrice.status === 'ACTIVE'),
+        );
+        setCurrentProductName(
+          planChangePreview.currentPlan.product?.name ??
+            locationState?.currentProductName ??
+            subscription?.price?.product?.name ??
+            null,
+        );
+        applyPreview(loadedPrice, planChangePreview);
+        billingService.clearUpgradeCheckoutPrefetch(
+          resolvedSubscriptionId,
+          priceId,
+        );
       } catch (err) {
         if (!cancelled) {
           setError(toUserErrorMessage(err, 'Failed to load upgrade checkout'));
@@ -190,7 +232,7 @@ export default function UpgradeCheckoutPage() {
           .catch(() => undefined);
       }
     };
-  }, [applyPreview, navigate, priceId, user]);
+  }, [applyPreview, locationState, navigate, priceId, user]);
 
   const refreshPreview = async (
     nextPrice: Price,
@@ -238,8 +280,7 @@ export default function UpgradeCheckoutPage() {
     setPeriodSwitchError('');
 
     try {
-      const loadedPrice = await billingService.getPrice(nextPrice.id);
-      await refreshPreview(loadedPrice, appliedCoupon);
+      await refreshPreview(nextPrice, appliedCoupon);
     } catch (err) {
       setPeriodSwitchError(toUserErrorMessage(err, 'Failed to update billing period'));
     } finally {
@@ -286,7 +327,7 @@ export default function UpgradeCheckoutPage() {
   };
 
   if (loading) {
-    return <LoadingSpinner message="Loading upgrade checkout…" />;
+    return <CheckoutSkeleton />;
   }
 
   if (

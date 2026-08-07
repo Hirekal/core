@@ -369,11 +369,42 @@ export async function getInvoices(paymentProviderId: string): Promise<Invoice[]>
 
 /*
  * Returns Stripe publishable key for embedded checkout.
+ * Cached in-memory for the session to avoid repeat config round-trips.
  */
+let checkoutConfigPromise: Promise<{ publishableKey: string }> | null = null;
+let stripeRuntimePromise: Promise<unknown> | null = null;
+
 export async function getCheckoutConfig(): Promise<{ publishableKey: string }> {
-  return withBillingErrorHandling(() =>
-    apiRequest('/payments/checkout/config', { auth: true }),
-  );
+  if (!checkoutConfigPromise) {
+    checkoutConfigPromise = withBillingErrorHandling(() =>
+      apiRequest('/payments/checkout/config', { auth: true }),
+    ).catch((error) => {
+      checkoutConfigPromise = null;
+      throw error;
+    });
+  }
+  return checkoutConfigPromise;
+}
+
+/*
+ * Warms checkout config + Stripe.js so payment UI mounts faster.
+ */
+export function warmCheckoutRuntime(): Promise<unknown> {
+  if (!stripeRuntimePromise) {
+    stripeRuntimePromise = getCheckoutConfig()
+      .then(async (config) => {
+        if (!config.publishableKey) {
+          return null;
+        }
+        const { loadStripe } = await import('@stripe/stripe-js');
+        return loadStripe(config.publishableKey);
+      })
+      .catch((error) => {
+        stripeRuntimePromise = null;
+        throw error;
+      });
+  }
+  return stripeRuntimePromise;
 }
 
 /*
@@ -426,6 +457,140 @@ export async function createCheckoutSession(input: {
       body: input,
     }),
   );
+}
+
+type SubscribeCheckoutPrefetch = {
+  price: Price | null;
+  sessionPromise: Promise<CheckoutSessionResponse>;
+  siblingPricesPromise: Promise<Price[]>;
+};
+
+type UpgradeCheckoutPrefetch = {
+  price: Price | null;
+  subscriptionId: string;
+  currentProductName: string | null;
+  previewPromise: ReturnType<typeof previewPlanChange>;
+  siblingPricesPromise: Promise<Price[]>;
+  configPromise: ReturnType<typeof getCheckoutConfig>;
+};
+
+const subscribeCheckoutPrefetch = new Map<string, SubscribeCheckoutPrefetch>();
+const upgradeCheckoutPrefetch = new Map<string, UpgradeCheckoutPrefetch>();
+
+function subscribePrefetchKey(priceId: string, email: string): string {
+  return `${priceId}:${email.trim().toLowerCase()}`;
+}
+
+function upgradePrefetchKey(subscriptionId: string, priceId: string): string {
+  return `${subscriptionId}:${priceId}`;
+}
+
+/*
+ * Starts subscribe checkout work as soon as the user clicks Subscribe.
+ */
+export function prefetchSubscribeCheckout(input: {
+  priceId: string;
+  email: string;
+  name?: string;
+  price?: Price;
+}): SubscribeCheckoutPrefetch {
+  const key = subscribePrefetchKey(input.priceId, input.email);
+  const existing = subscribeCheckoutPrefetch.get(key);
+  if (existing) {
+    return existing;
+  }
+
+  void warmCheckoutRuntime();
+
+  const entry: SubscribeCheckoutPrefetch = {
+    price: input.price ?? null,
+    sessionPromise: createCheckoutSession({
+      priceId: input.priceId,
+      email: input.email,
+      name: input.name,
+    }),
+    siblingPricesPromise: input.price
+      ? getPrices(input.price.productId)
+      : getPrice(input.priceId).then((price) => getPrices(price.productId)),
+  };
+
+  subscribeCheckoutPrefetch.set(key, entry);
+  return entry;
+}
+
+/*
+ * Reads a subscribe checkout prefetch started from the plans page.
+ */
+export function takeSubscribeCheckoutPrefetch(
+  priceId: string,
+  email: string,
+): SubscribeCheckoutPrefetch | null {
+  return subscribeCheckoutPrefetch.get(subscribePrefetchKey(priceId, email)) ?? null;
+}
+
+/*
+ * Clears a consumed subscribe checkout prefetch entry.
+ */
+export function clearSubscribeCheckoutPrefetch(
+  priceId: string,
+  email: string,
+): void {
+  subscribeCheckoutPrefetch.delete(subscribePrefetchKey(priceId, email));
+}
+
+/*
+ * Starts upgrade preview work as soon as the user confirms Upgrade.
+ */
+export function prefetchUpgradeCheckout(input: {
+  subscriptionId: string;
+  priceId: string;
+  price?: Price;
+  currentProductName?: string | null;
+}): UpgradeCheckoutPrefetch {
+  const key = upgradePrefetchKey(input.subscriptionId, input.priceId);
+  const existing = upgradeCheckoutPrefetch.get(key);
+  if (existing) {
+    return existing;
+  }
+
+  void warmCheckoutRuntime();
+
+  const entry: UpgradeCheckoutPrefetch = {
+    price: input.price ?? null,
+    subscriptionId: input.subscriptionId,
+    currentProductName: input.currentProductName ?? null,
+    previewPromise: previewPlanChange(input.subscriptionId, input.priceId),
+    siblingPricesPromise: input.price
+      ? getPrices(input.price.productId)
+      : getPrice(input.priceId).then((price) => getPrices(price.productId)),
+    configPromise: getCheckoutConfig(),
+  };
+
+  upgradeCheckoutPrefetch.set(key, entry);
+  return entry;
+}
+
+/*
+ * Reads an upgrade checkout prefetch started from the plans page.
+ */
+export function takeUpgradeCheckoutPrefetch(
+  subscriptionId: string,
+  priceId: string,
+): UpgradeCheckoutPrefetch | null {
+  return (
+    upgradeCheckoutPrefetch.get(upgradePrefetchKey(subscriptionId, priceId)) ??
+    null
+  );
+}
+
+/*
+ * Clears a consumed upgrade checkout prefetch entry.
+ */
+export function clearUpgradeCheckoutPrefetch(
+  subscriptionId: string,
+  priceId: string,
+): void {
+  upgradeCheckoutPrefetch.delete(upgradePrefetchKey(subscriptionId, priceId));
 }
 
 /*

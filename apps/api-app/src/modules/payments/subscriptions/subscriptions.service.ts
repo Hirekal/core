@@ -264,6 +264,10 @@ export class SubscriptionsService {
             : {}),
         },
         providerCouponId: stripeDiscount?.id ?? null,
+        resetBillingCycle: this.isBillingIntervalChangeFromPrices(
+          currentPrice,
+          newPrice,
+        ),
       });
 
       await this.subscriptionsRepository.update(subscription.id, {
@@ -304,6 +308,24 @@ export class SubscriptionsService {
     try {
       const subscription = await this.findOne(subscriptionId);
       this.assertOrganizationOwnership(subscription, organizationId);
+
+      const previousPriceId =
+        typeof subscription.metadata?.[
+          SUBSCRIPTION_METADATA_KEYS.PREVIOUS_PRICE_ID
+        ] === 'string'
+          ? (subscription.metadata[
+              SUBSCRIPTION_METADATA_KEYS.PREVIOUS_PRICE_ID
+            ] as string)
+          : undefined;
+
+      // Avoid a Stripe round-trip when there is nothing to revert.
+      if (
+        !this.hasPendingUpgrade(subscription.metadata) &&
+        !previousPriceId
+      ) {
+        return subscription;
+      }
+
       return this.revertUnpaidUpgradeCheckout(subscription);
     } catch (error) {
       this.logger.error(
@@ -403,14 +425,28 @@ export class SubscriptionsService {
     direction: PlanChangeDirection;
   }> {
     try {
-      const subscription = await this.loadChangeableSubscription(
-        id,
-        organizationId,
-      );
-      const restoredSubscription =
-        await this.revertUnpaidUpgradeCheckout(subscription);
+      // Preview is read-only for display — use local subscription state and
+      // only hit Stripe for the invoice preview (and revert when needed).
+      let subscription = await this.findOne(id);
+      this.assertOrganizationOwnership(subscription, organizationId);
+      this.assertSubscriptionChangeable(subscription);
 
-      const currentPrice = await this.ensureCurrentPrice(restoredSubscription);
+      const previousPriceId =
+        typeof subscription.metadata?.[
+          SUBSCRIPTION_METADATA_KEYS.PREVIOUS_PRICE_ID
+        ] === 'string'
+          ? (subscription.metadata[
+              SUBSCRIPTION_METADATA_KEYS.PREVIOUS_PRICE_ID
+            ] as string)
+          : undefined;
+      if (
+        this.hasPendingUpgrade(subscription.metadata) ||
+        Boolean(previousPriceId)
+      ) {
+        subscription = await this.revertUnpaidUpgradeCheckout(subscription);
+      }
+
+      const currentPrice = await this.ensureCurrentPrice(subscription);
       const newPrice = await this.pricesService.findOne(newPriceId);
       const direction = comparePlans(currentPrice, newPrice);
       if (direction === PlanChangeDirection.SAME) {
@@ -418,7 +454,7 @@ export class SubscriptionsService {
       }
 
       const provider = await this.paymentProvidersService.findById(
-        restoredSubscription.paymentProviderId,
+        subscription.paymentProviderId,
       );
       const paymentProvider = this.paymentProviderRegistry.resolve(
         provider.code,
@@ -429,12 +465,14 @@ export class SubscriptionsService {
 
       const planChangePreviewResult =
         await paymentProvider.previewSubscriptionPlanChange({
-          providerCustomerId:
-            restoredSubscription.customer.providerCustomerId,
-          providerSubscriptionId:
-            restoredSubscription.providerSubscriptionId,
+          providerCustomerId: subscription.customer.providerCustomerId,
+          providerSubscriptionId: subscription.providerSubscriptionId,
           providerPriceId: newPrice.providerPriceId,
           providerCouponId: stripeDiscount?.id ?? null,
+          resetBillingCycle: this.isBillingIntervalChangeFromPrices(
+            currentPrice,
+            newPrice,
+          ),
         });
 
       return {
@@ -628,6 +666,19 @@ export class SubscriptionsService {
     }
 
     return comparison;
+  }
+
+  /*
+   * True when two catalog prices use different billing intervals/cadences.
+   */
+  private isBillingIntervalChangeFromPrices(
+    currentPrice: Price,
+    newPrice: Price,
+  ): boolean {
+    return (
+      currentPrice.interval !== newPrice.interval ||
+      (currentPrice.intervalCount ?? 1) !== (newPrice.intervalCount ?? 1)
+    );
   }
 
   /*

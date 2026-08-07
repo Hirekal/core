@@ -2,14 +2,14 @@
  * @fileoverview Custom two-column checkout page styled like Stripe Checkout.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Elements } from '@stripe/react-stripe-js';
 import { loadStripe, type Stripe } from '@stripe/stripe-js';
-import LoadingSpinner from '../../components/common/LoadingSpinner';
 import Button from '../../components/common/Button';
 import BillingErrorState from '../../components/billing/BillingErrorState';
 import CheckoutOrderSummary from '../../components/billing/CheckoutOrderSummary';
 import CheckoutPaymentForm from '../../components/billing/CheckoutPaymentForm';
+import CheckoutSkeleton from '../../components/billing/CheckoutSkeleton';
 import { useAuth } from '../../context/AuthContext';
 import * as billingService from '../../services/billingService';
 import { toUserErrorMessage } from '../../utils/errorMessage';
@@ -40,10 +40,12 @@ async function createCheckoutForPrice(
  */
 export default function CheckoutPage() {
   const { priceId } = useParams();
+  const location = useLocation();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const locationPrice = (location.state as { price?: Price } | null)?.price;
 
-  const [price, setPrice] = useState<Price | null>(null);
+  const [price, setPrice] = useState<Price | null>(locationPrice ?? null);
   const [productPrices, setProductPrices] = useState<Price[]>([]);
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly');
   const [email, setEmail] = useState(user?.email ?? '');
@@ -52,7 +54,9 @@ export default function CheckoutPage() {
   const [providerSubscriptionId, setProviderSubscriptionId] = useState<string | null>(
     null,
   );
-  const [amountDueToday, setAmountDueToday] = useState<number | null>(null);
+  const [amountDueToday, setAmountDueToday] = useState<number | null>(
+    locationPrice?.amount ?? null,
+  );
   const [stripePromise, setStripePromise] = useState<Promise<Stripe | null> | null>(
     null,
   );
@@ -123,20 +127,42 @@ export default function CheckoutPage() {
         setLoading(true);
         setError('');
 
-        const loadedPrice = await billingService.getPrice(priceId);
-        const siblingPrices = await billingService.getPrices(loadedPrice.productId);
-        const checkoutSession = await createCheckoutForPrice(
+        const prefetch = billingService.takeSubscribeCheckoutPrefetch(
           priceId,
           user.email,
-          user.name ?? undefined,
         );
 
-        if (!cancelled) {
-          setProductPrices(siblingPrices);
-          setEmail(user.email);
-          setName(user.name ?? '');
-          applyCheckoutSession(loadedPrice, checkoutSession);
+        const loadedPricePromise = prefetch?.price
+          ? Promise.resolve(prefetch.price)
+          : locationPrice && locationPrice.id === priceId
+            ? Promise.resolve(locationPrice)
+            : billingService.getPrice(priceId);
+
+        const sessionPromise =
+          prefetch?.sessionPromise ??
+          createCheckoutForPrice(priceId, user.email, user.name ?? undefined);
+
+        const siblingPricesPromise =
+          prefetch?.siblingPricesPromise ??
+          loadedPricePromise.then((loadedPrice) =>
+            billingService.getPrices(loadedPrice.productId),
+          );
+
+        const [loadedPrice, checkoutSession, siblingPrices] = await Promise.all([
+          loadedPricePromise,
+          sessionPromise,
+          siblingPricesPromise.catch(() => [] as Price[]),
+        ]);
+
+        if (cancelled) {
+          return;
         }
+
+        setEmail(user.email);
+        setName(user.name ?? '');
+        setProductPrices(siblingPrices);
+        applyCheckoutSession(loadedPrice, checkoutSession);
+        billingService.clearSubscribeCheckoutPrefetch(priceId, user.email);
       } catch (err) {
         if (!cancelled) {
           setError(toUserErrorMessage(err, 'Failed to load checkout'));
@@ -153,7 +179,7 @@ export default function CheckoutPage() {
     return () => {
       cancelled = true;
     };
-  }, [applyCheckoutSession, navigate, priceId, user]);
+  }, [applyCheckoutSession, locationPrice, navigate, priceId, user]);
 
   const recreateCheckout = async (
     nextPrice: Price,
@@ -188,8 +214,7 @@ export default function CheckoutPage() {
     setPeriodSwitchError('');
 
     try {
-      const loadedPrice = await billingService.getPrice(nextPrice.id);
-      await recreateCheckout(loadedPrice, appliedCoupon);
+      await recreateCheckout(nextPrice, appliedCoupon);
     } catch (err) {
       setPeriodSwitchError(toUserErrorMessage(err, 'Failed to update billing period'));
     } finally {
@@ -235,7 +260,7 @@ export default function CheckoutPage() {
   };
 
   if (loading) {
-    return <LoadingSpinner message="Loading checkout…" />;
+    return <CheckoutSkeleton />;
   }
 
   if (error || !price?.product || !clientSecret || !stripePromise || !providerSubscriptionId) {
