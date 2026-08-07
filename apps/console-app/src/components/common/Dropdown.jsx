@@ -16,29 +16,37 @@ function useMenuPosition(open, triggerRef, menuRef, align = 'left') {
       if (!trigger) return;
 
       const rect = trigger.getBoundingClientRect();
-      const menuWidth = menuRef.current?.offsetWidth || 200;
       const menuHeight = menuRef.current?.offsetHeight || 240;
       const gap = 6;
       const spaceBelow = window.innerHeight - rect.bottom - gap;
       const spaceAbove = rect.top - gap;
-      const openUpward = spaceBelow < Math.min(menuHeight, 240) && spaceAbove > spaceBelow;
-      const left =
-        align === 'right'
-          ? Math.max(8, rect.right - menuWidth)
-          : rect.left;
+      const openUpward =
+        spaceBelow < Math.min(menuHeight, 240) && spaceAbove > spaceBelow;
+
+      // Anchor to the trigger edge so width changes don't misalign the menu.
+      const left = align === 'right' ? rect.right : rect.left;
+      const transforms = [];
+      if (align === 'right') {
+        transforms.push('translateX(-100%)');
+      }
+      if (openUpward) {
+        transforms.push('translateY(-100%)');
+      }
 
       setPosition({
         left,
-        width: rect.width,
         top: openUpward ? rect.top - gap : rect.bottom + gap,
-        transform: openUpward ? 'translateY(-100%)' : undefined,
+        transform: transforms.length > 0 ? transforms.join(' ') : undefined,
       });
     };
 
     update();
+    // Remeasure after paint once the menu is in the DOM (height for flip).
+    const frame = window.requestAnimationFrame(update);
     window.addEventListener('scroll', update, true);
     window.addEventListener('resize', update);
     return () => {
+      window.cancelAnimationFrame(frame);
       window.removeEventListener('scroll', update, true);
       window.removeEventListener('resize', update);
     };
@@ -47,7 +55,7 @@ function useMenuPosition(open, triggerRef, menuRef, align = 'left') {
   return position;
 }
 
-export default function Dropdown({ trigger, items, align = 'right' }) {
+export default function Dropdown({ trigger, items, align = 'right', menuClassName = '' }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const triggerRef = useRef(null);
@@ -87,7 +95,7 @@ export default function Dropdown({ trigger, items, align = 'right' }) {
           }}
           className={`min-w-[200px] overflow-hidden rounded-xl border border-border bg-card py-1 shadow-xl ${
             align === 'right' ? 'origin-top-right' : 'origin-top-left'
-          }`}
+          } ${menuClassName}`}
         >
           {items.map((item, i) =>
             item.divider ? (
@@ -106,7 +114,7 @@ export default function Dropdown({ trigger, items, align = 'right' }) {
                   item.danger
                     ? 'text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30'
                     : 'text-heading hover:bg-hover'
-                }`}
+                } ${item.className || ''}`}
               >
                 {item.icon}
                 {item.label}

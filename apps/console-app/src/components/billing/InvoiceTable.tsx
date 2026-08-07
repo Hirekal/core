@@ -43,6 +43,7 @@ function InvoiceActionsMenu({
   return (
     <Dropdown
       align="right"
+      menuClassName="!min-w-0 w-max"
       trigger={
         <button
           type="button"
@@ -55,15 +56,17 @@ function InvoiceActionsMenu({
       items={[
         {
           label: 'Invoice',
-          icon: <FileText size={16} />,
+          icon: <FileText size={18} />,
           disabled: !canInvoice,
           onClick: () => onDownloadInvoice(invoice),
+          className: 'gap-2.5 px-3.5 py-2.5 text-lg',
         },
         {
           label: 'Receipt',
-          icon: <Receipt size={16} />,
+          icon: <Receipt size={18} />,
           disabled: !canReceipt,
           onClick: () => onDownloadReceipt(invoice),
+          className: 'gap-2.5 px-3.5 py-2.5 text-lg',
         },
       ]}
     />
