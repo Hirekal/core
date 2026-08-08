@@ -145,6 +145,42 @@ export async function getMyPaymentCustomer(
   }
 }
 
+type PaymentCustomerAddress = {
+  line1?: string;
+  line2?: string;
+  city?: string;
+  state?: string;
+  postal_code?: string;
+  country?: string;
+};
+
+/*
+ * Updates the authenticated user's payment customer for a provider.
+ */
+export async function updateMyPaymentCustomer(input: {
+  paymentProviderId: string;
+  email?: string;
+  name?: string;
+  address?: PaymentCustomerAddress;
+  metadata?: Record<string, string>;
+}): Promise<PaymentCustomer> {
+  return withBillingErrorHandling(() =>
+    apiRequest(
+      `/payments/customers/me?paymentProviderId=${input.paymentProviderId}`,
+      {
+        method: 'PATCH',
+        auth: true,
+        body: {
+          ...(input.email ? { email: input.email } : {}),
+          ...(input.name ? { name: input.name } : {}),
+          ...(input.address ? { address: input.address } : {}),
+          ...(input.metadata ? { metadata: input.metadata } : {}),
+        },
+      },
+    ),
+  );
+}
+
 /*
  * Creates a payment provider customer for the authenticated user.
  */
@@ -227,10 +263,9 @@ export async function createSubscription(input: {
  */
 export async function getMySubscription(): Promise<Subscription | null> {
   return withBillingErrorHandling(async () => {
-    const subscription = await apiRequest<Subscription | null>(
-      '/payments/subscriptions/me',
-      { auth: true },
-    );
+    const subscription = await apiRequest('/payments/subscriptions/me', {
+      auth: true,
+    });
     return subscription ?? null;
   });
 }
@@ -387,10 +422,11 @@ export async function getCheckoutConfig(): Promise<{ publishableKey: string }> {
   if (!checkoutConfigPromise) {
     checkoutConfigPromise = withBillingErrorHandling(() =>
       apiRequest('/payments/checkout/config', { auth: true }),
-    ).catch((error) => {
-      checkoutConfigPromise = null;
-      throw error;
-    });
+    )
+      .catch((error) => {
+        checkoutConfigPromise = null;
+        throw error;
+      }) as Promise<{ publishableKey: string }>;
   }
   return checkoutConfigPromise;
 }

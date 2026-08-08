@@ -21,6 +21,7 @@ import type {
   StripeCardElementOptions,
   StripeCardExpiryElementChangeEvent,
   StripeCardNumberElementChangeEvent,
+  StripeCardNumberElementOptions,
 } from '@stripe/stripe-js';
 import Button from '../common/Button';
 import BillingErrorState from './BillingErrorState';
@@ -222,7 +223,7 @@ export default function CheckoutPaymentForm({
     ...cardElementOptions,
     disabled: formLocked,
   };
-  const cardNumberOptions: StripeCardElementOptions = {
+  const cardNumberOptions: StripeCardNumberElementOptions = {
     ...cardOptions,
     placeholder: 'XXXX XXXX XXXX XXXX',
   };
@@ -389,30 +390,39 @@ export default function CheckoutPaymentForm({
       }
 
       const billingAddressValue = billingAddressResult.value;
+      const billingAddress = {
+        line1: billingAddressValue.address.line1,
+        ...(billingAddressValue.address.line2
+          ? { line2: billingAddressValue.address.line2 }
+          : {}),
+        city: billingAddressValue.address.city,
+        state: billingAddressValue.address.state,
+        postal_code: billingAddressValue.address.postal_code,
+        country: billingAddressValue.address.country,
+      };
+
+      await billingService.updateMyPaymentCustomer({
+        paymentProviderId: price.paymentProviderId,
+        email: trimmedEmail,
+        name: billingAddressValue.name || trimmedName,
+        address: billingAddress,
+      });
+
       const cardNumberElement = elements.getElement(CardNumberElement);
       if (!cardNumberElement) {
         throw new Error('Card details are not ready yet.');
       }
 
       const confirmation = await stripe.confirmCardPayment(resolvedClientSecret, {
-        payment_method: {
-          card: cardNumberElement,
-          billing_details: {
-            email: trimmedEmail,
-            name: billingAddressValue.name || trimmedName,
-            address: {
-              line1: billingAddressValue.address.line1,
-              ...(billingAddressValue.address.line2
-                ? { line2: billingAddressValue.address.line2 }
-                : {}),
-              city: billingAddressValue.address.city,
-              state: billingAddressValue.address.state,
-              postal_code: billingAddressValue.address.postal_code,
-              country: billingAddressValue.address.country,
+          payment_method: {
+            card: cardNumberElement,
+            billing_details: {
+              email: trimmedEmail,
+              name: billingAddressValue.name || trimmedName,
+              address: billingAddress,
             },
           },
-        },
-      });
+        });
 
       if (confirmation.error) {
         throw confirmation.error;

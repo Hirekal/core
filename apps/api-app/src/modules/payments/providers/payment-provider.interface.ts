@@ -11,7 +11,17 @@ import {
 export interface ProviderCustomerInput {
   email: string;
   name?: string;
+  address?: ProviderCustomerAddressInput;
   metadata?: Record<string, string>;
+}
+
+export interface ProviderCustomerAddressInput {
+  line1?: string;
+  line2?: string;
+  city?: string;
+  state?: string;
+  postal_code?: string;
+  country?: string;
 }
 
 export interface ProviderCustomerResult {

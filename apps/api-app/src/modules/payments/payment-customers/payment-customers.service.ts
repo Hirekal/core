@@ -142,6 +142,7 @@ export class PaymentCustomersService {
       await paymentProvider.updateCustomer(customer.providerCustomerId, {
         email: dto.email,
         name: dto.name,
+        address: dto.address,
         metadata: dto.metadata,
       });
 

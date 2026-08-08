@@ -9,6 +9,7 @@ import {
   Logger,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
 } from '@nestjs/common';
@@ -20,6 +21,7 @@ import { User } from '../auth/users/entities/user.entity';
 import { PaymentsService } from './payments.service';
 import { PaymentCustomersService } from './payment-customers/payment-customers.service';
 import { CreatePaymentCustomerDto } from './payment-customers/dto/create-payment-customer.dto';
+import { UpdatePaymentCustomerDto } from './payment-customers/dto/update-payment-customer.dto';
 import { CreateCheckoutSessionDto } from './common/dto/create-checkout-session.dto';
 import { CreateBillingPortalSessionDto } from './common/dto/create-billing-portal-session.dto';
 import { AttachPaymentMethodDto } from './common/dto/attach-payment-method.dto';
@@ -80,6 +82,37 @@ export class PaymentsController {
     } catch (error) {
       this.logger.error(
         `getMyCustomer failed for organization ${user.organizationId}`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  /*
+   * Updates the authenticated organization's payment customer for a provider.
+   */
+  @Patch('customers/me')
+  @ApiOperation({ summary: 'Update my payment customer' })
+  @ApiQuery({ name: 'paymentProviderId', format: 'uuid' })
+  async updateMyCustomer(
+    @CurrentUser() user: User,
+    @Query('paymentProviderId', ParseUUIDPipe) paymentProviderId: string,
+    @Body() dto: UpdatePaymentCustomerDto,
+  ) {
+    try {
+      const customer =
+        await this.paymentCustomersService.findByOrganizationAndPaymentProviderId(
+          user.organizationId,
+          paymentProviderId,
+        );
+      if (!customer) {
+        throw new ForbiddenException(ERROR_MESSAGES.PAYMENT_CUSTOMER.NOT_FOUND);
+      }
+
+      return await this.paymentCustomersService.update(customer.id, dto);
+    } catch (error) {
+      this.logger.error(
+        `updateMyCustomer failed for organization ${user.organizationId}`,
         error,
       );
       throw error;

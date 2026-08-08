@@ -23,4 +23,8 @@ export class UpdatePaymentCustomerDto {
   @IsOptional()
   @IsObject()
   metadata?: Record<string, string>;
+
+  @IsOptional()
+  @IsObject()
+  address?: Record<string, string>;
 }

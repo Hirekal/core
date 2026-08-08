@@ -76,6 +76,7 @@ export class StripeProvider implements PaymentProvider {
       const customer = await this.stripeService.getClient().customers.create({
         email: input.email,
         name: input.name,
+        address: input.address,
         metadata: input.metadata,
       });
       return { providerCustomerId: customer.id };
@@ -120,6 +121,7 @@ export class StripeProvider implements PaymentProvider {
         .customers.update(providerCustomerId, {
           email: input.email,
           name: input.name,
+          address: input.address,
           metadata: input.metadata,
         });
       return { providerCustomerId: customer.id };
