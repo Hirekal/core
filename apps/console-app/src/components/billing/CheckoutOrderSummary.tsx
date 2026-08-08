@@ -317,6 +317,12 @@ export default function CheckoutOrderSummary({
       )}
 
       <div className="mt-4 space-y-1.5 border-t border-black/10 pt-4 text-base">
+        {isUpgrade ? (
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-muted">Plan amount</span>
+            <span className="text-heading">{formatMoney(price.amount, price.currency)}</span>
+          </div>
+        ) : null}
         <div className="flex items-center justify-between gap-4">
           <span className="text-muted">{isUpgrade ? 'Prorated charge' : 'Subtotal'}</span>
           <span className="text-heading">{formatAmount(lineSubtotal)}</span>
