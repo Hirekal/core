@@ -438,7 +438,7 @@ export default function CheckoutPaymentForm({
     <form
       onSubmit={handleSubmit}
       noValidate
-      className="flex h-full min-h-screen flex-col bg-white px-6 py-12 sm:px-8 sm:py-14 lg:px-10 lg:py-16 xl:px-12"
+      className="flex h-full min-h-screen flex-col bg-white px-6 py-12 sm:px-8 sm:py-14 lg:px-16 lg:py-16 xl:px-20"
       aria-busy={disabled || processing}
     >
       <div className="mx-auto w-full max-w-xl lg:ml-0 lg:mr-auto lg:max-w-2xl">

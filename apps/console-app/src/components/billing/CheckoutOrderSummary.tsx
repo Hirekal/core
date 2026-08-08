@@ -118,7 +118,7 @@ export default function CheckoutOrderSummary({
   };
 
   return (
-    <div className="flex h-full min-h-screen flex-col bg-[#f6f9fc] px-6 py-12 text-base sm:px-8 sm:py-14 lg:px-10 lg:py-16 xl:px-12">
+    <div className="flex h-full min-h-screen flex-col bg-[#f6f9fc] px-6 py-12 text-base sm:px-8 sm:py-14 lg:px-16 lg:py-16 xl:px-20">
       <div className="mx-auto flex w-full max-w-xl flex-1 flex-col lg:ml-auto lg:mr-0 lg:max-w-2xl">
       <div className="relative flex items-center gap-2.5">
         <Link

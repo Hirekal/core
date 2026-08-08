@@ -330,7 +330,7 @@ export default function CheckoutPage() {
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-2">
-      <div className="border-[#e6ebf1] shadow-[4px_0_24px_rgba(15,23,42,0.04)] lg:border-r">
+      <div className="min-h-screen bg-[#f6f9fc] lg:shadow-[1px_0_0_0_#e6ebf1]">
         <CheckoutOrderSummary
           product={price.product}
           price={price}
@@ -349,7 +349,7 @@ export default function CheckoutPage() {
           onRemoveCoupon={handleRemoveCoupon}
         />
       </div>
-      <div className="bg-white">
+      <div className="min-h-screen bg-white">
         <Elements
           key="checkout-elements-custom-billing"
           stripe={stripePromise}
