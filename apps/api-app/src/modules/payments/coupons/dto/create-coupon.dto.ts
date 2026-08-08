@@ -58,6 +58,7 @@ export class CreateCouponDto {
   @MaxLength(10)
   currency?: string;
 
+  /** Global redemption cap. Defaults to 100 when omitted. */
   @IsOptional()
   @IsInt()
   @Min(1)

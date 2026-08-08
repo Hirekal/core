@@ -36,6 +36,14 @@ function mapStripeInvalidRequestMessage(error: StripeLikeError): string {
     if (message.includes('expired')) {
       return ERROR_MESSAGES.COUPON.EXPIRED;
     }
+    if (
+      message.includes('customer') &&
+      (message.includes('already') ||
+        message.includes('per customer') ||
+        message.includes('maximum redemptions per customer'))
+    ) {
+      return ERROR_MESSAGES.COUPON.ALREADY_REDEEMED;
+    }
     return ERROR_MESSAGES.COUPON.MAX_REDEMPTIONS_REACHED;
   }
 

@@ -90,6 +90,8 @@ export const ERROR_MESSAGES = {
     INVALID: 'Coupon code is invalid',
     MAX_REDEMPTIONS_REACHED:
       'Coupon code has already been fully redeemed',
+    ALREADY_REDEEMED:
+      'You have already redeemed this coupon code',
     CODE_ALREADY_EXISTS: 'Coupon code already exists',
     CURRENCY_REQUIRED: 'Currency is required for fixed-amount coupons',
     DURATION_IN_MONTHS_REQUIRED:

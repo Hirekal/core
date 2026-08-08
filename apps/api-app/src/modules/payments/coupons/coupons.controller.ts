@@ -5,7 +5,8 @@ import { Body, Controller, Logger, Post } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Auth } from '../../auth/common/decorators/auth.decorator';
 import { Public } from '../../auth/common/decorators/public.decorator';
-import { SYSTEM_ROLES } from '../../auth/common/constants/auth.constants';
+import { CurrentUser } from '../../auth/common/decorators/current-user.decorator';
+import { User } from '../../auth/users/entities/user.entity';
 import { CouponsService } from './coupons.service';
 import { CreateCouponDto } from './dto/create-coupon.dto';
 import { ValidateCouponDto } from './dto/validate-coupon.dto';
@@ -37,14 +38,21 @@ export class CouponsController {
   }
 
   /*
-   * Validates a promotion code against the local coupon catalog.
+   * Validates a promotion code against the local coupon catalog for the
+   * authenticated organization's Stripe customer (per-customer once).
    */
-  @Auth(SYSTEM_ROLES.ADMIN)
+  @Auth()
   @Post('validate')
   @ApiOperation({ summary: 'Validate a coupon / promotion code' })
-  async validate(@Body() dto: ValidateCouponDto) {
+  async validate(
+    @CurrentUser() user: User,
+    @Body() dto: ValidateCouponDto,
+  ) {
     try {
-      return await this.couponsService.validatePromotionCode(dto.promotionCode);
+      return await this.couponsService.validatePromotionCode(
+        dto.promotionCode,
+        user.organizationId,
+      );
     } catch (error) {
       this.logger.error(
         `validate coupon failed for code ${dto.promotionCode}`,

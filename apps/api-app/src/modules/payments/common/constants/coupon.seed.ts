@@ -2,10 +2,11 @@
  * @fileoverview Default coupon catalog for database seeding.
  * Edit Stripe IDs and terms here, then run migrations.
  *
- * Stripe coupon max_redemptions must stay unlimited — incomplete checkouts
- * attach the coupon ID and would otherwise burn limited Stripe redemptions
- * before payment succeeds. Enforce caps via local maximumRedemptions after
- * successful paid invoices only.
+ * Stripe coupon max_redemptions stay unlimited — incomplete checkouts attach
+ * the coupon ID and would otherwise burn limited counters before payment.
+ * New promotion codes set Stripe max_redemptions (global). Per-customer once
+ * is enforced via paymentCouponRedemptions after paid invoices so failed
+ * checkouts do not consume a redemption.
  */
 import {
   CouponDiscountType,

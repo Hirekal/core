@@ -45,8 +45,11 @@ export interface ValidatedCouponResponse {
 }
 
 /*
- * Incomplete checkouts must use coupon IDs so Stripe promotion codes are not
- * marked redeemed before payment succeeds.
+ * Incomplete checkouts must use coupon IDs so Stripe promotion-code
+ * redemption counters are not consumed before payment succeeds.
+ * Global max_redemptions is set on the Stripe promotion code at create.
+ * Per-customer once is enforced locally from successful redemptions
+ * (Stripe's current API no longer supports maximum_redemptions_per_customer).
  */
 export type StripeDiscountRef = { kind: 'coupon'; id: string };
 
@@ -96,6 +99,9 @@ export class CouponsService {
       const redeemByUnix = expiresAt
         ? Math.floor(expiresAt.getTime() / 1000)
         : undefined;
+      const maximumRedemptions =
+        dto.maximumRedemptions ??
+        PAYMENT_CONSTANTS.COUPON_DEFAULT_MAXIMUM_REDEMPTIONS;
 
       const stripeCoupon = await this.stripeProvider.createCoupon(
         this.buildStripeCouponParams(dto, redeemByUnix),
@@ -109,6 +115,10 @@ export class CouponsService {
         },
         code: promotionCode,
         expires_at: redeemByUnix,
+        // Global cap on Stripe. Per-customer once is enforced locally from
+        // paymentCouponRedemptions — current Stripe API no longer exposes
+        // restrictions.maximum_redemptions_per_customer.
+        max_redemptions: maximumRedemptions,
         metadata: {
           localPromotionCode: promotionCode,
         },
@@ -137,7 +147,7 @@ export class CouponsService {
         discountType: dto.discountType,
         discountValue: dto.discountValue,
         duration: dto.duration,
-        maximumRedemptions: dto.maximumRedemptions ?? null,
+        maximumRedemptions,
         timesRedeemed: 0,
         expiresAt,
         status: RecordStatus.ACTIVE,
@@ -166,9 +176,10 @@ export class CouponsService {
    */
   async validatePromotionCode(
     promotionCode: string,
+    organizationId?: string,
   ): Promise<ValidatedCouponResponse> {
     const coupon = await this.findActiveByPromotionCode(promotionCode);
-    await this.assertCouponRedeemable(coupon);
+    await this.assertCouponRedeemable(coupon, organizationId);
     const livePromotionCode = await this.tryResolveLivePromotionCode(coupon);
 
     return this.toValidatedResponse(coupon, livePromotionCode);
@@ -180,6 +191,7 @@ export class CouponsService {
    */
   async resolveStripeDiscountRef(
     promotionCodeOrCoupon?: string | Coupon | null,
+    organizationId?: string,
   ): Promise<StripeDiscountRef | null> {
     if (!promotionCodeOrCoupon) {
       return null;
@@ -190,14 +202,14 @@ export class CouponsService {
         ? await this.findActiveByPromotionCode(promotionCodeOrCoupon)
         : promotionCodeOrCoupon;
 
-    await this.assertCouponRedeemable(coupon);
+    await this.assertCouponRedeemable(coupon, organizationId);
 
     if (!coupon.providerCouponId) {
       throw new BadRequestException(ERROR_MESSAGES.COUPON.INVALID);
     }
 
     // Ensure the Stripe coupon itself is still attachable. Limited Stripe
-    // max_redemptions would be consumed by incomplete checkouts.
+    // coupon max_redemptions would be consumed by incomplete checkouts.
     await this.assertStripeCouponAttachable(coupon.providerCouponId);
 
     return { kind: 'coupon', id: coupon.providerCouponId };
@@ -233,6 +245,22 @@ export class CouponsService {
       this.logger.warn(
         `Skipping redemption record; coupon ${promotionCode} not found locally`,
       );
+      return;
+    }
+
+    // One successful redemption per customer/org — matches Stripe
+    // restrictions.maximum_redemptions_per_customer and avoids counting
+    // recurring invoices against the global max.
+    const priorCustomerRedemption = await this.couponRedemptionRepository.findOne(
+      {
+        where: {
+          couponId: coupon.id,
+          organizationId: input.organizationId,
+          status: RecordStatus.ACTIVE,
+        },
+      },
+    );
+    if (priorCustomerRedemption) {
       return;
     }
 
@@ -435,10 +463,30 @@ export class CouponsService {
   }
 
   /*
-   * Enforces max redemptions from successful local redemptions only.
-   * Stripe incomplete-checkout attaches must not consume limited promo counters.
+   * Enforces global and per-customer redemption caps from successful local
+   * redemptions only. Incomplete checkout attaches must not consume counters.
    */
-  private async assertCouponRedeemable(coupon: Coupon): Promise<void> {
+  private async assertCouponRedeemable(
+    coupon: Coupon,
+    organizationId?: string,
+  ): Promise<void> {
+    if (coupon.expiresAt && coupon.expiresAt.getTime() < now().valueOf()) {
+      throw new BadRequestException(ERROR_MESSAGES.COUPON.EXPIRED);
+    }
+
+    if (organizationId) {
+      const customerRedemption = await this.couponRedemptionRepository.findOne({
+        where: {
+          couponId: coupon.id,
+          organizationId,
+          status: RecordStatus.ACTIVE,
+        },
+      });
+      if (customerRedemption) {
+        throw new BadRequestException(ERROR_MESSAGES.COUPON.ALREADY_REDEEMED);
+      }
+    }
+
     const successfulRedemptions = await this.couponRedemptionRepository.count({
       where: {
         couponId: coupon.id,
@@ -449,16 +497,14 @@ export class CouponsService {
       coupon.timesRedeemed ?? 0,
       successfulRedemptions,
     );
-    const maxRedemptions = coupon.maximumRedemptions ?? null;
+    const maxRedemptions =
+      coupon.maximumRedemptions ??
+      PAYMENT_CONSTANTS.COUPON_DEFAULT_MAXIMUM_REDEMPTIONS;
 
-    if (maxRedemptions != null && timesRedeemed >= maxRedemptions) {
+    if (timesRedeemed >= maxRedemptions) {
       throw new BadRequestException(
         ERROR_MESSAGES.COUPON.MAX_REDEMPTIONS_REACHED,
       );
-    }
-
-    if (coupon.expiresAt && coupon.expiresAt.getTime() < now().valueOf()) {
-      throw new BadRequestException(ERROR_MESSAGES.COUPON.EXPIRED);
     }
   }
 
@@ -504,7 +550,9 @@ export class CouponsService {
       expiresAt: coupon.expiresAt?.toISOString() ?? null,
       timesRedeemed: coupon.timesRedeemed ?? 0,
       maximumRedemptions:
-        coupon.maximumRedemptions ?? promotionCode?.max_redemptions ?? null,
+        coupon.maximumRedemptions ??
+        promotionCode?.max_redemptions ??
+        PAYMENT_CONSTANTS.COUPON_DEFAULT_MAXIMUM_REDEMPTIONS,
     };
   }
 }

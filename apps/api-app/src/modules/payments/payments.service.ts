@@ -145,7 +145,10 @@ export class PaymentsService {
       );
 
       const stripeDiscount =
-        await this.couponsService.resolveStripeDiscountRef(dto.couponCode);
+        await this.couponsService.resolveStripeDiscountRef(
+          dto.couponCode,
+          organizationId,
+        );
 
       if (dto.previousProviderSubscriptionId) {
         try {

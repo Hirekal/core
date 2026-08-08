@@ -171,8 +171,10 @@ export class StripeProvider implements PaymentProvider {
   }
 
   /*
-   * Creates a Stripe coupon. Do not set max_redemptions — incomplete
-   * checkouts attach the coupon ID and would burn limited counters.
+   * Creates a Stripe coupon. Do not set max_redemptions on the coupon —
+   * incomplete checkouts attach the coupon ID and would burn limited
+   * counters. Global / per-customer caps live on the promotion code and
+   * are enforced locally after successful paid invoices.
    */
   async createCoupon(
     params: Stripe.CouponCreateParams,
@@ -186,6 +188,9 @@ export class StripeProvider implements PaymentProvider {
 
   /*
    * Creates a customer-facing Stripe promotion code for a coupon.
+   * Callers should set max_redemptions for the global redemption cap.
+   * Per-customer limits are enforced in CouponsService (Stripe API no longer
+   * exposes restrictions.maximum_redemptions_per_customer).
    */
   async createPromotionCode(
     params: Stripe.PromotionCodeCreateParams,

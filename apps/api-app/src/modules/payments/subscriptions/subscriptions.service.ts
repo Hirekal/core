@@ -244,7 +244,10 @@ export class SubscriptionsService {
       }
 
       const stripeDiscount =
-        await this.couponsService.resolveStripeDiscountRef(couponCode);
+        await this.couponsService.resolveStripeDiscountRef(
+          couponCode,
+          organizationId,
+        );
 
       const session = await paymentProvider.createUpgradeCheckoutSession({
         providerCustomerId: subscription.customer.providerCustomerId,
@@ -461,7 +464,10 @@ export class SubscriptionsService {
       );
 
       const stripeDiscount =
-        await this.couponsService.resolveStripeDiscountRef(couponCode);
+        await this.couponsService.resolveStripeDiscountRef(
+          couponCode,
+          organizationId,
+        );
 
       const planChangePreviewResult =
         await paymentProvider.previewSubscriptionPlanChange({

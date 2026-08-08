@@ -5,6 +5,10 @@ export const PAYMENT_CONSTANTS = {
   DEFAULT_PROVIDER_CODE: 'STRIPE',
   CURRENCY_DEFAULT: 'USD',
   CATALOG_CACHE_TTL_MS: 2 * 60 * 60 * 1000,
+  /** Global promotion-code redemption cap (Stripe promo max_redemptions). */
+  COUPON_DEFAULT_MAXIMUM_REDEMPTIONS: 100,
+  /** Each Stripe customer may redeem a given promotion code this many times. */
+  COUPON_MAXIMUM_REDEMPTIONS_PER_CUSTOMER: 1,
 } as const;
 
 export const PAYMENT_CATALOG_CACHE_KEYS = {
