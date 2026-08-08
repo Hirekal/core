@@ -1,15 +1,13 @@
 /**
  * @fileoverview Checkout payment form with Stripe Checkout-style billing + Card Elements.
  *
- * Billing address is a custom condensed box (Name / Country / Address) so text stays
- * vertically centered. Stripe Address Element floating labels always reserve title
- * space and cannot match that UI reliably. Card fields stay on Stripe Elements;
- * billing details are passed into confirmCardPayment.
+ * Billing address uses Stripe's native Address Element while card fields stay on
+ * Stripe Elements. Billing details are passed into confirmCardPayment.
  */
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronDown } from 'lucide-react';
 import {
+  AddressElement,
   CardCvcElement,
   CardExpiryElement,
   CardNumberElement,
@@ -17,6 +15,8 @@ import {
   useStripe,
 } from '@stripe/react-stripe-js';
 import type {
+  StripeAddressElementChangeEvent,
+  StripeAddressElementOptions,
   StripeCardCvcElementChangeEvent,
   StripeCardElementOptions,
   StripeCardExpiryElementChangeEvent,
@@ -34,26 +34,10 @@ import type { Price } from '../../types/billing';
 const checkoutFieldClass =
   'w-full border-0 bg-transparent px-3 py-3 text-base leading-5 text-[#1a1f36] placeholder:text-[#8898aa] outline-none disabled:cursor-not-allowed disabled:opacity-100';
 
-const condensedRowClass =
-  'flex min-h-[46px] w-full items-center border-0 bg-transparent px-3 text-base leading-5 text-[#1a1f36] placeholder:text-[#8898aa] outline-none disabled:cursor-not-allowed disabled:opacity-100';
-
 const checkoutBoxClass =
   'overflow-hidden rounded-md border border-[#e6ebf1] bg-white shadow-sm';
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-const BILLING_COUNTRIES = [
-  { code: '', label: 'Country' },
-  { code: 'US', label: 'United States' },
-  { code: 'IN', label: 'India' },
-  { code: 'GB', label: 'United Kingdom' },
-  { code: 'CA', label: 'Canada' },
-  { code: 'AU', label: 'Australia' },
-  { code: 'AE', label: 'United Arab Emirates' },
-  { code: 'SG', label: 'Singapore' },
-  { code: 'DE', label: 'Germany' },
-  { code: 'FR', label: 'France' },
-];
 
 const cardElementOptions: StripeCardElementOptions = {
   style: {
@@ -74,7 +58,7 @@ const cardElementOptions: StripeCardElementOptions = {
   },
 };
 
-/** Card Elements appearance only (billing address is custom condensed UI). */
+/** Card Elements appearance with limited Address Element dropdown styling. */
 export const checkoutElementsOptions = {
   appearance: {
     theme: 'stripe' as const,
@@ -84,7 +68,37 @@ export const checkoutElementsOptions = {
       colorDanger: '#df1b41',
       fontFamily:
         '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-      borderRadius: '6px',
+    },
+    rules: {
+      '.Dropdown': {
+        backgroundColor: '#ffffff',
+        borderColor: '#e5e7eb',
+        borderWidth: '1px',
+        borderRadius: '8px',
+        boxShadow: 'none',
+        color: '#1a1f36',
+        fontSize: '14px',
+        lineHeight: '20px',
+        paddingTop: '12px',
+        paddingBottom: '12px',
+        paddingLeft: '12px',
+        paddingRight: '12px',
+      },
+      '.Dropdown:hover': {
+        borderColor: '#d1d5db',
+      },
+      '.Dropdown:focus': {
+        borderColor: '#1a1f36',
+        boxShadow: '0 0 0 2px rgba(26, 31, 54, 0.12)',
+      },
+      '.Dropdown--invalid': {
+        borderColor: '#df1b41',
+        boxShadow: '0 0 0 2px rgba(223, 27, 65, 0.12)',
+      },
+      '.DropdownItem--highlight': {
+        backgroundColor: '#f3f4f6',
+        color: '#1a1f36',
+      },
     },
   },
 };
@@ -117,11 +131,6 @@ interface CheckoutPaymentFormProps {
 
 type BillingTouched = {
   email: boolean;
-  name: boolean;
-  country: boolean;
-  line1: boolean;
-  city: boolean;
-  postal: boolean;
   cardNumber: boolean;
   cardExpiry: boolean;
   cardCvc: boolean;
@@ -177,23 +186,10 @@ export default function CheckoutPaymentForm({
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
   const [cardReady, setCardReady] = useState(false);
-  const [showManualAddress, setShowManualAddress] = useState(false);
-
   const [billingName, setBillingName] = useState(name ?? '');
-  const [billingCountry, setBillingCountry] = useState('');
-  const [billingLine1, setBillingLine1] = useState('');
-  const [billingLine2, setBillingLine2] = useState('');
-  const [billingCity, setBillingCity] = useState('');
-  const [billingPostal, setBillingPostal] = useState('');
-  const [billingState, setBillingState] = useState('');
-
+  const [billingAddressComplete, setBillingAddressComplete] = useState(false);
   const [touched, setTouched] = useState<BillingTouched>({
     email: false,
-    name: false,
-    country: false,
-    line1: false,
-    city: false,
-    postal: false,
     cardNumber: false,
     cardExpiry: false,
     cardCvc: false,
@@ -215,6 +211,13 @@ export default function CheckoutPaymentForm({
   }, [onProcessingChange, processing]);
 
   const formLocked = disabled || processing;
+  const billingAddressOptions = useMemo<StripeAddressElementOptions>(
+    () => ({
+      mode: 'billing',
+      defaultValues: billingName ? { name: billingName } : undefined,
+    }),
+    [billingName],
+  );
   const cardOptions: StripeCardElementOptions = {
     ...cardElementOptions,
     disabled: formLocked,
@@ -226,26 +229,8 @@ export default function CheckoutPaymentForm({
 
   const trimmedEmail = email.trim();
   const trimmedName = billingName.trim();
-  const trimmedLine1 = billingLine1.trim();
-  const trimmedLine2 = billingLine2.trim();
-  const trimmedCity = billingCity.trim();
-  const trimmedPostal = billingPostal.trim();
-  const trimmedState = billingState.trim();
 
   const emailValid = emailPattern.test(trimmedEmail);
-  const nameValid = trimmedName.length > 0;
-  const countryValid = billingCountry.length > 0;
-  const line1Valid = trimmedLine1.length > 0;
-  const cityValid = !showManualAddress || trimmedCity.length > 0;
-  const postalValid = !showManualAddress || trimmedPostal.length > 0;
-
-  const billingValid =
-    emailValid &&
-    nameValid &&
-    countryValid &&
-    line1Valid &&
-    cityValid &&
-    postalValid;
 
   const stripePaymentValid =
     cardNumberComplete &&
@@ -258,11 +243,10 @@ export default function CheckoutPaymentForm({
   const canPay = Boolean(
     !formLocked &&
       !switchError &&
-      billingValid &&
+      emailValid &&
+      billingAddressComplete &&
       (zeroDueConfirm || (stripe && elements && stripePaymentValid)),
   );
-
-  const postalLabel = billingCountry === 'IN' ? 'PIN' : 'ZIP';
 
   const emailError = touched.email
     ? !trimmedEmail
@@ -271,40 +255,6 @@ export default function CheckoutPaymentForm({
         ? 'Enter a valid email address.'
         : null
     : null;
-
-  const addressError = useMemo(() => {
-    if (touched.name && !nameValid) {
-      return 'Name is required.';
-    }
-    if (touched.country && !countryValid) {
-      return 'Country is required.';
-    }
-    if (touched.line1 && !line1Valid) {
-      return 'Address is required.';
-    }
-    if (showManualAddress && touched.city && !cityValid) {
-      return 'City is required.';
-    }
-    if (showManualAddress && touched.postal && !postalValid) {
-      return `${postalLabel} is required.`;
-    }
-    return null;
-  }, [
-    touched.name,
-    touched.country,
-    touched.line1,
-    touched.city,
-    touched.postal,
-    nameValid,
-    countryValid,
-    line1Valid,
-    cityValid,
-    postalValid,
-    showManualAddress,
-    postalLabel,
-  ]);
-
-  const billingBoxInvalid = Boolean(addressError);
 
   const cardNumberDisplayError = touched.cardNumber
     ? cardNumberError ||
@@ -329,6 +279,12 @@ export default function CheckoutPaymentForm({
 
   const markTouched = (field: keyof BillingTouched) => {
     setTouched((current) => ({ ...current, [field]: true }));
+  };
+
+  const handleBillingAddressChange = (event: StripeAddressElementChangeEvent) => {
+    setBillingAddressComplete(event.complete);
+    setBillingName(event.value.name ?? '');
+    onNameChange(event.value.name ?? '');
   };
 
   const handleCardNumberChange = (event: StripeCardNumberElementChangeEvent) => {
@@ -422,6 +378,17 @@ export default function CheckoutPaymentForm({
         throw new Error('Checkout is missing required Stripe configuration');
       }
 
+      const billingAddressElement = elements.getElement(AddressElement);
+      if (!billingAddressElement) {
+        throw new Error('Billing address is not ready yet.');
+      }
+
+      const billingAddressResult = await billingAddressElement.getValue();
+      if (!billingAddressResult.complete) {
+        return;
+      }
+
+      const billingAddressValue = billingAddressResult.value;
       const cardNumberElement = elements.getElement(CardNumberElement);
       if (!cardNumberElement) {
         throw new Error('Card details are not ready yet.');
@@ -432,14 +399,16 @@ export default function CheckoutPaymentForm({
           card: cardNumberElement,
           billing_details: {
             email: trimmedEmail,
-            name: trimmedName,
+            name: billingAddressValue.name || trimmedName,
             address: {
-              line1: trimmedLine1,
-              ...(trimmedLine2 ? { line2: trimmedLine2 } : {}),
-              ...(trimmedCity ? { city: trimmedCity } : {}),
-              ...(trimmedState ? { state: trimmedState } : {}),
-              ...(trimmedPostal ? { postal_code: trimmedPostal } : {}),
-              country: billingCountry,
+              line1: billingAddressValue.address.line1,
+              ...(billingAddressValue.address.line2
+                ? { line2: billingAddressValue.address.line2 }
+                : {}),
+              city: billingAddressValue.address.city,
+              state: billingAddressValue.address.state,
+              postal_code: billingAddressValue.address.postal_code,
+              country: billingAddressValue.address.country,
             },
           },
         },
@@ -506,9 +475,9 @@ export default function CheckoutPaymentForm({
       <div className="mx-auto w-full max-w-xl lg:ml-0 lg:mr-auto lg:max-w-2xl">
         <section>
           <h2 className="text-base font-semibold text-heading">Billing information</h2>
-          <p className="mt-1 text-sm text-muted">
+          {/* <p className="mt-1 text-sm text-muted">
             Required fields are marked with <RequiredMark />
-          </p>
+          </p> */}
 
           <div className="mt-5">
             <label htmlFor="checkout-email" className="block text-sm text-muted">
@@ -541,132 +510,15 @@ export default function CheckoutPaymentForm({
             <p className="text-sm text-muted">
               Billing address <RequiredMark />
             </p>
-            <div
-              className={`mt-2 ${checkoutBoxClass} ${
-                billingBoxInvalid ? 'border-[#df1b41]' : ''
-              }`}
-            >
-              <input
-                type="text"
-                autoComplete="name"
-                value={billingName}
-                disabled={formLocked}
-                placeholder="Name"
-                aria-label="Name"
-                aria-required="true"
-                className={condensedRowClass}
-                onChange={(event) => {
-                  setBillingName(event.target.value);
-                  onNameChange(event.target.value);
-                }}
-                onBlur={() => markTouched('name')}
-              />
-
-              <div className="relative border-t border-[#e6ebf1]">
-                <select
-                  value={billingCountry}
-                  disabled={formLocked}
-                  aria-label="Country"
-                  aria-required="true"
-                  className={`${condensedRowClass} appearance-none pr-10 ${
-                    billingCountry ? 'text-[#1a1f36]' : 'text-[#8898aa]'
-                  }`}
-                  onChange={(event) => setBillingCountry(event.target.value)}
-                  onBlur={() => markTouched('country')}
-                >
-                  {BILLING_COUNTRIES.map((country) => (
-                    <option key={country.code || 'blank'} value={country.code}>
-                      {country.label}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown
-                  size={16}
-                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-heading"
+            <div className="mt-2">
+              <div className="py-3">
+                <AddressElement
+                  options={billingAddressOptions}
+                  onChange={handleBillingAddressChange}
+                  className="w-full"
                 />
               </div>
-
-              <input
-                type="text"
-                autoComplete="address-line1"
-                value={billingLine1}
-                disabled={formLocked}
-                placeholder="Address"
-                aria-label="Address"
-                aria-required="true"
-                className={`${condensedRowClass} border-t border-[#e6ebf1]`}
-                onChange={(event) => setBillingLine1(event.target.value)}
-                onBlur={() => markTouched('line1')}
-              />
-
-              {showManualAddress ? (
-                <>
-                  <input
-                    type="text"
-                    autoComplete="address-line2"
-                    value={billingLine2}
-                    disabled={formLocked}
-                    placeholder="Address line 2"
-                    aria-label="Address line 2"
-                    className={`${condensedRowClass} border-t border-[#e6ebf1]`}
-                    onChange={(event) => setBillingLine2(event.target.value)}
-                  />
-                  <input
-                    type="text"
-                    autoComplete="address-level2"
-                    value={billingCity}
-                    disabled={formLocked}
-                    placeholder="City"
-                    aria-label="City"
-                    aria-required="true"
-                    className={`${condensedRowClass} border-t border-[#e6ebf1]`}
-                    onChange={(event) => setBillingCity(event.target.value)}
-                    onBlur={() => markTouched('city')}
-                  />
-                  <div className="grid grid-cols-2 border-t border-[#e6ebf1]">
-                    <input
-                      type="text"
-                      autoComplete="postal-code"
-                      value={billingPostal}
-                      disabled={formLocked}
-                      placeholder={postalLabel}
-                      aria-label={postalLabel}
-                      aria-required="true"
-                      className={`${condensedRowClass} border-r border-[#e6ebf1]`}
-                      onChange={(event) => setBillingPostal(event.target.value)}
-                      onBlur={() => markTouched('postal')}
-                    />
-                    <input
-                      type="text"
-                      autoComplete="address-level1"
-                      value={billingState}
-                      disabled={formLocked}
-                      placeholder="State"
-                      aria-label="State"
-                      className={condensedRowClass}
-                      onChange={(event) => setBillingState(event.target.value)}
-                    />
-                  </div>
-                </>
-              ) : null}
             </div>
-
-            <div className="mt-1 min-h-0" aria-live="polite">
-              {addressError ? (
-                <p className="text-sm text-[#df1b41]">{addressError}</p>
-              ) : null}
-            </div>
-
-            <button
-              type="button"
-              disabled={formLocked}
-              className="mt-1.5 text-sm text-[#0570de] underline underline-offset-2 hover:text-[#0451a5] disabled:cursor-not-allowed disabled:opacity-60 disabled:no-underline"
-              onClick={() => setShowManualAddress((current) => !current)}
-            >
-              {showManualAddress
-                ? 'Hide extra address fields'
-                : 'Enter address manually'}
-            </button>
           </div>
         </section>
 
