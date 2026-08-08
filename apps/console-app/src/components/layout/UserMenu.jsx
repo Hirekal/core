@@ -1,8 +1,7 @@
 import { useRef, useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ChevronDown, User, Building2, ExternalLink, LogOut } from 'lucide-react';
+import { ChevronDown, User, LogOut } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { SUPPORT_MAILTO } from '../../constants/support';
 
 export default function UserMenu() {
   const { user, logout } = useAuth();
@@ -37,18 +36,6 @@ export default function UserMenu() {
       description: 'Profile & password settings',
       icon: User,
       to: '/profile',
-    },
-    {
-      label: 'Organization',
-      description: 'Company & team info',
-      icon: Building2,
-      to: '/organization',
-    },
-    {
-      label: 'Support',
-      description: 'Email our support team',
-      icon: ExternalLink,
-      href: SUPPORT_MAILTO,
     },
   ];
 

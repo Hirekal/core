@@ -4,6 +4,7 @@ import {
   AUTH_EXPIRED_EVENT,
   clearExpiredSession,
   readSession,
+  refreshSessionIfNeeded,
 } from '../services/apiClient';
 
 const AuthContext = createContext(null);
@@ -17,7 +18,17 @@ export function AuthProvider({ children }) {
 
     async function bootstrap() {
       const session = readSession();
-      if (!session?.accessToken) {
+      if (!session?.accessToken && !session?.refreshToken) {
+        if (!cancelled) {
+          setUser(null);
+          setLoading(false);
+        }
+        return;
+      }
+
+      const sessionReady = await refreshSessionIfNeeded();
+      if (!sessionReady) {
+        clearExpiredSession();
         if (!cancelled) {
           setUser(null);
           setLoading(false);
@@ -26,7 +37,6 @@ export function AuthProvider({ children }) {
       }
 
       try {
-        // Prove tokens still work; localStorage alone is not enough after API restarts / DB resets.
         const profile = await authService.getProfile();
         if (!cancelled) {
           setUser(profile);
@@ -96,6 +106,17 @@ export function AuthProvider({ children }) {
   );
 }
 
+/**
+ * @returns {{
+ *   user: { id: string, email: string, name?: string | null } | null,
+ *   loading: boolean,
+ *   login: (email: string, password: string) => Promise<unknown>,
+ *   signUp: (name: string, email: string, password: string) => Promise<unknown>,
+ *   logout: () => Promise<void>,
+ *   updateUser: (data: Record<string, unknown>) => Promise<unknown>,
+ *   isAuthenticated: boolean
+ * }}
+ */
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) throw new Error('useAuth must be used within AuthProvider');

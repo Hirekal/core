@@ -11,6 +11,7 @@ import {
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import type { Request } from 'express';
+import { RecordStatus } from '../constants/auth.constants';
 import { UsersService } from '../../users/users.service';
 import { UserSessionsService } from '../../users/user-sessions/user-sessions.service';
 import { logServiceError } from '../../../../common/utils/error.util';
@@ -71,7 +72,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         hashToken(accessToken),
       );
 
-      if (!session || !this.userSessionsService.isSessionActive(session)) {
+      if (
+        !session ||
+        session.revokedAt ||
+        (session.status as RecordStatus) !== RecordStatus.ACTIVE
+      ) {
         throw new UnauthorizedException(
           ERROR_MESSAGES.AUTH.SESSION_INVALID_OR_EXPIRED,
         );

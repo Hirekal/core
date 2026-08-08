@@ -12,6 +12,68 @@ export const AUTH_EXPIRED_EVENT = 'hirekal:auth-expired';
 /** In-flight refresh promise so concurrent 401s share a single token rotation. */
 let refreshInFlight = null;
 
+/** Skip refresh retries briefly after a confirmed invalid refresh token. */
+let refreshBlockedUntil = 0;
+
+/**
+ * Returns true when the stored access token is missing or past its expiry.
+ *
+ * @param {object|null} session
+ * @returns {boolean}
+ */
+function isAccessTokenExpired(session) {
+  if (!session?.accessToken) {
+    return true;
+  }
+  if (!session.accessTokenExpiresAt) {
+    return false;
+  }
+  const expiresAt = Date.parse(session.accessTokenExpiresAt);
+  return Number.isFinite(expiresAt) && expiresAt <= Date.now();
+}
+
+/**
+ * Refreshes the session when the access token is expired.
+ *
+ * @returns {Promise<boolean>} True when a usable session exists afterward
+ */
+export async function refreshSessionIfNeeded() {
+  const session = readSession();
+  if (!session?.refreshToken) {
+    return Boolean(session?.accessToken) && !isAccessTokenExpired(session);
+  }
+  if (!isAccessTokenExpired(session)) {
+    return true;
+  }
+  if (Date.now() < refreshBlockedUntil) {
+    return false;
+  }
+  return tryRefreshSession();
+}
+
+/**
+ * Builds Authorization and refresh headers from the current session.
+ * Refreshes first when the access token is expired but a refresh token exists.
+ *
+ * @returns {Promise<Record<string, string>>}
+ */
+async function buildAuthHeaders() {
+  const ready = await refreshSessionIfNeeded();
+  const session = readSession();
+  if (!ready || !session) {
+    return {};
+  }
+
+  const headers = {};
+  if (session.accessToken) {
+    headers.Authorization = `Bearer ${session.accessToken}`;
+  }
+  if (session.refreshToken) {
+    headers['X-Refresh-Token'] = session.refreshToken;
+  }
+  return headers;
+}
+
 /**
  * Reads the persisted auth session from localStorage.
  *
@@ -154,12 +216,12 @@ export async function apiRequest(path, options = {}) {
   }
 
   if (auth) {
-    const session = readSession();
-    if (session?.accessToken) {
-      headers.Authorization = `Bearer ${session.accessToken}`;
-    }
-    if (session?.refreshToken) {
-      headers['X-Refresh-Token'] = session.refreshToken;
+    Object.assign(headers, await buildAuthHeaders());
+    if (!headers.Authorization && !headers['X-Refresh-Token']) {
+      clearExpiredSession();
+      const error = new Error('Your session has expired. Please sign in again.');
+      error.status = 401;
+      throw error;
     }
   }
 
@@ -187,9 +249,11 @@ export async function apiRequest(path, options = {}) {
   persistTokensFromHeaders(response, auth);
 
   if (response.status === 401 && auth && retry) {
-    const refreshed = await tryRefreshSession();
-    if (refreshed) {
-      return apiRequest(path, { ...options, retry: false });
+    if (Date.now() >= refreshBlockedUntil) {
+      const refreshed = await tryRefreshSession();
+      if (refreshed) {
+        return apiRequest(path, { ...options, retry: false });
+      }
     }
     clearExpiredSession();
   }
@@ -278,6 +342,9 @@ async function performRefreshSession() {
   if (!session?.refreshToken) {
     return false;
   }
+  if (Date.now() < refreshBlockedUntil) {
+    return false;
+  }
 
   try {
     const data = await apiRequest(API_ENDPOINTS.auth.refresh, {
@@ -287,6 +354,11 @@ async function performRefreshSession() {
       retry: false,
     });
 
+    if (!data?.accessToken || !data?.refreshToken) {
+      refreshBlockedUntil = Date.now() + 30_000;
+      return false;
+    }
+
     writeSession({
       ...session,
       accessToken: data.accessToken,
@@ -294,9 +366,10 @@ async function performRefreshSession() {
       accessTokenExpiresAt: data.accessTokenExpiresAt,
       refreshTokenExpiresAt: data.refreshTokenExpiresAt,
     });
+    refreshBlockedUntil = 0;
     return true;
   } catch {
-    writeSession(null);
+    refreshBlockedUntil = Date.now() + 30_000;
     return false;
   }
 }

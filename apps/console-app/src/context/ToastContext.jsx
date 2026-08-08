@@ -79,6 +79,14 @@ export function ToastProvider({ children }) {
   );
 }
 
+/**
+ * @returns {{
+ *   showToast: (message: string, options?: { tone?: string, duration?: number }) => number,
+ *   showError: (error: unknown, fallback?: string) => number,
+ *   showSuccess: (message: string) => number,
+ *   dismiss: (id: number) => void
+ * }}
+ */
 export function useToast() {
   const context = useContext(ToastContext);
   if (!context) {

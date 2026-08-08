@@ -1,15 +1,34 @@
 import { ValidationPipe } from '@nestjs/common';
+import type { RawBodyRequest } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { json, urlencoded } from 'express';
+import type { NestExpressApplication } from '@nestjs/platform-express';
+import type { Request, Response, NextFunction } from 'express';
+import { json, raw, urlencoded } from 'express';
 import { AppModule } from './app.module';
 import { HTTP_HEADERS } from './modules/auth/common/constants/app.constants';
 import { CronService } from './modules/cron/cron.service';
 
-async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { bodyParser: false });
+const PAYMENTS_WEBHOOK_PATH = '/api/v1/payments/webhooks';
 
-  // Media-worker callbacks can exceed Nest's default 100kb JSON limit.
-  app.use(json({ limit: '5mb' }));
+async function bootstrap() {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bodyParser: false,
+  });
+
+  app.use((req: RawBodyRequest<Request>, res: Response, next: NextFunction) => {
+    if (req.originalUrl.startsWith(PAYMENTS_WEBHOOK_PATH)) {
+      return raw({ type: 'application/json' })(req, res, next);
+    }
+
+    return json({
+      limit: '5mb',
+      verify: (request: RawBodyRequest<Request>, _response, buffer) => {
+        if (Buffer.isBuffer(buffer)) {
+          request.rawBody = buffer;
+        }
+      },
+    })(req, res, next);
+  });
   app.use(urlencoded({ extended: true, limit: '5mb' }));
 
   app.setGlobalPrefix('api/v1');

@@ -163,6 +163,32 @@ export class UserSessionsService {
   }
 
   /**
+   * Updates the access token hash and expiry on an active session.
+   */
+  async updateAccessToken(
+    id: string,
+    input: {
+      accessTokenHash: string;
+      accessTokenExpiresAt: Date;
+      ipAddress?: string | null;
+    },
+  ): Promise<void> {
+    try {
+      await this.sessionsRepository.update(id, {
+        accessTokenHash: input.accessTokenHash,
+        accessTokenExpiresAt: input.accessTokenExpiresAt,
+        ...(input.ipAddress !== undefined
+          ? { ipAddress: input.ipAddress }
+          : {}),
+        lastActivityAt: toDate(),
+      });
+    } catch (error) {
+      this.logger.error(LOG_MESSAGES.SESSION.TOUCH_FAILED(id), error);
+      throw error;
+    }
+  }
+
+  /**
    * Updates the last activity timestamp for a session.
    *
    * @param id - Session identifier

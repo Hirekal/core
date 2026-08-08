@@ -43,6 +43,10 @@ export function toUserErrorMessage(error, fallback = 'Something went wrong. Plea
     return 'You do not have permission to do that.';
   }
   if (status === 404) {
+    // Prefer API copy for known domain errors (e.g. coupon not available).
+    if (raw && raw.length <= 180 && !normalized.includes('exception') && !normalized.includes('cannot ')) {
+      return raw;
+    }
     return 'We could not find what you were looking for.';
   }
   if (status === 409) {
