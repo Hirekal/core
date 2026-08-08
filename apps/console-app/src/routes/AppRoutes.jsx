@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
-import ProtectedRoute, { PublicRoute, HomeRedirect } from './ProtectedRoute';
+import ProtectedRoute, { AdminRoute, PublicRoute, HomeRedirect } from './ProtectedRoute';
 import Navbar from '../components/layout/Navbar';
 
 import LoginPage from '../pages/auth/LoginPage';
@@ -21,6 +21,15 @@ import JobSettingsEmailAutomationPage from '../pages/jobs/JobSettingsEmailAutoma
 import NotificationsPage from '../pages/notifications/NotificationsPage';
 import OrganizationPage from '../pages/organization/OrganizationPage';
 import ProfileSettingsPage from '../pages/profile/ProfileSettingsPage';
+import PricingPlansPage from '../pages/billing/PricingPlansPage';
+import PlanUpgradePage from '../pages/billing/PlanUpgradePage';
+import UpgradeCheckoutPage from '../pages/billing/UpgradeCheckoutPage';
+import CheckoutPage from '../pages/billing/CheckoutPage';
+import CheckoutSuccessPage from '../pages/billing/CheckoutSuccessPage';
+import CheckoutFailedPage from '../pages/billing/CheckoutFailedPage';
+import ManageSubscriptionPage from '../pages/billing/ManageSubscriptionPage';
+import InvoicesPage from '../pages/billing/InvoicesPage';
+import SupportPage from '../pages/support/SupportPage';
 
 function AppLayout({ children }) {
   return (
@@ -29,6 +38,10 @@ function AppLayout({ children }) {
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">{children}</main>
     </div>
   );
+}
+
+function CheckoutLayout({ children }) {
+  return <div className="min-h-screen bg-white">{children}</div>;
 }
 
 export default function AppRoutes() {
@@ -124,6 +137,84 @@ export default function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/billing/plans"
+        element={
+          <AdminRoute>
+            <AppLayout><PricingPlansPage /></AppLayout>
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/billing/upgrade/checkout/:priceId"
+        element={
+          <AdminRoute>
+            <CheckoutLayout><UpgradeCheckoutPage /></CheckoutLayout>
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/billing/upgrade/:priceId"
+        element={
+          <AdminRoute>
+            <AppLayout><PlanUpgradePage /></AppLayout>
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/billing/checkout/:priceId"
+        element={
+          <AdminRoute>
+            <CheckoutLayout><CheckoutPage /></CheckoutLayout>
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/billing/success"
+        element={
+          <AdminRoute>
+            <AppLayout><CheckoutSuccessPage /></AppLayout>
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/billing/failed"
+        element={
+          <AdminRoute>
+            <AppLayout><CheckoutFailedPage /></AppLayout>
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/billing/subscription"
+        element={
+          <AdminRoute>
+            <AppLayout><ManageSubscriptionPage /></AppLayout>
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/payments"
+        element={
+          <AdminRoute>
+            <AppLayout><InvoicesPage /></AppLayout>
+          </AdminRoute>
+        }
+      />
+      <Route path="/invoices" element={<Navigate to="/payments" replace />} />
+      <Route
+        path="/billing/invoices"
+        element={<Navigate to="/payments" replace />}
+      />
+      <Route
+        path="/support"
+        element={
+          <ProtectedRoute>
+            <AppLayout><SupportPage /></AppLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route path="/billing" element={<Navigate to="/billing/plans" replace />} />
 
       <Route path="/" element={<HomeRedirect />} />
       <Route path="*" element={<HomeRedirect />} />

@@ -1,6 +1,14 @@
 import { Link } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 
+/**
+ * @param {{
+ *   title: string,
+ *   description?: string,
+ *   breadcrumbs?: Array<{ to?: string, label: string }>,
+ *   actions?: import('react').ReactNode
+ * }} props
+ */
 export default function PageHeader({ title, description, breadcrumbs, actions }) {
   return (
     <div className="mb-8">

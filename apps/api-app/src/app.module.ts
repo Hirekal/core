@@ -11,6 +11,7 @@ import { CronModule } from './modules/cron/cron.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './modules/auth/auth.module';
+import { PaymentsModule } from './modules/payments/payments.module';
 
 @Module({
   imports: [
@@ -45,6 +46,26 @@ import { AuthModule } from './modules/auth/auth.module';
         jwtSecret: configService.getOrThrow<string>('JWT_SECRET'),
         jwtAccessExpiresIn: configService.get('JWT_ACCESS_EXPIRES_IN'),
         jwtRefreshExpiresIn: configService.get('JWT_REFRESH_EXPIRES_IN'),
+      }),
+    }),
+    PaymentsModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        defaultProviderCode:
+          configService.get<string>('PAYMENTS_DEFAULT_PROVIDER') ?? 'STRIPE',
+        stripe: {
+          secretKey: configService.get<string>('STRIPE_SECRET_KEY') ?? '',
+          publishableKey:
+            configService.get<string>('STRIPE_PUBLISHABLE_KEY') ?? '',
+          webhookSecret:
+            configService.get<string>('STRIPE_WEBHOOK_SECRET') ?? '',
+          successUrl:
+            configService.get<string>('STRIPE_CHECKOUT_SUCCESS_URL') ??
+            'http://localhost:5173/billing/success',
+          cancelUrl:
+            configService.get<string>('STRIPE_CHECKOUT_CANCEL_URL') ??
+            'http://localhost:5173/billing/plans',
+        },
       }),
     }),
   ],

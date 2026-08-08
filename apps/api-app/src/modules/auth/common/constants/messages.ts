@@ -13,6 +13,7 @@ export const ERROR_MESSAGES = {
     SESSION_INVALID_OR_EXPIRED: 'Session is invalid or expired',
     EMAIL_ALREADY_VERIFIED: 'Email is already verified',
     CURRENT_PASSWORD_INCORRECT: 'Current password is incorrect',
+    FORBIDDEN: 'You do not have permission to perform this action',
   },
   USER: {
     NOT_FOUND: 'User not found',

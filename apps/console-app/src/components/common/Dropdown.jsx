@@ -2,7 +2,7 @@ import { ChevronDown, Check } from 'lucide-react';
 import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 
-function useMenuPosition(open, triggerRef, menuRef) {
+function useMenuPosition(open, triggerRef, menuRef, align = 'left') {
   const [position, setPosition] = useState(null);
 
   useLayoutEffect(() => {
@@ -20,34 +20,47 @@ function useMenuPosition(open, triggerRef, menuRef) {
       const gap = 6;
       const spaceBelow = window.innerHeight - rect.bottom - gap;
       const spaceAbove = rect.top - gap;
-      const openUpward = spaceBelow < Math.min(menuHeight, 240) && spaceAbove > spaceBelow;
+      const openUpward =
+        spaceBelow < Math.min(menuHeight, 240) && spaceAbove > spaceBelow;
+
+      // Anchor to the trigger edge so width changes don't misalign the menu.
+      const left = align === 'right' ? rect.right : rect.left;
+      const transforms = [];
+      if (align === 'right') {
+        transforms.push('translateX(-100%)');
+      }
+      if (openUpward) {
+        transforms.push('translateY(-100%)');
+      }
 
       setPosition({
-        left: rect.left,
-        width: rect.width,
+        left,
         top: openUpward ? rect.top - gap : rect.bottom + gap,
-        transform: openUpward ? 'translateY(-100%)' : undefined,
+        transform: transforms.length > 0 ? transforms.join(' ') : undefined,
       });
     };
 
     update();
+    // Remeasure after paint once the menu is in the DOM (height for flip).
+    const frame = window.requestAnimationFrame(update);
     window.addEventListener('scroll', update, true);
     window.addEventListener('resize', update);
     return () => {
+      window.cancelAnimationFrame(frame);
       window.removeEventListener('scroll', update, true);
       window.removeEventListener('resize', update);
     };
-  }, [open, triggerRef, menuRef]);
+  }, [open, triggerRef, menuRef, align]);
 
   return position;
 }
 
-export default function Dropdown({ trigger, items, align = 'right' }) {
+export default function Dropdown({ trigger, items, align = 'right', menuClassName = '' }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const triggerRef = useRef(null);
   const menuRef = useRef(null);
-  const position = useMenuPosition(open, triggerRef, menuRef);
+  const position = useMenuPosition(open, triggerRef, menuRef, align);
 
   useEffect(() => {
     function handleClick(e) {
@@ -59,20 +72,30 @@ export default function Dropdown({ trigger, items, align = 'right' }) {
   }, []);
 
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative inline-flex" ref={ref}>
       <div
         ref={triggerRef}
-        onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+        className="inline-flex"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((current) => !current);
+        }}
       >
         {trigger}
       </div>
       {open && position && createPortal(
         <div
           ref={menuRef}
-          style={{ position: 'fixed', left: position.left, top: position.top, transform: position.transform, zIndex: 9999 }}
+          style={{
+            position: 'fixed',
+            left: position.left,
+            top: position.top,
+            transform: position.transform,
+            zIndex: 9999,
+          }}
           className={`min-w-[200px] overflow-hidden rounded-xl border border-border bg-card py-1 shadow-xl ${
             align === 'right' ? 'origin-top-right' : 'origin-top-left'
-          }`}
+          } ${menuClassName}`}
         >
           {items.map((item, i) =>
             item.divider ? (
@@ -81,13 +104,17 @@ export default function Dropdown({ trigger, items, align = 'right' }) {
               <button
                 key={i}
                 type="button"
+                disabled={item.disabled}
                 onClick={() => {
+                  if (item.disabled) return;
                   item.onClick?.();
                   setOpen(false);
                 }}
-                className={`flex w-full items-center gap-2 px-4 py-2.5 text-sm transition-colors ${
-                  item.danger ? 'text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30' : 'text-heading hover:bg-hover'
-                }`}
+                className={`flex w-full items-center gap-2 px-4 py-2.5 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                  item.danger
+                    ? 'text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30'
+                    : 'text-heading hover:bg-hover'
+                } ${item.className || ''}`}
               >
                 {item.icon}
                 {item.label}

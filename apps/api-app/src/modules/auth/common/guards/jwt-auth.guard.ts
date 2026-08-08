@@ -4,20 +4,16 @@
  */
 import {
   ExecutionContext,
-  Inject,
   Injectable,
   Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
-import { JwtService } from '@nestjs/jwt';
 import type { Request, Response } from 'express';
 import { AuthService } from '../../auth.service';
 import { logServiceError } from '../../../../common/utils/error.util';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
-import { AUTH_MODULE_OPTIONS } from '../interfaces/auth-module-options.interface';
-import type { AuthModuleOptions } from '../interfaces/auth-module-options.interface';
 import { HTTP_HEADERS } from '../constants/app.constants';
 import { ERROR_MESSAGES, LOG_MESSAGES } from '../constants/messages';
 
@@ -31,9 +27,6 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
   constructor(
     private reflector: Reflector,
     private readonly authService: AuthService,
-    private readonly jwtService: JwtService,
-    @Inject(AUTH_MODULE_OPTIONS)
-    private readonly authOptions: AuthModuleOptions,
   ) {
     super();
   }
@@ -62,7 +55,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       const response = context.switchToHttp().getResponse<Response>();
       const refreshToken = this.extractRefreshToken(request);
 
-      if (!refreshToken || !this.isAccessTokenExpired(request)) {
+      if (!refreshToken) {
         throw new UnauthorizedException(
           ERROR_MESSAGES.AUTH.INVALID_OR_MISSING_TOKEN,
         );
@@ -75,6 +68,8 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       );
 
       request.headers.authorization = `Bearer ${tokens.accessToken}`;
+      request.headers[HTTP_HEADERS.REFRESH_TOKEN.toLowerCase()] =
+        tokens.refreshToken;
       response.setHeader(
         HTTP_HEADERS.AUTHORIZATION,
         `Bearer ${tokens.accessToken}`,
@@ -131,28 +126,6 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
   private extractRefreshToken(request: Request): string | undefined {
     const header = request.headers[HTTP_HEADERS.REFRESH_TOKEN.toLowerCase()];
     return typeof header === 'string' && header.length > 0 ? header : undefined;
-  }
-
-  /**
-   * Determines whether the bearer token is present but expired.
-   *
-   * @param request - Incoming HTTP request
-   * @returns True only for expired JWTs, not invalid signatures
-   */
-  private isAccessTokenExpired(request: Request): boolean {
-    const authHeader = request.headers.authorization;
-    if (!authHeader?.startsWith('Bearer ')) {
-      return false;
-    }
-
-    try {
-      this.jwtService.verify(authHeader.slice(7), {
-        secret: this.authOptions.jwtSecret,
-      });
-      return false;
-    } catch (error) {
-      return (error as Error).name === 'TokenExpiredError';
-    }
   }
 
   /**
