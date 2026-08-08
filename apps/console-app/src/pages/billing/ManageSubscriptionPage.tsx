@@ -311,7 +311,9 @@ export default function ManageSubscriptionPage() {
       <ConfirmationModal
         isOpen={cancelOpen}
         title="Cancel subscription"
-        message={`Your ${planName} subscription will remain active until ${formatDate(subscription.currentPeriodEnd)}. After that date, you will lose access to paid features. You can resume anytime before then.`}
+        message={`Your ${planName} subscription will remain active until ${formatDate(
+          subscription.currentPeriodEnd,
+        )}. After that date, you will lose access to paid features.`}
         confirmLabel="Cancel at period end"
         loading={processing}
         onConfirm={handleCancel}

@@ -2,8 +2,10 @@
  * @fileoverview Reusable current subscription summary card.
  */
 import Button from '../common/Button';
+import { useState } from 'react';
 import Card from '../common/Card';
 import SubscriptionStatusBadge from './SubscriptionStatusBadge';
+import ConfirmationModal from './ConfirmationModal';
 import {
   formatIntervalShort,
   formatMoney,
@@ -65,81 +67,95 @@ export default function BillingSummaryCard({
   const showCancelSchedule = Boolean(hasScheduledDowngrade && onCancelScheduledChange);
   const showCancel = Boolean(!subscription.cancelAtPeriodEnd && onCancel);
   const showActions = manageable && (showChangePlan || showCancelSchedule || showCancel);
+  const [cancelScheduledOpen, setCancelScheduledOpen] = useState(false);
 
   return (
-    <Card className="p-4 sm:p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-base font-semibold text-heading">{product.name}</p>
-          <p className="mt-0.5 text-sm text-muted">
-            {formatMoney(price.amount, price.currency)} ·{' '}
-            {formatIntervalShort(price.interval, price.intervalCount ?? 1)}
+    <>
+      <Card className="p-4 sm:p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-base font-semibold text-heading">{product.name}</p>
+            <p className="mt-0.5 text-sm text-muted">
+              {formatMoney(price.amount, price.currency)} ·{' '}
+              {formatIntervalShort(price.interval, price.intervalCount ?? 1)}
+            </p>
+          </div>
+          <SubscriptionStatusBadge
+            status={subscription.subscriptionStatus}
+            cancelAtPeriodEnd={subscription.cancelAtPeriodEnd}
+          />
+        </div>
+
+        <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+          <div>
+            <dt className="text-xs text-muted">
+              {subscription.cancelAtPeriodEnd ? 'Cancels on' : 'Next billing date'}
+            </dt>
+            <dd className="mt-0.5 font-medium text-heading">
+              {formatDate(subscription.currentPeriodEnd)}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted">Payment method</dt>
+            <dd className="mt-0.5 font-medium text-heading">{paymentMethodLabel}</dd>
+          </div>
+        </dl>
+
+        {scheduledPlan && scheduledPlanChangeAt && (
+          <p className="mt-3 text-sm text-muted">
+            Switching to {scheduledPlan.product.name} on {formatDate(scheduledPlanChangeAt)}.
           </p>
-        </div>
-        <SubscriptionStatusBadge
-          status={subscription.subscriptionStatus}
-          cancelAtPeriodEnd={subscription.cancelAtPeriodEnd}
-        />
-      </div>
+        )}
 
-      <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-        <div>
-          <dt className="text-xs text-muted">Next billing date</dt>
-          <dd className="mt-0.5 font-medium text-heading">
-            {formatDate(subscription.currentPeriodEnd)}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted">Payment method</dt>
-          <dd className="mt-0.5 font-medium text-heading">{paymentMethodLabel}</dd>
-        </div>
-      </dl>
+        {/* When subscription is scheduled to cancel at period end we show that
+            information in the billing date row above, so avoid duplicating it here. */}
 
-      {scheduledPlan && scheduledPlanChangeAt && (
-        <p className="mt-3 text-sm text-muted">
-          Switching to {scheduledPlan.product.name} on {formatDate(scheduledPlanChangeAt)}.
-        </p>
-      )}
-
-      {subscription.cancelAtPeriodEnd && (
-        <p className="mt-3 text-sm text-amber-800 dark:text-amber-200">
-          Cancels on {formatDate(subscription.currentPeriodEnd)}.
-        </p>
-      )}
-
-      {showActions && (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-          <div className="flex flex-wrap gap-2">
-            {showChangePlan && (
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={changePlanDisabled}
-                onClick={onChangePlan}
-              >
-                {changePlanLabel}
-              </Button>
-            )}
+        {showActions && (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+            <div className="flex flex-wrap gap-2">
+              {showChangePlan && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={changePlanDisabled}
+                  onClick={onChangePlan}
+                >
+                  {changePlanLabel}
+                </Button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {showCancelSchedule && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={processing}
+                  onClick={() => setCancelScheduledOpen(true)}
+                >
+                  Cancel schedule
+                </Button>
+              )}
+              {showCancel && (
+                <Button variant="danger" size="sm" disabled={processing} onClick={onCancel}>
+                  Cancel subscription
+                </Button>
+              )}
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {showCancelSchedule && (
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={processing}
-                onClick={onCancelScheduledChange}
-              >
-                Cancel schedule
-              </Button>
-            )}
-            {showCancel && (
-              <Button variant="danger" size="sm" disabled={processing} onClick={onCancel}>
-                Cancel subscription
-              </Button>
-            )}
-          </div>
-        </div>
-      )}
-    </Card>
+        )}
+      </Card>
+      <ConfirmationModal
+        isOpen={cancelScheduledOpen}
+        title="Cancel scheduled change"
+        message={`Cancel the scheduled plan change to ${scheduledPlan?.product.name ?? 'the new plan'}? Your subscription will remain on the current plan.`}
+        confirmLabel="Cancel scheduled change"
+        loading={processing}
+        onConfirm={() => {
+          setCancelScheduledOpen(false);
+          if (onCancelScheduledChange) onCancelScheduledChange();
+        }}
+        onClose={() => setCancelScheduledOpen(false)}
+      />
+    </>
   );
 }
