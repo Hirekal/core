@@ -96,16 +96,21 @@ interface CheckoutPaymentFormProps {
   clientSecret?: string;
   providerSubscriptionId?: string;
   payAmount?: number;
+  /** When true, no card payment is needed — confirm applies the plan change. */
+  zeroDueConfirm?: boolean;
   successMessage?: string;
   navigationState?: Record<string, unknown>;
   prepareCheckout?: () => Promise<{
-    clientSecret: string;
+    clientSecret: string | null;
     providerSubscriptionId: string;
+    paymentRequired?: boolean;
   }>;
   onCheckoutFailed?: () => Promise<void>;
   onCheckoutSucceeded?: () => void;
   switchError?: string;
   disabled?: boolean;
+  /** Notifies parent when Pay/confirm is in flight so summary actions can lock. */
+  onProcessingChange?: (processing: boolean) => void;
   onEmailChange: (value: string) => void;
   onNameChange: (value: string) => void;
 }
@@ -152,6 +157,7 @@ export default function CheckoutPaymentForm({
   clientSecret,
   providerSubscriptionId,
   payAmount,
+  zeroDueConfirm = false,
   successMessage = 'Subscription activated successfully',
   navigationState,
   prepareCheckout,
@@ -159,6 +165,7 @@ export default function CheckoutPaymentForm({
   onCheckoutSucceeded,
   switchError = '',
   disabled = false,
+  onProcessingChange,
   onEmailChange,
   onNameChange,
 }: CheckoutPaymentFormProps) {
@@ -203,6 +210,10 @@ export default function CheckoutPaymentForm({
     setBillingName(name ?? '');
   }, [name]);
 
+  useEffect(() => {
+    onProcessingChange?.(processing);
+  }, [onProcessingChange, processing]);
+
   const formLocked = disabled || processing;
   const cardOptions: StripeCardElementOptions = {
     ...cardElementOptions,
@@ -245,12 +256,10 @@ export default function CheckoutPaymentForm({
     !cardCvcError;
 
   const canPay = Boolean(
-    stripe &&
-      elements &&
-      !formLocked &&
+    !formLocked &&
       !switchError &&
       billingValid &&
-      stripePaymentValid,
+      (zeroDueConfirm || (stripe && elements && stripePaymentValid)),
   );
 
   const postalLabel = billingCountry === 'IN' ? 'PIN' : 'ZIP';
@@ -341,13 +350,11 @@ export default function CheckoutPaymentForm({
     event.preventDefault();
     setError('');
 
-    if (disabled || processing || !stripe || !elements || !canPay) {
+    if (disabled || processing || !canPay) {
       return;
     }
 
-    const cardNumberElement = elements.getElement(CardNumberElement);
-    if (!cardNumberElement) {
-      setError('Card details are not ready yet.');
+    if (!zeroDueConfirm && (!stripe || !elements)) {
       return;
     }
 
@@ -355,18 +362,69 @@ export default function CheckoutPaymentForm({
     let checkoutPrepared = false;
 
     try {
-      let resolvedClientSecret = clientSecret;
+      let resolvedClientSecret = clientSecret ?? null;
       let resolvedProviderSubscriptionId = providerSubscriptionId;
+      let paymentRequired = !zeroDueConfirm;
 
       if (prepareCheckout) {
         const checkoutSession = await prepareCheckout();
         resolvedClientSecret = checkoutSession.clientSecret;
         resolvedProviderSubscriptionId = checkoutSession.providerSubscriptionId;
+        paymentRequired =
+          checkoutSession.paymentRequired ??
+          Boolean(checkoutSession.clientSecret);
         checkoutPrepared = true;
       }
 
-      if (!resolvedClientSecret || !resolvedProviderSubscriptionId) {
+      if (!resolvedProviderSubscriptionId) {
         throw new Error('Checkout is missing required Stripe configuration');
+      }
+
+      if (zeroDueConfirm && paymentRequired) {
+        throw new Error(
+          'A charge is required for this upgrade. Please refresh the page and try again.',
+        );
+      }
+
+      if (!paymentRequired) {
+        onCheckoutSucceeded?.();
+
+        const subscription = await billingService.syncCheckoutSubscription(
+          resolvedProviderSubscriptionId,
+        );
+
+        if (!isBillableSubscription(subscription)) {
+          throw new Error(
+            'Your plan was updated but your subscription is still activating. Please wait a moment and refresh the plans page.',
+          );
+        }
+
+        persistSubscriptionSession(
+          subscription.id,
+          subscription.paymentProviderId,
+          subscription.customerId,
+        );
+
+        showSuccess(successMessage);
+
+        navigate('/billing/plans', {
+          replace: true,
+          state: {
+            subscription,
+            subscribed: true,
+            ...navigationState,
+          },
+        });
+        return;
+      }
+
+      if (!resolvedClientSecret || !stripe || !elements) {
+        throw new Error('Checkout is missing required Stripe configuration');
+      }
+
+      const cardNumberElement = elements.getElement(CardNumberElement);
+      if (!cardNumberElement) {
+        throw new Error('Card details are not ready yet.');
       }
 
       const confirmation = await stripe.confirmCardPayment(resolvedClientSecret, {
@@ -614,51 +672,59 @@ export default function CheckoutPaymentForm({
 
         <section className="mt-8">
           <h2 className="text-base font-semibold text-heading">Payment details</h2>
-          <p className="mt-5 text-sm text-muted">
-            Card information <RequiredMark />
-          </p>
-          <div className="relative mt-2 min-h-[88px]">
-            {!cardReady ? (
-              <div className="pointer-events-none absolute inset-0 z-10">
-                <CardElementPlaceholder />
-              </div>
-            ) : null}
-            <div className={cardReady ? 'relative' : 'invisible'}>
-              <div
-                className={`${checkoutBoxClass} ${
-                  stripeFieldError ? 'border-[#df1b41]' : ''
-                }`}
-              >
-                <div className="border-b border-[#e6ebf1] px-3 py-2.5">
-                  <CardNumberElement
-                    options={cardNumberOptions}
-                    onChange={handleCardNumberChange}
-                    onReady={() => setCardReady(true)}
-                    onBlur={() => markTouched('cardNumber')}
-                  />
-                </div>
-                <div className="grid grid-cols-2">
-                  <div className="border-r border-[#e6ebf1] px-3 py-2.5">
-                    <CardExpiryElement
-                      options={cardOptions}
-                      onChange={handleCardExpiryChange}
-                      onBlur={() => markTouched('cardExpiry')}
-                    />
+          {zeroDueConfirm ? (
+            <p className="mt-5 text-sm text-muted">
+              No charge due today — confirm to switch plans.
+            </p>
+          ) : (
+            <>
+              <p className="mt-5 text-sm text-muted">
+                Card information <RequiredMark />
+              </p>
+              <div className="relative mt-2 min-h-[88px]">
+                {!cardReady ? (
+                  <div className="pointer-events-none absolute inset-0 z-10">
+                    <CardElementPlaceholder />
                   </div>
-                  <div className="px-3 py-2.5">
-                    <CardCvcElement
-                      options={cardOptions}
-                      onChange={handleCardCvcChange}
-                      onBlur={() => markTouched('cardCvc')}
-                    />
+                ) : null}
+                <div className={cardReady ? 'relative' : 'invisible'}>
+                  <div
+                    className={`${checkoutBoxClass} ${
+                      stripeFieldError ? 'border-[#df1b41]' : ''
+                    }`}
+                  >
+                    <div className="border-b border-[#e6ebf1] px-3 py-2.5">
+                      <CardNumberElement
+                        options={cardNumberOptions}
+                        onChange={handleCardNumberChange}
+                        onReady={() => setCardReady(true)}
+                        onBlur={() => markTouched('cardNumber')}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2">
+                      <div className="border-r border-[#e6ebf1] px-3 py-2.5">
+                        <CardExpiryElement
+                          options={cardOptions}
+                          onChange={handleCardExpiryChange}
+                          onBlur={() => markTouched('cardExpiry')}
+                        />
+                      </div>
+                      <div className="px-3 py-2.5">
+                        <CardCvcElement
+                          options={cardOptions}
+                          onChange={handleCardCvcChange}
+                          onBlur={() => markTouched('cardCvc')}
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
-          {stripeFieldError ? (
-            <p className="mt-1.5 text-sm text-[#df1b41]">{stripeFieldError}</p>
-          ) : null}
+              {stripeFieldError ? (
+                <p className="mt-1.5 text-sm text-[#df1b41]">{stripeFieldError}</p>
+              ) : null}
+            </>
+          )}
         </section>
 
         {(error || switchError) && (
@@ -678,7 +744,9 @@ export default function CheckoutPaymentForm({
               ? 'Processing…'
               : disabled
                 ? 'Updating checkout…'
-                : `Pay ${formatMoney(payAmount ?? price.amount, price.currency)}`}
+                : zeroDueConfirm
+                  ? 'Confirm upgrade — no charge today'
+                  : `Pay ${formatMoney(payAmount ?? price.amount, price.currency)}`}
           </Button>
           {/* {!canPay && !processing && !disabled && !switchError ? (
             <p className="mt-2 text-center text-sm text-muted">

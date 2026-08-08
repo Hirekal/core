@@ -17,7 +17,6 @@ import * as billingService from '../../services/billingService';
 import { toUserErrorMessage } from '../../utils/errorMessage';
 import {
   BILLING_PERIODS,
-  comparePlanDirection,
   isPayableUpgradePeriod,
   matchesBillingPeriod,
   resolveBillingPeriod,
@@ -68,6 +67,7 @@ export default function UpgradeCheckoutPage() {
   const [appliedCoupon, setAppliedCoupon] = useState<ValidatedCoupon | null>(null);
   const [couponApplying, setCouponApplying] = useState(false);
   const [couponError, setCouponError] = useState('');
+  const [paymentProcessing, setPaymentProcessing] = useState(false);
   const upgradePreparedRef = useRef(false);
   const subscriptionIdRef = useRef<string | null>(locationState?.subscriptionId ?? null);
   const upgradeSucceededRef = useRef(false);
@@ -109,6 +109,9 @@ export default function UpgradeCheckoutPage() {
       previousAmountDue?: number | null,
     ) => {
       const direction = planChangePreview.direction;
+      if (direction === 'same') {
+        throw new Error("You're already on this plan.");
+      }
       if (direction !== 'upgrade' && direction !== 'lateral') {
         throw new Error('Selected plan is not an upgrade from your current plan.');
       }
@@ -261,19 +264,25 @@ export default function UpgradeCheckoutPage() {
         const activeCurrentPrice = planChangePreview.currentPlan;
         const credit = Math.max(planChangePreview.preview.prorationCredit ?? 0, 0);
 
+        if (
+          planChangePreview.direction === 'same' ||
+          activeCurrentPrice.id === loadedPrice.id
+        ) {
+          throw new Error("You're already on this plan.");
+        }
+
         let checkoutPrice = loadedPrice;
         let checkoutPreview = planChangePreview;
 
+        // Interval options that settle underpaid are hidden; fall back to a
+        // payable sibling. Same-interval $0 due (credit/coupon) stays valid.
         const selectedIsPayable = isPayableUpgradePeriod(
           activeCurrentPrice,
           loadedPrice,
           credit,
         );
-        const selectedLooksUnderpaid =
-          planChangePreview.direction === 'upgrade' &&
-          planChangePreview.preview.estimatedAmountPayable <= 0;
 
-        if (!selectedIsPayable || selectedLooksUnderpaid) {
+        if (!selectedIsPayable) {
           const fallbackPrice = findPayableSiblingPrice(
             activeCurrentPrice,
             activePrices,
@@ -317,7 +326,16 @@ export default function UpgradeCheckoutPage() {
         );
       } catch (err) {
         if (!cancelled) {
-          setError(toUserErrorMessage(err, 'Failed to load upgrade checkout'));
+          const message = toUserErrorMessage(err, 'Failed to load upgrade checkout');
+          const normalized = message.toLowerCase();
+          if (
+            normalized.includes('already on this plan') ||
+            normalized.includes('already on the requested plan')
+          ) {
+            setError("You're already on this plan.");
+          } else {
+            setError(message);
+          }
         }
       } finally {
         if (!cancelled) {
@@ -366,7 +384,7 @@ export default function UpgradeCheckoutPage() {
   };
 
   const handleBillingPeriodChange = async (period: BillingPeriod) => {
-    if (!currentPrice || period === billingPeriod || periodSwitching || couponApplying) {
+    if (!currentPrice || period === billingPeriod || periodSwitching || couponApplying || paymentProcessing) {
       return;
     }
 
@@ -405,7 +423,7 @@ export default function UpgradeCheckoutPage() {
   };
 
   const handleApplyCoupon = async (code: string) => {
-    if (!price || couponApplying || periodSwitching) {
+    if (!price || couponApplying || periodSwitching || paymentProcessing) {
       return;
     }
 
@@ -435,7 +453,7 @@ export default function UpgradeCheckoutPage() {
   };
 
   const handleRemoveCoupon = async () => {
-    if (!price || couponApplying || periodSwitching) {
+    if (!price || couponApplying || periodSwitching || paymentProcessing) {
       return;
     }
 
@@ -485,9 +503,9 @@ export default function UpgradeCheckoutPage() {
     );
   }
 
-  const upgradeDirection = comparePlanDirection(currentPrice, price);
-  const chargeLooksInvalid =
-    amountDue <= 0 && upgradeDirection === 'upgrade';
+  const zeroDueUpgrade =
+    amountDue <= 0 &&
+    isPayableUpgradePeriod(currentPrice, price, unusedCreditEstimate);
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-2">
@@ -508,6 +526,7 @@ export default function UpgradeCheckoutPage() {
           appliedCoupon={appliedCoupon}
           couponApplying={couponApplying}
           couponError={couponError}
+          actionsLocked={paymentProcessing}
           onApplyCoupon={handleApplyCoupon}
           onRemoveCoupon={handleRemoveCoupon}
         />
@@ -523,28 +542,18 @@ export default function UpgradeCheckoutPage() {
             email={email}
             name={name}
             payAmount={amountDue}
+            zeroDueConfirm={zeroDueUpgrade}
             successMessage="Subscription upgraded successfully"
             navigationState={{ upgraded: true }}
-            switchError={
-              periodSwitchError ||
-              (chargeLooksInvalid
-                ? 'Unable to calculate the upgrade charge for this billing period. Try another period or refresh the page.'
-                : '')
-            }
+            switchError={periodSwitchError}
             disabled={couponApplying || periodSwitching}
+            onProcessingChange={setPaymentProcessing}
             prepareCheckout={async () => {
               if (
                 !isPayableUpgradePeriod(currentPrice, price, unusedCreditEstimate)
               ) {
                 throw new Error(
                   'Selected billing period is not available for an upgrade from your current plan.',
-                );
-              }
-
-              const direction = comparePlanDirection(currentPrice, price);
-              if (amountDue <= 0 && direction === 'upgrade') {
-                throw new Error(
-                  'Unable to calculate the upgrade charge. Please try another billing period.',
                 );
               }
 
@@ -555,23 +564,23 @@ export default function UpgradeCheckoutPage() {
                   appliedCoupon?.promotionCode,
                 );
 
-              if (
-                !checkoutSession.clientSecret ||
-                !checkoutSession.providerSubscriptionId
-              ) {
+              if (!checkoutSession.providerSubscriptionId) {
                 throw new Error('Checkout is missing required Stripe configuration');
               }
 
               if (typeof checkoutSession.amountDue === 'number') {
-                if (
-                  checkoutSession.amountDue <= 0 &&
-                  direction === 'upgrade'
-                ) {
-                  throw new Error(
-                    'Unable to calculate the upgrade charge. Please try another billing period.',
-                  );
-                }
                 setAmountDue(checkoutSession.amountDue);
+              }
+
+              const paymentRequired =
+                checkoutSession.paymentRequired ??
+                Boolean(
+                  checkoutSession.clientSecret &&
+                    (checkoutSession.amountDue ?? 0) > 0,
+                );
+
+              if (paymentRequired && !checkoutSession.clientSecret) {
+                throw new Error('Checkout is missing required Stripe configuration');
               }
 
               upgradePreparedRef.current = true;
@@ -580,6 +589,7 @@ export default function UpgradeCheckoutPage() {
               return {
                 clientSecret: checkoutSession.clientSecret,
                 providerSubscriptionId: checkoutSession.providerSubscriptionId,
+                paymentRequired,
               };
             }}
             onCheckoutFailed={async () => {

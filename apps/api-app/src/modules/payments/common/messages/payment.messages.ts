@@ -25,7 +25,7 @@ export const ERROR_MESSAGES = {
     NOT_FOUND: 'Subscription not found',
     RESUME_NOT_SUPPORTED:
       'Resume subscription is not supported for this provider',
-    SAME_PLAN: 'Subscription is already on the requested plan',
+    SAME_PLAN: "You're already on this plan.",
     PLAN_PROVIDER_MISMATCH:
       'Requested price belongs to a different payment provider',
     INVALID_PLAN_CHANGE:

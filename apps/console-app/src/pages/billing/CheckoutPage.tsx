@@ -74,6 +74,7 @@ export default function CheckoutPage() {
   const [appliedCoupon, setAppliedCoupon] = useState<ValidatedCoupon | null>(null);
   const [couponApplying, setCouponApplying] = useState(false);
   const [couponError, setCouponError] = useState('');
+  const [paymentProcessing, setPaymentProcessing] = useState(false);
   const totalsRequestIdRef = useRef(0);
 
   const availablePeriods = useMemo(
@@ -225,7 +226,7 @@ export default function CheckoutPage() {
   );
 
   const handleBillingPeriodChange = async (period: BillingPeriod) => {
-    if (!user?.email || period === billingPeriod || periodSwitching || couponApplying) {
+    if (!user?.email || period === billingPeriod || periodSwitching || couponApplying || paymentProcessing) {
       return;
     }
 
@@ -257,7 +258,7 @@ export default function CheckoutPage() {
   };
 
   const handleApplyCoupon = async (code: string) => {
-    if (!price || couponApplying || periodSwitching) {
+    if (!price || couponApplying || periodSwitching || paymentProcessing) {
       return;
     }
 
@@ -286,7 +287,7 @@ export default function CheckoutPage() {
   };
 
   const handleRemoveCoupon = async () => {
-    if (!price || couponApplying || periodSwitching) {
+    if (!price || couponApplying || periodSwitching || paymentProcessing) {
       return;
     }
 
@@ -345,6 +346,7 @@ export default function CheckoutPage() {
           appliedCoupon={appliedCoupon}
           couponApplying={couponApplying}
           couponError={couponError}
+          actionsLocked={paymentProcessing}
           onApplyCoupon={handleApplyCoupon}
           onRemoveCoupon={handleRemoveCoupon}
         />
@@ -362,6 +364,7 @@ export default function CheckoutPage() {
             payAmount={amountDueToday ?? price.amount}
             switchError={periodSwitchError}
             disabled={couponApplying || periodSwitching}
+            onProcessingChange={setPaymentProcessing}
             prepareCheckout={async () => {
               if (!user?.email) {
                 throw new Error('You need to be signed in to complete checkout.');

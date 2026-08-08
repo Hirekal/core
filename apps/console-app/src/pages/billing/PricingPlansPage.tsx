@@ -224,12 +224,13 @@ export default function PricingPlansPage() {
   const getActionLabel = useCallback(
     (plan: BillingPlan): string => {
       if (!currentPlan?.price) return 'Subscribe';
+      if (plan.price.id === currentPriceId) return 'Current plan';
       const direction = comparePlanDirection(currentPlan.price, plan.price);
       if (direction === 'upgrade' || direction === 'lateral') return 'Upgrade';
       if (direction === 'downgrade') return 'Downgrade';
-      return 'Subscribe';
+      return 'Current plan';
     },
-    [currentPlan],
+    [currentPlan, currentPriceId],
   );
 
   /*
@@ -286,6 +287,7 @@ export default function PricingPlansPage() {
       if (!activePrice) return;
 
       const direction = comparePlanDirection(activePrice, plan.price);
+      if (direction === 'same') return;
       if (direction === 'upgrade' || direction === 'lateral') {
         setConfirmUpgradePlan(plan);
         return;

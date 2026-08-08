@@ -124,10 +124,14 @@ export interface ProviderUpgradeCheckoutSessionInput {
   resetBillingCycle?: boolean;
 }
 
-export interface ProviderUpgradeCheckoutSessionResult
-  extends ProviderCheckoutSessionResult {
+export interface ProviderUpgradeCheckoutSessionResult {
+  clientSecret: string | null;
+  sessionId: string;
+  providerSubscriptionId: string;
   amountDue: number;
   currency: string;
+  /** False when proration settled at $0 and no card confirmation is needed. */
+  paymentRequired: boolean;
 }
 
 export interface ProviderBillingPortalSessionInput {

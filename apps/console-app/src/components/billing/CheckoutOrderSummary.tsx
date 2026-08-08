@@ -29,6 +29,8 @@ interface CheckoutOrderSummaryProps {
   appliedCoupon?: ValidatedCoupon | null;
   couponApplying?: boolean;
   couponError?: string;
+  /** Locks period + coupon controls (e.g. while payment is processing). */
+  actionsLocked?: boolean;
   onApplyCoupon?: (code: string) => Promise<void> | void;
   onRemoveCoupon?: () => void;
 }
@@ -50,11 +52,13 @@ export default function CheckoutOrderSummary({
   appliedCoupon = null,
   couponApplying = false,
   couponError = '',
+  actionsLocked = false,
   onApplyCoupon,
   onRemoveCoupon,
   savingsByPeriod,
 }: CheckoutOrderSummaryProps) {
   const isUpgrade = mode === 'upgrade';
+  const controlsLocked = couponApplying || actionsLocked;
   const totalDue =
     amountDueToday != null ? amountDueToday : isUpgrade ? null : price.amount;
   const discount = Math.max(discountAmount, 0);
@@ -101,7 +105,7 @@ export default function CheckoutOrderSummary({
   }, [appliedCoupon]);
 
   const handleApply = async () => {
-    if (!onApplyCoupon || !couponInput.trim()) {
+    if (!onApplyCoupon || !couponInput.trim() || controlsLocked) {
       return;
     }
     // Coupons are case-insensitive; normalize before validate/apply.
@@ -109,6 +113,9 @@ export default function CheckoutOrderSummary({
   };
 
   const toggleCouponAccordion = () => {
+    if (controlsLocked) {
+      return;
+    }
     setShowCouponField((current) => {
       if (current) {
         setCouponInput('');
@@ -144,7 +151,7 @@ export default function CheckoutOrderSummary({
             value={billingPeriod}
             periods={availablePeriods}
             onChange={onBillingPeriodChange}
-            disabled={periodSwitching || couponApplying}
+            disabled={periodSwitching || controlsLocked}
             savingsByPeriod={savingsByPeriod}
             title={product.name}
             titleRight={formatMoney(price.amount, price.currency)}
@@ -175,7 +182,7 @@ export default function CheckoutOrderSummary({
             <div className="space-y-2">
               <div
                 className={`rounded-md border border-[#99f6e4] bg-[#f0fdfa] px-3 py-2.5 ${
-                  couponApplying ? 'opacity-70' : ''
+                  controlsLocked ? 'opacity-70' : ''
                 }`}
               >
                 <div className="flex items-center justify-between gap-3">
@@ -208,7 +215,7 @@ export default function CheckoutOrderSummary({
                     <button
                       type="button"
                       className="inline-flex shrink-0 items-center gap-1.5 text-base text-muted hover:text-heading disabled:cursor-not-allowed disabled:opacity-60"
-                      disabled={couponApplying}
+                      disabled={controlsLocked}
                       onClick={onRemoveCoupon}
                     >
                       {couponApplying ? (
@@ -232,9 +239,10 @@ export default function CheckoutOrderSummary({
               <button
                 type="button"
                 id="checkout-coupon-trigger"
-                className="inline-flex items-center gap-1.5 text-left text-base font-medium text-[#635bff] hover:underline"
+                className="inline-flex items-center gap-1.5 text-left text-base font-medium text-[#635bff] hover:underline disabled:cursor-not-allowed disabled:opacity-50 disabled:no-underline"
                 aria-expanded={showCouponField}
                 aria-controls="checkout-coupon-panel"
+                disabled={controlsLocked}
                 onClick={toggleCouponAccordion}
               >
                 <span>Apply coupon</span>
@@ -268,7 +276,7 @@ export default function CheckoutOrderSummary({
                         onChange={(event) => setCouponInput(event.target.value)}
                         placeholder="Coupon code"
                         className="min-w-0 flex-1 rounded-md border border-[#e6ebf1] bg-white px-3 py-2.5 text-base leading-normal text-heading placeholder:text-[#8898aa] focus:border-[#e6ebf1] focus:outline-none"
-                        disabled={couponApplying}
+                        disabled={controlsLocked}
                         onKeyDown={(event) => {
                           if (event.key === 'Enter') {
                             event.preventDefault();
@@ -283,7 +291,7 @@ export default function CheckoutOrderSummary({
                       />
                       <button
                         type="button"
-                        disabled={couponApplying || !couponInput.trim()}
+                        disabled={controlsLocked || !couponInput.trim()}
                         className="inline-flex h-auto shrink-0 items-center justify-center gap-2 rounded-md border border-transparent bg-white px-4 py-2.5 text-base font-medium leading-normal text-heading transition-colors hover:bg-[#f6f9fc] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                         onClick={() => void handleApply()}
                       >

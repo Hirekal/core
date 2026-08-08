@@ -163,9 +163,15 @@ export interface CheckoutSessionResponse {
   currency?: string;
 }
 
-export interface UpgradeCheckoutSessionResponse extends CheckoutSessionResponse {
+export interface UpgradeCheckoutSessionResponse {
+  clientSecret: string | null;
+  sessionId: string;
+  providerSubscriptionId: string;
+  publishableKey: string;
   amountDue: number;
   currency: string;
+  /** False when proration settled at $0 and no card confirmation is needed. */
+  paymentRequired?: boolean;
 }
 
 export interface ValidatedCoupon {

@@ -891,21 +891,29 @@ export class StripeProvider implements PaymentProvider {
           );
         }
 
-        const clientSecret = latestInvoice.confirmation_secret?.client_secret;
-        if (!clientSecret) {
+        const currency = latestInvoice.currency.toUpperCase();
+        const amountDue = Math.max(
+          toMajorAmount(latestInvoice.amount_due, currency),
+          0,
+        );
+        const clientSecret =
+          latestInvoice.confirmation_secret?.client_secret ?? null;
+        const invoicePaid = latestInvoice.status === 'paid';
+        const paymentRequired = amountDue > 0 && !invoicePaid;
+
+        if (paymentRequired && !clientSecret) {
           throw new BadRequestException(
             ERROR_MESSAGES.CHECKOUT.SESSION_CREATE_FAILED,
           );
         }
 
-        const currency = latestInvoice.currency.toUpperCase();
-
         return {
           clientSecret,
           sessionId: updatedSubscription.id,
           providerSubscriptionId: updatedSubscription.id,
-          amountDue: toMajorAmount(latestInvoice.amount_due, currency),
+          amountDue,
           currency,
+          paymentRequired,
         };
       } catch (error) {
         if (couponCreditItemId) {
