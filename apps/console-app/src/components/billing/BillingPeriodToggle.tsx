@@ -16,6 +16,10 @@ interface BillingPeriodToggleProps {
   disabled?: boolean;
   /** Actual % saved vs monthly for each period (e.g. { yearly: 17 }). */
   savingsByPeriod?: Partial<Record<BillingPeriod, number>>;
+  /** Radio-variant header title (defaults to "Billing period"). */
+  title?: string;
+  /** Optional right-side label in the radio header (e.g. plan price). */
+  titleRight?: string;
 }
 
 /**
@@ -28,6 +32,8 @@ export default function BillingPeriodToggle({
   variant = 'pill',
   disabled = false,
   savingsByPeriod = {},
+  title = 'Billing period',
+  titleRight,
 }: BillingPeriodToggleProps) {
   const renderSavingsBadge = (
     period: BillingPeriod,
@@ -47,12 +53,19 @@ export default function BillingPeriodToggle({
     return (
       <div className="overflow-hidden rounded-md border border-[#e6ebf1] bg-white p-3 shadow-sm">
         <div className="mb-2 flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[#1a1f36] text-white">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#1a1f36] text-white">
             <CalendarDays size={16} />
           </div>
-          <h2 className="text-base font-medium text-heading">Billing period</h2>
+          <h2 className="min-w-0 flex-1 truncate text-base font-medium text-heading">
+            {title}
+          </h2>
+          {titleRight ? (
+            <span className="shrink-0 text-base font-medium tabular-nums text-heading">
+              {titleRight}
+            </span>
+          ) : null}
         </div>
-        <div className="space-y-0" role="radiogroup" aria-label="Billing period">
+        <div className="space-y-0" role="radiogroup" aria-label={title}>
           {periods.map((period) => {
             const isActive = value === period;
 

@@ -1,5 +1,10 @@
 /**
- * @fileoverview Custom checkout payment form styled like Stripe Checkout.
+ * @fileoverview Checkout payment form with Stripe Checkout-style billing + Card Elements.
+ *
+ * Billing address is a custom condensed box (Name / Country / Address) so text stays
+ * vertically centered. Stripe Address Element floating labels always reserve title
+ * space and cannot match that UI reliably. Card fields stay on Stripe Elements;
+ * billing details are passed into confirmCardPayment.
  */
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -27,20 +32,28 @@ import { toUserErrorMessage } from '../../utils/errorMessage';
 import type { Price } from '../../types/billing';
 
 const checkoutFieldClass =
-  'w-full border-0 bg-transparent px-3 py-3 text-base text-heading placeholder:text-[#8898aa] focus:outline-none';
+  'w-full border-0 bg-transparent px-3 py-3 text-base leading-5 text-[#1a1f36] placeholder:text-[#8898aa] outline-none disabled:cursor-not-allowed disabled:opacity-100';
+
+const condensedRowClass =
+  'flex min-h-[46px] w-full items-center border-0 bg-transparent px-3 text-base leading-5 text-[#1a1f36] placeholder:text-[#8898aa] outline-none disabled:cursor-not-allowed disabled:opacity-100';
+
 const checkoutBoxClass =
   'overflow-hidden rounded-md border border-[#e6ebf1] bg-white shadow-sm';
 
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 const BILLING_COUNTRIES = [
-  { code: '', label: 'Country or region' },
+  { code: '', label: 'Country' },
   { code: 'US', label: 'United States' },
   { code: 'IN', label: 'India' },
   { code: 'GB', label: 'United Kingdom' },
   { code: 'CA', label: 'Canada' },
   { code: 'AU', label: 'Australia' },
+  { code: 'AE', label: 'United Arab Emirates' },
+  { code: 'SG', label: 'Singapore' },
+  { code: 'DE', label: 'Germany' },
+  { code: 'FR', label: 'France' },
 ];
-
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const cardElementOptions: StripeCardElementOptions = {
   style: {
@@ -49,6 +62,7 @@ const cardElementOptions: StripeCardElementOptions = {
       fontFamily:
         '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
       fontSize: '16px',
+      lineHeight: '20px',
       fontSmoothing: 'antialiased',
       '::placeholder': {
         color: '#8898aa',
@@ -56,6 +70,21 @@ const cardElementOptions: StripeCardElementOptions = {
     },
     invalid: {
       color: '#df1b41',
+    },
+  },
+};
+
+/** Card Elements appearance only (billing address is custom condensed UI). */
+export const checkoutElementsOptions = {
+  appearance: {
+    theme: 'stripe' as const,
+    variables: {
+      colorPrimary: '#1a1f36',
+      colorText: '#1a1f36',
+      colorDanger: '#df1b41',
+      fontFamily:
+        '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+      borderRadius: '6px',
     },
   },
 };
@@ -81,12 +110,40 @@ interface CheckoutPaymentFormProps {
   onNameChange: (value: string) => void;
 }
 
-function isValidEmail(value: string): boolean {
-  return EMAIL_PATTERN.test(value.trim());
+type BillingTouched = {
+  email: boolean;
+  name: boolean;
+  country: boolean;
+  line1: boolean;
+  city: boolean;
+  postal: boolean;
+  cardNumber: boolean;
+  cardExpiry: boolean;
+  cardCvc: boolean;
+};
+
+function RequiredMark() {
+  return (
+    <span className="text-[#df1b41]" aria-hidden="true">
+      *
+    </span>
+  );
+}
+
+function CardElementPlaceholder() {
+  return (
+    <div className={`${checkoutBoxClass} overflow-hidden`} aria-hidden>
+      <div className="h-[44px] animate-pulse bg-[#f0f3f7]" />
+      <div className="grid grid-cols-2 border-t border-[#e6ebf1]">
+        <div className="h-[44px] animate-pulse border-r border-[#e6ebf1] bg-[#f0f3f7]" />
+        <div className="h-[44px] animate-pulse bg-[#f0f3f7]" />
+      </div>
+    </div>
+  );
 }
 
 /**
- * Collects billing details and confirms the subscription payment intent.
+ * Collects billing + card details and confirms the subscription payment intent.
  */
 export default function CheckoutPaymentForm({
   price,
@@ -112,20 +169,27 @@ export default function CheckoutPaymentForm({
 
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
+  const [cardReady, setCardReady] = useState(false);
+  const [showManualAddress, setShowManualAddress] = useState(false);
+
   const [billingName, setBillingName] = useState(name ?? '');
   const [billingCountry, setBillingCountry] = useState('');
-  const [billingAddress, setBillingAddress] = useState('');
-  const [showManualAddress, setShowManualAddress] = useState(false);
+  const [billingLine1, setBillingLine1] = useState('');
+  const [billingLine2, setBillingLine2] = useState('');
   const [billingCity, setBillingCity] = useState('');
-  const [billingState, setBillingState] = useState('');
   const [billingPostal, setBillingPostal] = useState('');
-  const [touched, setTouched] = useState({
+  const [billingState, setBillingState] = useState('');
+
+  const [touched, setTouched] = useState<BillingTouched>({
     email: false,
     name: false,
     country: false,
-    address: false,
+    line1: false,
     city: false,
     postal: false,
+    cardNumber: false,
+    cardExpiry: false,
+    cardCvc: false,
   });
 
   const [cardNumberComplete, setCardNumberComplete] = useState(false);
@@ -147,14 +211,16 @@ export default function CheckoutPaymentForm({
 
   const trimmedEmail = email.trim();
   const trimmedName = billingName.trim();
-  const trimmedAddress = billingAddress.trim();
+  const trimmedLine1 = billingLine1.trim();
+  const trimmedLine2 = billingLine2.trim();
   const trimmedCity = billingCity.trim();
   const trimmedPostal = billingPostal.trim();
+  const trimmedState = billingState.trim();
 
-  const emailValid = isValidEmail(trimmedEmail);
+  const emailValid = emailPattern.test(trimmedEmail);
   const nameValid = trimmedName.length > 0;
   const countryValid = billingCountry.length > 0;
-  const addressValid = trimmedAddress.length > 0;
+  const line1Valid = trimmedLine1.length > 0;
   const cityValid = !showManualAddress || trimmedCity.length > 0;
   const postalValid = !showManualAddress || trimmedPostal.length > 0;
 
@@ -162,7 +228,7 @@ export default function CheckoutPaymentForm({
     emailValid &&
     nameValid &&
     countryValid &&
-    addressValid &&
+    line1Valid &&
     cityValid &&
     postalValid;
 
@@ -183,39 +249,73 @@ export default function CheckoutPaymentForm({
       stripePaymentValid,
   );
 
-  const emailError =
-    touched.email && !emailValid
-      ? trimmedEmail
-        ? 'Enter a valid email address'
-        : 'Email is required'
-      : '';
-  const nameError =
-    touched.name && !nameValid ? 'Name is required' : '';
-  const countryError =
-    touched.country && !countryValid ? 'Country or region is required' : '';
-  const addressError =
-    touched.address && !addressValid ? 'Address is required' : '';
-  const cityError =
-    showManualAddress && touched.city && !cityValid ? 'City is required' : '';
-  const postalError =
-    showManualAddress && touched.postal && !postalValid
-      ? 'ZIP / postal code is required'
-      : '';
+  const postalLabel = billingCountry === 'IN' ? 'PIN' : 'ZIP';
+
+  const emailError = touched.email
+    ? !trimmedEmail
+      ? 'Email is required.'
+      : !emailValid
+        ? 'Enter a valid email address.'
+        : null
+    : null;
+
+  const addressError = useMemo(() => {
+    if (touched.name && !nameValid) {
+      return 'Name is required.';
+    }
+    if (touched.country && !countryValid) {
+      return 'Country is required.';
+    }
+    if (touched.line1 && !line1Valid) {
+      return 'Address is required.';
+    }
+    if (showManualAddress && touched.city && !cityValid) {
+      return 'City is required.';
+    }
+    if (showManualAddress && touched.postal && !postalValid) {
+      return `${postalLabel} is required.`;
+    }
+    return null;
+  }, [
+    touched.name,
+    touched.country,
+    touched.line1,
+    touched.city,
+    touched.postal,
+    nameValid,
+    countryValid,
+    line1Valid,
+    cityValid,
+    postalValid,
+    showManualAddress,
+    postalLabel,
+  ]);
+
+  const billingBoxInvalid = Boolean(addressError);
+
+  const cardNumberDisplayError = touched.cardNumber
+    ? cardNumberError ||
+      (!cardNumberComplete ? 'Card number is required.' : null)
+    : null;
+  const cardExpiryDisplayError = touched.cardExpiry
+    ? cardExpiryError ||
+      (!cardExpiryComplete ? 'Expiry date is required.' : null)
+    : null;
+  const cardCvcDisplayError = touched.cardCvc
+    ? cardCvcError || (!cardCvcComplete ? 'CVC is required.' : null)
+    : null;
 
   const stripeFieldError = useMemo(
-    () => cardNumberError || cardExpiryError || cardCvcError || '',
-    [cardNumberError, cardExpiryError, cardCvcError],
+    () =>
+      cardNumberDisplayError ||
+      cardExpiryDisplayError ||
+      cardCvcDisplayError ||
+      '',
+    [cardNumberDisplayError, cardExpiryDisplayError, cardCvcDisplayError],
   );
 
-  const markBillingTouched = () => {
-    setTouched({
-      email: true,
-      name: true,
-      country: true,
-      address: true,
-      city: true,
-      postal: true,
-    });
+  const markTouched = (field: keyof BillingTouched) => {
+    setTouched((current) => ({ ...current, [field]: true }));
   };
 
   const handleCardNumberChange = (event: StripeCardNumberElementChangeEvent) => {
@@ -236,18 +336,8 @@ export default function CheckoutPaymentForm({
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setError('');
-    markBillingTouched();
 
-    if (disabled || processing || !stripe || !elements) {
-      return;
-    }
-
-    if (!billingValid || !stripePaymentValid) {
-      setError(
-        !billingValid
-          ? 'Please complete all required billing information.'
-          : 'Please complete your card details.',
-      );
+    if (disabled || processing || !stripe || !elements || !canPay) {
       return;
     }
 
@@ -275,8 +365,6 @@ export default function CheckoutPaymentForm({
         throw new Error('Checkout is missing required Stripe configuration');
       }
 
-      const trimmedState = billingState.trim();
-
       const confirmation = await stripe.confirmCardPayment(resolvedClientSecret, {
         payment_method: {
           card: cardNumberElement,
@@ -284,7 +372,8 @@ export default function CheckoutPaymentForm({
             email: trimmedEmail,
             name: trimmedName,
             address: {
-              line1: trimmedAddress,
+              line1: trimmedLine1,
+              ...(trimmedLine2 ? { line2: trimmedLine2 } : {}),
               ...(trimmedCity ? { city: trimmedCity } : {}),
               ...(trimmedState ? { state: trimmedState } : {}),
               ...(trimmedPostal ? { postal_code: trimmedPostal } : {}),
@@ -355,10 +444,13 @@ export default function CheckoutPaymentForm({
       <div className="mx-auto w-full max-w-xl lg:ml-0 lg:mr-auto lg:max-w-2xl">
         <section>
           <h2 className="text-base font-semibold text-heading">Billing information</h2>
+          <p className="mt-1 text-sm text-muted">
+            Required fields are marked with <RequiredMark />
+          </p>
 
           <div className="mt-5">
             <label htmlFor="checkout-email" className="block text-sm text-muted">
-              Email
+              Email <RequiredMark />
             </label>
             <div
               className={`mt-2 ${checkoutBoxClass} ${
@@ -368,13 +460,14 @@ export default function CheckoutPaymentForm({
               <input
                 id="checkout-email"
                 type="email"
-                value={email}
-                onChange={(event) => onEmailChange(event.target.value)}
-                onBlur={() => setTouched((current) => ({ ...current, email: true }))}
-                placeholder="Email"
-                disabled={formLocked}
                 autoComplete="email"
-                className={`${checkoutFieldClass} disabled:cursor-not-allowed disabled:opacity-100`}
+                value={email}
+                disabled={formLocked}
+                placeholder="Email"
+                aria-required="true"
+                className={checkoutFieldClass}
+                onChange={(event) => onEmailChange(event.target.value)}
+                onBlur={() => markTouched('email')}
               />
             </div>
             {emailError ? (
@@ -383,39 +476,41 @@ export default function CheckoutPaymentForm({
           </div>
 
           <div className="mt-5">
-            <p className="text-sm text-muted">Billing address</p>
+            <p className="text-sm text-muted">
+              Billing address <RequiredMark />
+            </p>
             <div
               className={`mt-2 ${checkoutBoxClass} ${
-                nameError || countryError || addressError || cityError || postalError
-                  ? 'border-[#df1b41]'
-                  : ''
+                billingBoxInvalid ? 'border-[#df1b41]' : ''
               }`}
             >
               <input
                 type="text"
+                autoComplete="name"
                 value={billingName}
+                disabled={formLocked}
+                placeholder="Name"
+                aria-label="Name"
+                aria-required="true"
+                className={condensedRowClass}
                 onChange={(event) => {
                   setBillingName(event.target.value);
                   onNameChange(event.target.value);
                 }}
-                onBlur={() => setTouched((current) => ({ ...current, name: true }))}
-                placeholder="Name"
-                autoComplete="name"
-                disabled={formLocked}
-                className={`${checkoutFieldClass} border-b border-[#e6ebf1] disabled:cursor-not-allowed disabled:opacity-100`}
+                onBlur={() => markTouched('name')}
               />
-              <div className="relative border-b border-[#e6ebf1]">
+
+              <div className="relative border-t border-[#e6ebf1]">
                 <select
                   value={billingCountry}
-                  onChange={(event) => setBillingCountry(event.target.value)}
-                  onBlur={() =>
-                    setTouched((current) => ({ ...current, country: true }))
-                  }
                   disabled={formLocked}
-                  aria-label="Country or region"
-                  className={`${checkoutFieldClass} appearance-none pr-10 disabled:cursor-not-allowed disabled:opacity-100 ${
-                    billingCountry ? 'text-heading' : 'text-[#8898aa]'
+                  aria-label="Country"
+                  aria-required="true"
+                  className={`${condensedRowClass} appearance-none pr-10 ${
+                    billingCountry ? 'text-[#1a1f36]' : 'text-[#8898aa]'
                   }`}
+                  onChange={(event) => setBillingCountry(event.target.value)}
+                  onBlur={() => markTouched('country')}
                 >
                   {BILLING_COUNTRIES.map((country) => (
                     <option key={country.code || 'blank'} value={country.code}>
@@ -428,106 +523,132 @@ export default function CheckoutPaymentForm({
                   className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-heading"
                 />
               </div>
+
               <input
                 type="text"
-                value={billingAddress}
-                onChange={(event) => setBillingAddress(event.target.value)}
-                onBlur={() =>
-                  setTouched((current) => ({ ...current, address: true }))
-                }
-                placeholder="Address"
-                autoComplete="street-address"
+                autoComplete="address-line1"
+                value={billingLine1}
                 disabled={formLocked}
-                className={`${checkoutFieldClass} disabled:cursor-not-allowed disabled:opacity-100`}
+                placeholder="Address"
+                aria-label="Address"
+                aria-required="true"
+                className={`${condensedRowClass} border-t border-[#e6ebf1]`}
+                onChange={(event) => setBillingLine1(event.target.value)}
+                onBlur={() => markTouched('line1')}
               />
-              {showManualAddress && (
+
+              {showManualAddress ? (
                 <>
                   <input
                     type="text"
-                    value={billingCity}
-                    onChange={(event) => setBillingCity(event.target.value)}
-                    onBlur={() =>
-                      setTouched((current) => ({ ...current, city: true }))
-                    }
-                    placeholder="City"
-                    autoComplete="address-level2"
+                    autoComplete="address-line2"
+                    value={billingLine2}
                     disabled={formLocked}
-                    className={`${checkoutFieldClass} border-t border-[#e6ebf1] disabled:cursor-not-allowed disabled:opacity-100`}
+                    placeholder="Address line 2"
+                    aria-label="Address line 2"
+                    className={`${condensedRowClass} border-t border-[#e6ebf1]`}
+                    onChange={(event) => setBillingLine2(event.target.value)}
+                  />
+                  <input
+                    type="text"
+                    autoComplete="address-level2"
+                    value={billingCity}
+                    disabled={formLocked}
+                    placeholder="City"
+                    aria-label="City"
+                    aria-required="true"
+                    className={`${condensedRowClass} border-t border-[#e6ebf1]`}
+                    onChange={(event) => setBillingCity(event.target.value)}
+                    onBlur={() => markTouched('city')}
                   />
                   <div className="grid grid-cols-2 border-t border-[#e6ebf1]">
                     <input
                       type="text"
-                      value={billingState}
-                      onChange={(event) => setBillingState(event.target.value)}
-                      placeholder="State"
-                      autoComplete="address-level1"
+                      autoComplete="postal-code"
+                      value={billingPostal}
                       disabled={formLocked}
-                      className={`${checkoutFieldClass} border-r border-[#e6ebf1] disabled:cursor-not-allowed disabled:opacity-100`}
+                      placeholder={postalLabel}
+                      aria-label={postalLabel}
+                      aria-required="true"
+                      className={`${condensedRowClass} border-r border-[#e6ebf1]`}
+                      onChange={(event) => setBillingPostal(event.target.value)}
+                      onBlur={() => markTouched('postal')}
                     />
                     <input
                       type="text"
-                      value={billingPostal}
-                      onChange={(event) => setBillingPostal(event.target.value)}
-                      onBlur={() =>
-                        setTouched((current) => ({ ...current, postal: true }))
-                      }
-                      placeholder="ZIP"
-                      autoComplete="postal-code"
+                      autoComplete="address-level1"
+                      value={billingState}
                       disabled={formLocked}
-                      className={`${checkoutFieldClass} disabled:cursor-not-allowed disabled:opacity-100`}
+                      placeholder="State"
+                      aria-label="State"
+                      className={condensedRowClass}
+                      onChange={(event) => setBillingState(event.target.value)}
                     />
                   </div>
                 </>
-              )}
+              ) : null}
             </div>
-            {(nameError || countryError || addressError || cityError || postalError) && (
-              <p className="mt-1.5 text-sm text-[#df1b41]">
-                {nameError ||
-                  countryError ||
-                  addressError ||
-                  cityError ||
-                  postalError}
-              </p>
-            )}
-            {!showManualAddress && (
-              <button
-                type="button"
-                onClick={() => setShowManualAddress(true)}
-                disabled={formLocked}
-                className="mt-2 text-sm text-muted underline underline-offset-2 hover:text-heading disabled:cursor-not-allowed disabled:opacity-100 disabled:no-underline"
-              >
-                Enter address manually
-              </button>
-            )}
+
+            <div className="mt-1 min-h-0" aria-live="polite">
+              {addressError ? (
+                <p className="text-sm text-[#df1b41]">{addressError}</p>
+              ) : null}
+            </div>
+
+            <button
+              type="button"
+              disabled={formLocked}
+              className="mt-1.5 text-sm text-[#0570de] underline underline-offset-2 hover:text-[#0451a5] disabled:cursor-not-allowed disabled:opacity-60 disabled:no-underline"
+              onClick={() => setShowManualAddress((current) => !current)}
+            >
+              {showManualAddress
+                ? 'Hide extra address fields'
+                : 'Enter address manually'}
+            </button>
           </div>
         </section>
 
-        <section className="mt-10">
+        <section className="mt-8">
           <h2 className="text-base font-semibold text-heading">Payment details</h2>
-          <p className="mt-5 text-sm text-muted">Card information</p>
-          <div
-            className={`mt-2 ${checkoutBoxClass} ${
-              stripeFieldError ? 'border-[#df1b41]' : ''
-            }`}
-          >
-            <div className="border-b border-[#e6ebf1] px-3 py-3">
-              <CardNumberElement
-                options={cardOptions}
-                onChange={handleCardNumberChange}
-              />
-            </div>
-            <div className="grid grid-cols-2">
-              <div className="border-r border-[#e6ebf1] px-3 py-3">
-                <CardExpiryElement
-                  options={cardOptions}
-                  onChange={handleCardExpiryChange}
-                />
+          <p className="mt-5 text-sm text-muted">
+            Card information <RequiredMark />
+          </p>
+          <div className="relative mt-2 min-h-[88px]">
+            {!cardReady ? (
+              <div className="pointer-events-none absolute inset-0 z-10">
+                <CardElementPlaceholder />
               </div>
-              <div className="px-3 py-3">
-                <CardCvcElement
-                  options={cardOptions}
-                  onChange={handleCardCvcChange}
-                />
+            ) : null}
+            <div className={cardReady ? 'relative' : 'invisible'}>
+              <div
+                className={`${checkoutBoxClass} ${
+                  stripeFieldError ? 'border-[#df1b41]' : ''
+                }`}
+              >
+                <div className="border-b border-[#e6ebf1] px-3 py-2.5">
+                  <CardNumberElement
+                    options={cardOptions}
+                    onChange={handleCardNumberChange}
+                    onReady={() => setCardReady(true)}
+                    onBlur={() => markTouched('cardNumber')}
+                  />
+                </div>
+                <div className="grid grid-cols-2">
+                  <div className="border-r border-[#e6ebf1] px-3 py-2.5">
+                    <CardExpiryElement
+                      options={cardOptions}
+                      onChange={handleCardExpiryChange}
+                      onBlur={() => markTouched('cardExpiry')}
+                    />
+                  </div>
+                  <div className="px-3 py-2.5">
+                    <CardCvcElement
+                      options={cardOptions}
+                      onChange={handleCardCvcChange}
+                      onBlur={() => markTouched('cardCvc')}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -547,6 +668,7 @@ export default function CheckoutPaymentForm({
             type="submit"
             className="w-full !rounded-md !bg-[#1a1f36] !py-3.5 text-base font-medium hover:!bg-[#111527] disabled:!opacity-50 disabled:!cursor-not-allowed"
             disabled={!canPay}
+            onClick={() => undefined}
           >
             {processing
               ? 'Processing…'
@@ -554,6 +676,11 @@ export default function CheckoutPaymentForm({
                 ? 'Updating checkout…'
                 : `Pay ${formatMoney(payAmount ?? price.amount, price.currency)}`}
           </Button>
+          {!canPay && !processing && !disabled && !switchError ? (
+            <p className="mt-2 text-center text-sm text-muted">
+              Complete all required fields marked with * to continue.
+            </p>
+          ) : null}
         </div>
       </div>
     </form>

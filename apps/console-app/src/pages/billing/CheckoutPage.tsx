@@ -8,7 +8,9 @@ import { loadStripe, type Stripe } from '@stripe/stripe-js';
 import Button from '../../components/common/Button';
 import BillingErrorState from '../../components/billing/BillingErrorState';
 import CheckoutOrderSummary from '../../components/billing/CheckoutOrderSummary';
-import CheckoutPaymentForm from '../../components/billing/CheckoutPaymentForm';
+import CheckoutPaymentForm, {
+  checkoutElementsOptions,
+} from '../../components/billing/CheckoutPaymentForm';
 import CheckoutSkeleton from '../../components/billing/CheckoutSkeleton';
 import { useAuth } from '../../context/AuthContext';
 import * as billingService from '../../services/billingService';
@@ -348,7 +350,11 @@ export default function CheckoutPage() {
         />
       </div>
       <div className="bg-white">
-        <Elements stripe={stripePromise}>
+        <Elements
+          key="checkout-elements-custom-billing"
+          stripe={stripePromise}
+          options={checkoutElementsOptions}
+        >
           <CheckoutPaymentForm
             price={price}
             email={email}

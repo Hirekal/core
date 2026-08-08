@@ -35,18 +35,24 @@ export default function CheckoutSkeleton() {
           <div className="mt-8 space-y-5">
             <div className="space-y-2">
               <div className="h-3 w-16 animate-pulse rounded bg-[#e6ebf1]" />
-              <div className="h-12 w-full animate-pulse rounded-md bg-[#f0f3f7]" />
+              <div className="h-[44px] w-full animate-pulse rounded-md bg-[#f0f3f7]" />
             </div>
             <div className="space-y-2">
               <div className="h-3 w-28 animate-pulse rounded bg-[#e6ebf1]" />
-              <div className="h-28 w-full animate-pulse rounded-md bg-[#f0f3f7]" />
+              <div className="overflow-hidden rounded-md border border-[#e6ebf1]">
+                <div className="h-[46px] animate-pulse bg-[#f0f3f7]" />
+                <div className="h-[46px] animate-pulse border-t border-[#e6ebf1] bg-[#f0f3f7]" />
+                <div className="h-[46px] animate-pulse border-t border-[#e6ebf1] bg-[#f0f3f7]" />
+              </div>
             </div>
             <div className="space-y-2 pt-4">
               <div className="h-3 w-28 animate-pulse rounded bg-[#e6ebf1]" />
-              <div className="h-12 w-full animate-pulse rounded-md bg-[#f0f3f7]" />
-              <div className="grid grid-cols-2 gap-0">
-                <div className="h-12 animate-pulse rounded-md bg-[#f0f3f7]" />
-                <div className="h-12 animate-pulse rounded-md bg-[#f0f3f7]" />
+              <div className="overflow-hidden rounded-md border border-[#e6ebf1]">
+                <div className="h-[44px] animate-pulse bg-[#f0f3f7]" />
+                <div className="grid grid-cols-2 border-t border-[#e6ebf1]">
+                  <div className="h-[44px] animate-pulse border-r border-[#e6ebf1] bg-[#f0f3f7]" />
+                  <div className="h-[44px] animate-pulse bg-[#f0f3f7]" />
+                </div>
               </div>
             </div>
           </div>

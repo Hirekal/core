@@ -500,12 +500,6 @@ export default function PricingPlansPage() {
         </>
       ) : null}
 
-      {!subscription && !loading && plans.length > 0 && (
-        <p className="text-center text-sm text-muted">
-          Signed in as {user?.email}. Select a plan to continue to checkout.
-        </p>
-      )}
-
       <ConfirmationModal
         isOpen={Boolean(confirmUpgradePlan)}
         title="Upgrade plan"

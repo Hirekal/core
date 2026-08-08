@@ -1,13 +1,13 @@
 /**
  * @fileoverview Stripe-style order summary for custom checkout.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Check, CheckCircle2, Loader2 } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Loader2 } from 'lucide-react';
 import {
   formatIntervalShort,
   formatMoney,
-  getProductFeatures,
+  computeCouponDiscountedAmount,
   type BillingPeriod,
 } from '../../utils/billingFormat';
 import type { Price, Product, ValidatedCoupon } from '../../types/billing';
@@ -44,7 +44,6 @@ export default function CheckoutOrderSummary({
   amountDueToday,
   discountAmount = 0,
   discountLabel = null,
-  currentProductName = null,
   billingPeriod,
   availablePeriods,
   onBillingPeriodChange,
@@ -71,9 +70,31 @@ export default function CheckoutOrderSummary({
         ? `${appliedCoupon.discountValue}% off`
         : `${formatMoney(appliedCoupon.discountValue, price.currency)} off`;
 
+  // Same banner savings math for subscribe + upgrade (prefer parent discount).
+  const couponSaveToday = (() => {
+    if (!appliedCoupon) {
+      return 0;
+    }
+    if (discount > 0) {
+      return discount;
+    }
+    if (totalDue != null && lineSubtotal != null && lineSubtotal > totalDue) {
+      return lineSubtotal - totalDue;
+    }
+    return Math.max(
+      price.amount - computeCouponDiscountedAmount(price.amount, appliedCoupon),
+      0,
+    );
+  })();
+
   const [couponInput, setCouponInput] = useState('');
   const [showCouponField, setShowCouponField] = useState(Boolean(appliedCoupon));
-  const features = getProductFeatures(product.metadata);
+
+  useEffect(() => {
+    if (appliedCoupon) {
+      setShowCouponField(true);
+    }
+  }, [appliedCoupon]);
 
   const handleApply = async () => {
     if (!onApplyCoupon || !couponInput.trim()) {
@@ -99,27 +120,11 @@ export default function CheckoutOrderSummary({
         <span className="text-lg font-semibold text-heading">Hirekal</span>
       </div>
 
-      {isUpgrade ? (
-        <div className="mt-5">
-          <p className="text-sm text-muted">Upgrade to</p>
-          <p className="mt-0.5 text-3xl font-semibold tracking-tight text-heading">
-            {product.name}
-          </p>
-          <p className="mt-1 text-base text-muted">
-            {formatMoney(price.amount, price.currency)}{' '}
-            {formatIntervalShort(price.interval, price.intervalCount ?? 1)
-              .replace(/^Per /i, '')
-              .toLowerCase()}
-            , billed going forward
-          </p>
-        </div>
-      ) : null}
-
       {onBillingPeriodChange &&
         billingPeriod &&
         availablePeriods &&
         availablePeriods.length > 0 && (
-        <div className={isUpgrade ? 'mt-4' : 'mt-5'}>
+        <div className="mt-5">
           <BillingPeriodToggle
             variant="radio"
             value={billingPeriod}
@@ -127,43 +132,28 @@ export default function CheckoutOrderSummary({
             onChange={onBillingPeriodChange}
             disabled={periodSwitching || couponApplying}
             savingsByPeriod={savingsByPeriod}
+            title={product.name}
+            titleRight={formatMoney(price.amount, price.currency)}
           />
         </div>
       )}
 
-      <div className="mt-5 space-y-2 border-t border-black/10 pt-4">
-        {isUpgrade && currentProductName && (
-          <div className="flex items-start justify-between gap-4 text-base">
-            <span className="text-muted">Current plan</span>
-            <span className="font-medium text-heading">{currentProductName}</span>
-          </div>
-        )}
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-base font-medium text-heading">{product.name}</p>
-            <p className="mt-0.5 text-sm text-muted">
-              {formatIntervalShort(price.interval, price.intervalCount ?? 1)} subscription
+      {!(onBillingPeriodChange && billingPeriod && availablePeriods?.length) ? (
+        <div className="mt-5 space-y-2 border-t border-black/10 pt-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-base font-medium text-heading">{product.name}</p>
+              <p className="mt-0.5 text-sm text-muted">
+                {formatIntervalShort(price.interval, price.intervalCount ?? 1)}{' '}
+                subscription
+              </p>
+            </div>
+            <p className="text-base font-medium text-heading">
+              {formatMoney(price.amount, price.currency)}
             </p>
           </div>
-          <p className="text-base font-medium text-heading">
-            {formatMoney(price.amount, price.currency)}
-          </p>
         </div>
-      </div>
-
-      {features.length > 0 && (
-        <div className="mt-4 border-t border-black/10 pt-4">
-          <p className="text-sm font-semibold text-heading">What's included</p>
-          <ul className="mt-3 space-y-2">
-            {features.map((feature) => (
-              <li key={feature} className="flex items-start gap-2 text-sm text-muted">
-                <Check size={16} className="mt-0.5 shrink-0 text-[#635bff]" aria-hidden />
-                <span>{feature}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      ) : null}
 
       {onApplyCoupon && (
         <div className="mt-4 space-y-2 border-t border-black/10 pt-4">
@@ -173,7 +163,7 @@ export default function CheckoutOrderSummary({
               className="text-base font-medium text-[#635bff] hover:underline"
               onClick={() => setShowCouponField(true)}
             >
-              Add promotion code
+              Apply coupon
             </button>
           ) : appliedCoupon ? (
             <div className="space-y-2">
@@ -201,9 +191,9 @@ export default function CheckoutOrderSummary({
                           </span>
                         )}
                       </p>
-                      {discount > 0 && (
+                      {couponSaveToday > 0 && (
                         <p className="mt-0.5 text-sm font-medium text-[#0d9488]">
-                          You save {formatMoney(discount, price.currency)} today
+                          You save {formatMoney(couponSaveToday, price.currency)} today
                         </p>
                       )}
                     </div>
@@ -238,7 +228,7 @@ export default function CheckoutOrderSummary({
                   type="text"
                   value={couponInput}
                   onChange={(event) => setCouponInput(event.target.value.toUpperCase())}
-                  placeholder="Promotion code"
+                  placeholder="Coupon code"
                   className="min-w-0 flex-1 rounded-md border border-[#e6ebf1] bg-white px-3 py-2.5 text-base text-heading placeholder:text-[#8898aa] focus:border-[#635bff] focus:outline-none"
                   disabled={couponApplying}
                   onKeyDown={(event) => {
@@ -312,6 +302,7 @@ export default function CheckoutOrderSummary({
         </div>
       </div>
 
+      {/* Temporarily hidden
       <p className="mt-auto pt-10 text-xs text-muted">
         Powered by{' '}
         <span className="font-medium text-heading">stripe</span>
@@ -333,6 +324,7 @@ export default function CheckoutOrderSummary({
           Privacy
         </a>
       </p>
+      */}
       </div>
     </div>
   );

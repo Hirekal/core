@@ -8,7 +8,9 @@ import { loadStripe, type Stripe } from '@stripe/stripe-js';
 import Button from '../../components/common/Button';
 import BillingErrorState from '../../components/billing/BillingErrorState';
 import CheckoutOrderSummary from '../../components/billing/CheckoutOrderSummary';
-import CheckoutPaymentForm from '../../components/billing/CheckoutPaymentForm';
+import CheckoutPaymentForm, {
+  checkoutElementsOptions,
+} from '../../components/billing/CheckoutPaymentForm';
 import CheckoutSkeleton from '../../components/billing/CheckoutSkeleton';
 import { useAuth } from '../../context/AuthContext';
 import * as billingService from '../../services/billingService';
@@ -104,17 +106,33 @@ export default function UpgradeCheckoutPage() {
       loadedPrice: Price,
       planChangePreview: Awaited<ReturnType<typeof billingService.previewPlanChange>>,
       coupon?: ValidatedCoupon | null,
+      previousAmountDue?: number | null,
     ) => {
       const direction = planChangePreview.direction;
       if (direction !== 'upgrade' && direction !== 'lateral') {
         throw new Error('Selected plan is not an upgrade from your current plan.');
       }
 
+      const payable = planChangePreview.preview.estimatedAmountPayable;
+      let previewDiscount = planChangePreview.preview.discountAmount ?? 0;
+      // Keep coupon banner savings consistent with subscribe when Stripe
+      // preview omits an explicit discount amount.
+      if (
+        coupon &&
+        previewDiscount <= 0 &&
+        typeof previousAmountDue === 'number' &&
+        previousAmountDue > payable
+      ) {
+        previewDiscount = previousAmountDue - payable;
+      }
+
       setPrice(loadedPrice);
-      setAmountDue(planChangePreview.preview.estimatedAmountPayable);
-      setDiscountAmount(planChangePreview.preview.discountAmount ?? 0);
+      setAmountDue(payable);
+      setDiscountAmount(previewDiscount);
       setDiscountLabel(
-        planChangePreview.preview.discountLabel ?? coupon?.promotionCode ?? null,
+        coupon?.promotionCode ??
+          planChangePreview.preview.discountLabel ??
+          null,
       );
       setUnusedCreditEstimate(
         Math.max(planChangePreview.preview.prorationCredit ?? 0, 0),
@@ -345,7 +363,7 @@ export default function UpgradeCheckoutPage() {
       coupon?.promotionCode,
     );
 
-    applyPreview(nextPrice, planChangePreview, coupon);
+    applyPreview(nextPrice, planChangePreview, coupon, amountDue);
   };
 
   const handleBillingPeriodChange = async (period: BillingPeriod) => {
@@ -481,7 +499,7 @@ export default function UpgradeCheckoutPage() {
           mode="upgrade"
           amountDueToday={amountDue}
           discountAmount={discountAmount}
-          discountLabel={discountLabel}
+          discountLabel={appliedCoupon?.promotionCode ?? discountLabel}
           currentProductName={currentProductName}
           billingPeriod={billingPeriod}
           availablePeriods={availablePeriods}
@@ -496,7 +514,11 @@ export default function UpgradeCheckoutPage() {
         />
       </div>
       <div className="bg-white">
-        <Elements stripe={stripePromise}>
+        <Elements
+          key="checkout-elements-custom-billing"
+          stripe={stripePromise}
+          options={checkoutElementsOptions}
+        >
           <CheckoutPaymentForm
             price={price}
             email={email}
