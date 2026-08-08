@@ -109,7 +109,7 @@ export default function InvoicesPage() {
           ]}
         />
         <Card padding={false}>
-          <div className="p-5">
+          <div className="">
             <InvoiceTable
               invoices={[]}
               loading
@@ -139,7 +139,7 @@ export default function InvoicesPage() {
       {error && <BillingErrorState message={error} onRetry={loadInvoices} />}
 
       <Card padding={false}>
-        <div className="p-5">
+        <div className="">
           <InvoiceTable
             invoices={invoices}
             loading={loading}
