@@ -171,6 +171,65 @@ export class StripeProvider implements PaymentProvider {
   }
 
   /*
+   * Creates a Stripe coupon. Do not set max_redemptions — incomplete
+   * checkouts attach the coupon ID and would burn limited counters.
+   */
+  async createCoupon(
+    params: Stripe.CouponCreateParams,
+  ): Promise<Stripe.Coupon> {
+    try {
+      return await this.stripeService.getClient().coupons.create(params);
+    } catch (error) {
+      rethrowStripeError(error);
+    }
+  }
+
+  /*
+   * Creates a customer-facing Stripe promotion code for a coupon.
+   */
+  async createPromotionCode(
+    params: Stripe.PromotionCodeCreateParams,
+  ): Promise<Stripe.PromotionCode> {
+    try {
+      return await this.stripeService
+        .getClient()
+        .promotionCodes.create(params);
+    } catch (error) {
+      rethrowStripeError(error);
+    }
+  }
+
+  /*
+   * Deletes a Stripe coupon (best-effort cleanup after failed sync).
+   */
+  async deleteCoupon(providerCouponId: string): Promise<void> {
+    try {
+      await this.stripeService.getClient().coupons.del(providerCouponId);
+    } catch (error) {
+      this.logger.warn(
+        `Failed to delete Stripe coupon ${providerCouponId} during cleanup`,
+        error instanceof Error ? error.message : error,
+      );
+    }
+  }
+
+  /*
+   * Deactivates a Stripe promotion code (promotion codes cannot be deleted).
+   */
+  async deactivatePromotionCode(providerPromotionCodeId: string): Promise<void> {
+    try {
+      await this.stripeService
+        .getClient()
+        .promotionCodes.update(providerPromotionCodeId, { active: false });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to deactivate Stripe promotion code ${providerPromotionCodeId} during cleanup`,
+        error instanceof Error ? error.message : error,
+      );
+    }
+  }
+
+  /*
    * Creates a Stripe subscription with error-if-incomplete payment behavior.
    */
   async createSubscription(

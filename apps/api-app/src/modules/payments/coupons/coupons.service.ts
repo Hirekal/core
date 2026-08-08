@@ -1,8 +1,9 @@
 /**
- * @fileoverview Lookup, validation, and successful-payment redemption for coupons.
+ * @fileoverview Lookup, validation, creation, and successful-payment redemption for coupons.
  */
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -12,11 +13,24 @@ import { Repository } from 'typeorm';
 import type Stripe from 'stripe';
 import { Coupon } from './entities/coupon.entity';
 import { CouponRedemption } from './entities/coupon-redemption.entity';
-import { RecordStatus } from '../common/enums/payment.enums';
-import { ERROR_MESSAGES } from '../common/messages/payment.messages';
-import { now } from '../common/utils/date.util';
-import { StripeService } from '../providers/stripe/stripe.service';
+import {
+  CouponDiscountType,
+  CouponDuration,
+  RecordStatus,
+} from '../common/enums/payment.enums';
+import {
+  ERROR_MESSAGES,
+  LOG_MESSAGES,
+} from '../common/messages/payment.messages';
+import { PAYMENT_CONSTANTS } from '../common/constants/payment.constants';
+import { now, toDate } from '../common/utils/date.util';
+import { toProviderMinorAmount } from '../common/utils/currency-amount.util';
 import { isPostgresUniqueViolation } from '../../../common/utils/error.util';
+import { BaseRepository } from '../common/repositories/base.repository';
+import { StripeService } from '../providers/stripe/stripe.service';
+import { StripeProvider } from '../providers/stripe/stripe.provider';
+import { PaymentProvidersService } from '../payment-providers/payment-providers.service';
+import { CreateCouponDto } from './dto/create-coupon.dto';
 
 export interface ValidatedCouponResponse {
   id: string;
@@ -46,7 +60,106 @@ export class CouponsService {
     @InjectRepository(CouponRedemption)
     private readonly couponRedemptionRepository: Repository<CouponRedemption>,
     private readonly stripeService: StripeService,
+    private readonly stripeProvider: StripeProvider,
+    private readonly paymentProvidersService: PaymentProvidersService,
   ) {}
+
+  /*
+   * Creates a local coupon synchronized with Stripe coupon + promotion code.
+   * Stripe objects are created first; local save failure cleans them up.
+   */
+  async create(dto: CreateCouponDto): Promise<ValidatedCouponResponse> {
+    const promotionCode = dto.promotionCode.trim().toUpperCase();
+    let providerCouponId: string | null = null;
+    let providerPromotionCodeId: string | null = null;
+
+    try {
+      this.assertCreateDto(dto, promotionCode);
+
+      const existing = await this.couponRepository
+        .createQueryBuilder('coupon')
+        .where('UPPER(TRIM(coupon.promotionCode)) = :code', {
+          code: promotionCode,
+        })
+        .getOne();
+      if (existing) {
+        throw new ConflictException(ERROR_MESSAGES.COUPON.CODE_ALREADY_EXISTS);
+      }
+
+      await this.assertStripePromotionCodeAvailable(promotionCode);
+
+      const provider = await this.paymentProvidersService.findByCode(
+        PAYMENT_CONSTANTS.DEFAULT_PROVIDER_CODE,
+      );
+
+      const expiresAt = dto.expiresAt ? toDate(dto.expiresAt) : null;
+      const redeemByUnix = expiresAt
+        ? Math.floor(expiresAt.getTime() / 1000)
+        : undefined;
+
+      const stripeCoupon = await this.stripeProvider.createCoupon(
+        this.buildStripeCouponParams(dto, redeemByUnix),
+      );
+      providerCouponId = stripeCoupon.id;
+
+      const stripePromotionCode = await this.stripeProvider.createPromotionCode({
+        promotion: {
+          type: 'coupon',
+          coupon: stripeCoupon.id,
+        },
+        code: promotionCode,
+        expires_at: redeemByUnix,
+        metadata: {
+          localPromotionCode: promotionCode,
+        },
+      });
+      providerPromotionCodeId = stripePromotionCode.id;
+
+      const metadata: Record<string, unknown> = {
+        ...(dto.metadata ?? {}),
+      };
+      if (dto.discountType === CouponDiscountType.FIXED && dto.currency) {
+        metadata.currency = dto.currency.toUpperCase();
+      }
+      if (
+        dto.duration === CouponDuration.REPEATING &&
+        dto.durationInMonths != null
+      ) {
+        metadata.durationInMonths = dto.durationInMonths;
+      }
+
+      const coupon = await BaseRepository.createAndSave(this.couponRepository, {
+        name: dto.name.trim(),
+        paymentProviderId: provider.id,
+        providerCouponId: stripeCoupon.id,
+        providerPromotionCodeId: stripePromotionCode.id,
+        promotionCode,
+        discountType: dto.discountType,
+        discountValue: dto.discountValue,
+        duration: dto.duration,
+        maximumRedemptions: dto.maximumRedemptions ?? null,
+        timesRedeemed: 0,
+        expiresAt,
+        status: RecordStatus.ACTIVE,
+        metadata,
+      });
+
+      return this.toValidatedResponse(coupon, stripePromotionCode);
+    } catch (error) {
+      await this.cleanupStripeCouponArtifacts(
+        providerCouponId,
+        providerPromotionCodeId,
+      );
+
+      if (isPostgresUniqueViolation(error)) {
+        this.logger.error(LOG_MESSAGES.COUPON.CREATE_FAILED(promotionCode), error);
+        throw new ConflictException(ERROR_MESSAGES.COUPON.CODE_ALREADY_EXISTS);
+      }
+
+      this.logger.error(LOG_MESSAGES.COUPON.CREATE_FAILED(promotionCode), error);
+      throw error;
+    }
+  }
 
   /*
    * Validates a promotion code without consuming a Stripe redemption.
@@ -142,6 +255,103 @@ export class CouponsService {
         return;
       }
       throw error;
+    }
+  }
+
+  private assertCreateDto(dto: CreateCouponDto, promotionCode: string): void {
+    if (!promotionCode) {
+      throw new BadRequestException(ERROR_MESSAGES.COUPON.INVALID);
+    }
+
+    if (
+      dto.discountType === CouponDiscountType.PERCENTAGE &&
+      dto.discountValue > 100
+    ) {
+      throw new BadRequestException(ERROR_MESSAGES.COUPON.INVALID);
+    }
+
+    if (dto.discountType === CouponDiscountType.FIXED && !dto.currency?.trim()) {
+      throw new BadRequestException(ERROR_MESSAGES.COUPON.CURRENCY_REQUIRED);
+    }
+
+    if (
+      dto.duration === CouponDuration.REPEATING &&
+      (dto.durationInMonths == null || dto.durationInMonths < 1)
+    ) {
+      throw new BadRequestException(
+        ERROR_MESSAGES.COUPON.DURATION_IN_MONTHS_REQUIRED,
+      );
+    }
+
+    if (dto.expiresAt) {
+      const expiresAt = toDate(dto.expiresAt);
+      if (expiresAt.getTime() <= now().valueOf()) {
+        throw new BadRequestException(ERROR_MESSAGES.COUPON.EXPIRES_AT_INVALID);
+      }
+    }
+  }
+
+  private buildStripeCouponParams(
+    dto: CreateCouponDto,
+    redeemByUnix?: number,
+  ): Stripe.CouponCreateParams {
+    const duration = dto.duration.toLowerCase() as Stripe.CouponCreateParams.Duration;
+    const params: Stripe.CouponCreateParams = {
+      name: dto.name.trim(),
+      duration,
+      redeem_by: redeemByUnix,
+      metadata: {
+        localPromotionCode: dto.promotionCode.trim().toUpperCase(),
+      },
+    };
+
+    if (dto.duration === CouponDuration.REPEATING) {
+      params.duration_in_months = dto.durationInMonths;
+    }
+
+    if (dto.discountType === CouponDiscountType.PERCENTAGE) {
+      params.percent_off = dto.discountValue;
+    } else {
+      const currency = dto.currency!.trim().toUpperCase();
+      params.currency = currency.toLowerCase();
+      params.amount_off = toProviderMinorAmount(dto.discountValue, currency);
+    }
+
+    return params;
+  }
+
+  private async assertStripePromotionCodeAvailable(
+    promotionCode: string,
+  ): Promise<void> {
+    try {
+      const listed = await this.stripeService.getClient().promotionCodes.list({
+        code: promotionCode,
+        limit: 10,
+      });
+      const active = listed.data.find((entry) => entry.active);
+      if (active) {
+        throw new ConflictException(ERROR_MESSAGES.COUPON.CODE_ALREADY_EXISTS);
+      }
+    } catch (error) {
+      if (error instanceof ConflictException) {
+        throw error;
+      }
+      this.logger.warn(
+        `Stripe promotion code availability check failed for ${promotionCode}`,
+        error instanceof Error ? error.message : error,
+      );
+    }
+  }
+
+  private async cleanupStripeCouponArtifacts(
+    providerCouponId: string | null,
+    providerPromotionCodeId: string | null,
+  ): Promise<void> {
+    if (providerPromotionCodeId) {
+      await this.stripeProvider.deactivatePromotionCode(providerPromotionCodeId);
+    }
+    if (providerCouponId) {
+      await this.stripeProvider.deleteCoupon(providerCouponId);
     }
   }
 

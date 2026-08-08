@@ -90,6 +90,11 @@ export const ERROR_MESSAGES = {
     INVALID: 'Coupon code is invalid',
     MAX_REDEMPTIONS_REACHED:
       'Coupon code has already been fully redeemed',
+    CODE_ALREADY_EXISTS: 'Coupon code already exists',
+    CURRENCY_REQUIRED: 'Currency is required for fixed-amount coupons',
+    DURATION_IN_MONTHS_REQUIRED:
+      'durationInMonths is required for repeating coupons',
+    EXPIRES_AT_INVALID: 'Coupon expiration must be a future date',
   },
 } as const;
 
@@ -139,6 +144,9 @@ export const LOG_MESSAGES = {
       `Failed to create price for product: ${productId}`,
     LIST_FAILED: 'Failed to list prices',
     FIND_FAILED: (id: string) => `Failed to find price: ${id}`,
+  },
+  COUPON: {
+    CREATE_FAILED: (code: string) => `Failed to create coupon: ${code}`,
   },
   SUBSCRIPTION: {
     CREATE_FAILED: (userId: string) =>
