@@ -324,7 +324,7 @@ export default function CheckoutOrderSummary({
           </div>
         ) : null}
         <div className="flex items-center justify-between gap-4">
-          <span className="text-muted">{isUpgrade ? 'Prorated charge' : 'Subtotal'}</span>
+          <span className="text-muted">{isUpgrade ? 'Prorated amount' : 'Subtotal'}</span>
           <span className="text-heading">{formatAmount(lineSubtotal)}</span>
         </div>
         {discount > 0 && totalDue != null && (

@@ -40,6 +40,11 @@ export default function PlanChangeSummary({
           <dt className="text-muted">New plan</dt>
           <dd className="font-medium text-heading">
             {newProduct.name} · {formatMoney(newPrice.amount, currency)}
+            {preview.prorationCharge > 0 ? (
+              <div className="text-xs text-muted">-
+                {formatMoney(preview.prorationCharge, currency)} deducted
+              </div>
+            ) : null}
           </dd>
         </div>
         <div className="flex justify-between gap-4">
@@ -59,7 +64,7 @@ export default function PlanChangeSummary({
         {preview.prorationCharge > 0 && (
           <div className="flex justify-between gap-4">
             <dt className="text-muted">Prorated charge for upgrade</dt>
-            <dd className="font-medium text-heading">
+            <dd className="font-medium text-heading">-
               {formatMoney(preview.prorationCharge, currency)}
             </dd>
           </div>

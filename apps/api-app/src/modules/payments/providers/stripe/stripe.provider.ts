@@ -380,12 +380,19 @@ export class StripeProvider implements PaymentProvider {
         {
           items: [{ id: subscriptionItem.id, price: input.providerPriceId }],
           proration_behavior: 'create_prorations',
-          proration_date: prorationDate,
-          ...(intervalChange ? { billing_cycle_anchor: 'now' } : {}),
+          ...(intervalChange ? { billing_cycle_anchor: 'now' } : { proration_date: prorationDate }),
         };
 
       // Do not pass invoice-level discounts: proration lines are not discountable.
       // Coupon savings are applied to the computed payable below.
+      // Defensive: ensure we never send both billing_cycle_anchor and proration_date
+      if (
+        (subscriptionDetails as any).billing_cycle_anchor === 'now' &&
+        'proration_date' in (subscriptionDetails as any)
+      ) {
+        delete (subscriptionDetails as any).proration_date;
+      }
+
       const invoicePreview = await stripe.invoices.createPreview({
         customer: input.providerCustomerId,
         subscription: input.providerSubscriptionId,
@@ -581,15 +588,19 @@ export class StripeProvider implements PaymentProvider {
         input.providerPriceId,
       );
 
+      const updatePayload: any = {
+        items: [{ id: subscriptionItem.id, price: input.providerPriceId }],
+        proration_behavior: UPGRADE_PRORATION_BEHAVIOR,
+        ...(intervalChange ? { billing_cycle_anchor: 'now' } : { proration_date: prorationDate }),
+        payment_behavior: 'error_if_incomplete',
+      };
+      if (updatePayload.billing_cycle_anchor === 'now' && 'proration_date' in updatePayload) {
+        delete updatePayload.proration_date;
+      }
+
       const updatedSubscription = await stripe.subscriptions.update(
         input.providerSubscriptionId,
-        {
-          items: [{ id: subscriptionItem.id, price: input.providerPriceId }],
-          proration_behavior: UPGRADE_PRORATION_BEHAVIOR,
-          proration_date: prorationDate,
-          payment_behavior: 'error_if_incomplete',
-          billing_cycle_anchor: intervalChange ? 'now' : 'unchanged',
-        },
+        updatePayload,
       );
 
       await this.assertUpgradeInvoiceSettled(updatedSubscription);
@@ -902,20 +913,24 @@ export class StripeProvider implements PaymentProvider {
       }
 
       try {
+        const updatePayload: any = {
+          items: [{ id: subscriptionItem.id, price: input.providerPriceId }],
+          proration_behavior: UPGRADE_PRORATION_BEHAVIOR,
+          ...(intervalChange ? { billing_cycle_anchor: 'now' } : { proration_date: prorationDate }),
+          payment_behavior: 'default_incomplete',
+          expand: ['latest_invoice.confirmation_secret'],
+          metadata: {
+            ...(subscription.metadata ?? {}),
+            ...(input.metadata ?? {}),
+          },
+        };
+        if (updatePayload.billing_cycle_anchor === 'now' && 'proration_date' in updatePayload) {
+          delete updatePayload.proration_date;
+        }
+
         const updatedSubscription = await stripe.subscriptions.update(
           input.providerSubscriptionId,
-          {
-            items: [{ id: subscriptionItem.id, price: input.providerPriceId }],
-            proration_behavior: UPGRADE_PRORATION_BEHAVIOR,
-            proration_date: prorationDate,
-            payment_behavior: 'default_incomplete',
-            billing_cycle_anchor: intervalChange ? 'now' : 'unchanged',
-            expand: ['latest_invoice.confirmation_secret'],
-            metadata: {
-              ...(subscription.metadata ?? {}),
-              ...(input.metadata ?? {}),
-            },
-          },
+          updatePayload,
         );
 
         const latestInvoice = updatedSubscription.latest_invoice;
