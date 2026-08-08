@@ -208,6 +208,10 @@ export default function CheckoutPaymentForm({
     ...cardElementOptions,
     disabled: formLocked,
   };
+  const cardNumberOptions: StripeCardElementOptions = {
+    ...cardOptions,
+    placeholder: 'XXXX XXXX XXXX XXXX',
+  };
 
   const trimmedEmail = email.trim();
   const trimmedName = billingName.trim();
@@ -627,7 +631,7 @@ export default function CheckoutPaymentForm({
               >
                 <div className="border-b border-[#e6ebf1] px-3 py-2.5">
                   <CardNumberElement
-                    options={cardOptions}
+                    options={cardNumberOptions}
                     onChange={handleCardNumberChange}
                     onReady={() => setCardReady(true)}
                     onBlur={() => markTouched('cardNumber')}
