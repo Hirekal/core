@@ -69,6 +69,7 @@ export default function UpgradeCheckoutPage() {
   const upgradePreparedRef = useRef(false);
   const subscriptionIdRef = useRef<string | null>(locationState?.subscriptionId ?? null);
   const upgradeSucceededRef = useRef(false);
+  const previewRequestIdRef = useRef(0);
 
   useEffect(() => {
     subscriptionIdRef.current = subscriptionId;
@@ -337,6 +338,7 @@ export default function UpgradeCheckoutPage() {
       throw new Error('Selected billing period is not available for this upgrade.');
     }
 
+    // Read-only Stripe invoice preview — does not create a PaymentIntent.
     const planChangePreview = await billingService.previewPlanChange(
       subscriptionId,
       nextPrice.id,
@@ -365,15 +367,23 @@ export default function UpgradeCheckoutPage() {
       return;
     }
 
+    const requestId = ++previewRequestIdRef.current;
     setPeriodSwitching(true);
     setPeriodSwitchError('');
 
     try {
       await refreshPreview(nextPrice, appliedCoupon);
+      if (requestId !== previewRequestIdRef.current) {
+        return;
+      }
     } catch (err) {
-      setPeriodSwitchError(toUserErrorMessage(err, 'Failed to update billing period'));
+      if (requestId === previewRequestIdRef.current) {
+        setPeriodSwitchError(toUserErrorMessage(err, 'Failed to update billing period'));
+      }
     } finally {
-      setPeriodSwitching(false);
+      if (requestId === previewRequestIdRef.current) {
+        setPeriodSwitching(false);
+      }
     }
   };
 
@@ -382,17 +392,28 @@ export default function UpgradeCheckoutPage() {
       return;
     }
 
+    const requestId = ++previewRequestIdRef.current;
     setCouponApplying(true);
     setCouponError('');
 
     try {
       const validated = await billingService.validateCoupon(code);
+      if (requestId !== previewRequestIdRef.current) {
+        return;
+      }
       await refreshPreview(price, validated);
+      if (requestId !== previewRequestIdRef.current) {
+        return;
+      }
       setAppliedCoupon(validated);
     } catch (err) {
-      setCouponError(toUserErrorMessage(err, 'Coupon code is not available'));
+      if (requestId === previewRequestIdRef.current) {
+        setCouponError(toUserErrorMessage(err, 'Coupon code is not available'));
+      }
     } finally {
-      setCouponApplying(false);
+      if (requestId === previewRequestIdRef.current) {
+        setCouponApplying(false);
+      }
     }
   };
 
@@ -401,17 +422,25 @@ export default function UpgradeCheckoutPage() {
       return;
     }
 
+    const requestId = ++previewRequestIdRef.current;
     setCouponApplying(true);
     setCouponError('');
 
     try {
       await refreshPreview(price, null);
+      if (requestId !== previewRequestIdRef.current) {
+        return;
+      }
       setAppliedCoupon(null);
       setDiscountLabel(null);
     } catch (err) {
-      setCouponError(toUserErrorMessage(err, 'Failed to remove coupon'));
+      if (requestId === previewRequestIdRef.current) {
+        setCouponError(toUserErrorMessage(err, 'Failed to remove coupon'));
+      }
     } finally {
-      setCouponApplying(false);
+      if (requestId === previewRequestIdRef.current) {
+        setCouponApplying(false);
+      }
     }
   };
 

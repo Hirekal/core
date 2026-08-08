@@ -1,7 +1,7 @@
 /**
  * @fileoverview Custom two-column checkout page styled like Stripe Checkout.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Elements } from '@stripe/react-stripe-js';
 import { loadStripe, type Stripe } from '@stripe/stripe-js';
@@ -18,6 +18,7 @@ import {
   matchesBillingPeriod,
   resolveBillingPeriod,
   buildPeriodSavingsMap,
+  computeCouponDiscountedAmount,
   type BillingPeriod,
 } from '../../utils/billingFormat';
 import type { Price, ValidatedCoupon } from '../../types/billing';
@@ -71,6 +72,7 @@ export default function CheckoutPage() {
   const [appliedCoupon, setAppliedCoupon] = useState<ValidatedCoupon | null>(null);
   const [couponApplying, setCouponApplying] = useState(false);
   const [couponError, setCouponError] = useState('');
+  const totalsRequestIdRef = useRef(0);
 
   const availablePeriods = useMemo(
     () =>
@@ -199,26 +201,26 @@ export default function CheckoutPage() {
   }, [applyCheckoutTotals, locationPrice, navigate, priceId, user]);
 
   /*
-   * Refreshes checkout session totals for period/coupon changes (calculation only).
-   * Payment confirmation creates the charged session on Pay.
+   * Updates displayed period/coupon totals without creating a Stripe payment
+   * session. Pay creates the incomplete subscription + PaymentIntent once.
    */
-  const refreshCheckoutTotals = async (
-    nextPrice: Price,
-    coupon?: ValidatedCoupon | null,
-  ) => {
-    if (!user?.email) {
-      return;
-    }
+  const applyDisplayTotals = useCallback(
+    (nextPrice: Price, coupon?: ValidatedCoupon | null) => {
+      setPrice(nextPrice);
+      setAmountDueToday(
+        computeCouponDiscountedAmount(nextPrice.amount, coupon ?? null),
+      );
 
-    const checkoutSession = await createCheckoutForPrice(
-      nextPrice.id,
-      user.email,
-      user.name ?? undefined,
-      coupon?.promotionCode,
-      providerSubscriptionId ?? undefined,
-    );
-    applyCheckoutTotals(nextPrice, checkoutSession);
-  };
+      const period = resolveBillingPeriod(
+        nextPrice.interval,
+        nextPrice.intervalCount,
+      );
+      if (period) {
+        setBillingPeriod(period);
+      }
+    },
+    [],
+  );
 
   const handleBillingPeriodChange = async (period: BillingPeriod) => {
     if (!user?.email || period === billingPeriod || periodSwitching || couponApplying) {
@@ -232,15 +234,23 @@ export default function CheckoutPage() {
       return;
     }
 
+    const requestId = ++totalsRequestIdRef.current;
     setPeriodSwitching(true);
     setPeriodSwitchError('');
 
     try {
-      await refreshCheckoutTotals(nextPrice, appliedCoupon);
+      if (requestId !== totalsRequestIdRef.current) {
+        return;
+      }
+      applyDisplayTotals(nextPrice, appliedCoupon);
     } catch (err) {
-      setPeriodSwitchError(toUserErrorMessage(err, 'Failed to update billing period'));
+      if (requestId === totalsRequestIdRef.current) {
+        setPeriodSwitchError(toUserErrorMessage(err, 'Failed to update billing period'));
+      }
     } finally {
-      setPeriodSwitching(false);
+      if (requestId === totalsRequestIdRef.current) {
+        setPeriodSwitching(false);
+      }
     }
   };
 
@@ -249,17 +259,27 @@ export default function CheckoutPage() {
       return;
     }
 
+    const requestId = ++totalsRequestIdRef.current;
     setCouponApplying(true);
     setCouponError('');
 
     try {
       const validated = await billingService.validateCoupon(code);
-      await refreshCheckoutTotals(price, validated);
+      if (requestId !== totalsRequestIdRef.current) {
+        return;
+      }
+      // Display-only estimate from backend-validated coupon metadata.
+      // Stripe enforces the real discount when Pay creates the payment session.
+      applyDisplayTotals(price, validated);
       setAppliedCoupon(validated);
     } catch (err) {
-      setCouponError(toUserErrorMessage(err, 'Coupon code is not available'));
+      if (requestId === totalsRequestIdRef.current) {
+        setCouponError(toUserErrorMessage(err, 'Coupon code is not available'));
+      }
     } finally {
-      setCouponApplying(false);
+      if (requestId === totalsRequestIdRef.current) {
+        setCouponApplying(false);
+      }
     }
   };
 
@@ -268,16 +288,24 @@ export default function CheckoutPage() {
       return;
     }
 
+    const requestId = ++totalsRequestIdRef.current;
     setCouponApplying(true);
     setCouponError('');
 
     try {
-      await refreshCheckoutTotals(price, null);
+      if (requestId !== totalsRequestIdRef.current) {
+        return;
+      }
+      applyDisplayTotals(price, null);
       setAppliedCoupon(null);
     } catch (err) {
-      setCouponError(toUserErrorMessage(err, 'Failed to remove coupon'));
+      if (requestId === totalsRequestIdRef.current) {
+        setCouponError(toUserErrorMessage(err, 'Failed to remove coupon'));
+      }
     } finally {
-      setCouponApplying(false);
+      if (requestId === totalsRequestIdRef.current) {
+        setCouponApplying(false);
+      }
     }
   };
 

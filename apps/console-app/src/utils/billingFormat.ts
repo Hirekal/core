@@ -90,6 +90,36 @@ export function formatMoney(amount: number, currency: string): string {
 }
 
 /**
+ * Estimates the amount due after a validated coupon for display only.
+ * Final charged amount is always determined by Stripe when the payment
+ * session is created on Pay — never trust this as the payment source of truth.
+ */
+export function computeCouponDiscountedAmount(
+  amount: number,
+  coupon?: {
+    discountType: 'PERCENTAGE' | 'FIXED' | string;
+    discountValue: number;
+  } | null,
+): number {
+  if (!coupon || !Number.isFinite(amount) || amount <= 0) {
+    return Math.max(0, amount || 0);
+  }
+
+  if (coupon.discountType === 'PERCENTAGE') {
+    const discountedMinor = Math.round(
+      amount * 100 * (1 - coupon.discountValue / 100),
+    );
+    return Math.max(0, discountedMinor / 100);
+  }
+
+  if (coupon.discountType === 'FIXED') {
+    return Math.max(0, amount - coupon.discountValue);
+  }
+
+  return amount;
+}
+
+/**
  * Returns a human-readable billing interval label.
  */
 export function formatInterval(interval: PriceInterval | null, count = 1): string {
