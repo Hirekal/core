@@ -257,17 +257,11 @@ export default function CheckoutPaymentForm({
         : null
     : null;
 
-  const cardNumberDisplayError = touched.cardNumber
-    ? cardNumberError ||
-      (!cardNumberComplete ? 'Card number is required.' : null)
-    : null;
-  const cardExpiryDisplayError = touched.cardExpiry
-    ? cardExpiryError ||
-      (!cardExpiryComplete ? 'Expiry date is required.' : null)
-    : null;
-  const cardCvcDisplayError = touched.cardCvc
-    ? cardCvcError || (!cardCvcComplete ? 'CVC is required.' : null)
-    : null;
+  // Only show Stripe-provided validation messages. Do not duplicate Stripe's
+  // required/format checks with our own messages — let Stripe manage them.
+  const cardNumberDisplayError = cardNumberError || null;
+  const cardExpiryDisplayError = cardExpiryError || null;
+  const cardCvcDisplayError = cardCvcError || null;
 
   const stripeFieldError = useMemo(
     () =>
@@ -555,12 +549,11 @@ export default function CheckoutPaymentForm({
                       stripeFieldError ? 'border-[#df1b41]' : ''
                     }`}
                   >
-                    <div className="border-b border-[#e6ebf1] px-3 py-2.5">
+                      <div className="border-b border-[#e6ebf1] px-3 py-2.5">
                       <CardNumberElement
                         options={cardNumberOptions}
                         onChange={handleCardNumberChange}
                         onReady={() => setCardReady(true)}
-                        onBlur={() => markTouched('cardNumber')}
                       />
                     </div>
                     <div className="grid grid-cols-2">
@@ -568,14 +561,12 @@ export default function CheckoutPaymentForm({
                         <CardExpiryElement
                           options={cardOptions}
                           onChange={handleCardExpiryChange}
-                          onBlur={() => markTouched('cardExpiry')}
                         />
                       </div>
                       <div className="px-3 py-2.5">
                         <CardCvcElement
                           options={cardOptions}
                           onChange={handleCardCvcChange}
-                          onBlur={() => markTouched('cardCvc')}
                         />
                       </div>
                     </div>
