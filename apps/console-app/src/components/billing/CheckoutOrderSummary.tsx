@@ -12,7 +12,6 @@ import {
 } from '../../utils/billingFormat';
 import type { Price, Product, ValidatedCoupon } from '../../types/billing';
 import BillingPeriodToggle from './BillingPeriodToggle';
-import Button from '../common/Button';
 
 interface CheckoutOrderSummaryProps {
   product: Product;
@@ -70,7 +69,8 @@ export default function CheckoutOrderSummary({
         ? `${appliedCoupon.discountValue}% off`
         : `${formatMoney(appliedCoupon.discountValue, price.currency)} off`;
 
-  // Same banner savings math for subscribe + upgrade (prefer parent discount).
+  // Prefer parent-provided discount. On upgrade, never invent savings from
+  // catalog plan price — coupons apply to today's prorated payable.
   const couponSaveToday = (() => {
     if (!appliedCoupon) {
       return 0;
@@ -80,6 +80,9 @@ export default function CheckoutOrderSummary({
     }
     if (totalDue != null && lineSubtotal != null && lineSubtotal > totalDue) {
       return lineSubtotal - totalDue;
+    }
+    if (isUpgrade) {
+      return 0;
     }
     return Math.max(
       price.amount - computeCouponDiscountedAmount(price.amount, appliedCoupon),
@@ -252,15 +255,19 @@ export default function CheckoutOrderSummary({
                   showCouponField ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
                 }`}
               >
-                <div className="overflow-hidden">
+                <div
+                  className={
+                    showCouponField ? 'overflow-visible' : 'overflow-hidden'
+                  }
+                >
                   <div className="space-y-1.5 pt-3">
-                    <div className="flex gap-2">
+                    <div className="flex items-stretch gap-2">
                       <input
                         type="text"
                         value={couponInput}
                         onChange={(event) => setCouponInput(event.target.value)}
                         placeholder="Coupon code"
-                        className="min-w-0 flex-1 rounded-md border border-[#e6ebf1] bg-white px-3 py-2.5 text-base text-heading placeholder:text-[#8898aa] focus:border-[#635bff] focus:outline-none"
+                        className="min-w-0 flex-1 rounded-md border border-[#e6ebf1] bg-white px-3 py-2.5 text-base leading-normal text-heading placeholder:text-[#8898aa] focus:border-[#e6ebf1] focus:outline-none"
                         disabled={couponApplying}
                         onKeyDown={(event) => {
                           if (event.key === 'Enter') {
@@ -274,11 +281,10 @@ export default function CheckoutOrderSummary({
                           }
                         }}
                       />
-                      <Button
+                      <button
                         type="button"
-                        variant="secondary"
-                        size="sm"
                         disabled={couponApplying || !couponInput.trim()}
+                        className="inline-flex h-auto shrink-0 items-center justify-center gap-2 rounded-md border border-transparent bg-white px-4 py-2.5 text-base font-medium leading-normal text-heading transition-colors hover:bg-[#f6f9fc] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                         onClick={() => void handleApply()}
                       >
                         {couponApplying ? (
@@ -289,7 +295,7 @@ export default function CheckoutOrderSummary({
                         ) : (
                           'Apply'
                         )}
-                      </Button>
+                      </button>
                     </div>
                     {couponError && (
                       <p className="text-base text-[#df1b41]">{couponError}</p>

@@ -276,7 +276,7 @@ export default function CheckoutPage() {
       setAppliedCoupon(validated);
     } catch (err) {
       if (requestId === totalsRequestIdRef.current) {
-        setCouponError(toUserErrorMessage(err, 'Coupon code is not available'));
+        setCouponError(toUserErrorMessage(err, 'Coupon not available'));
       }
     } finally {
       if (requestId === totalsRequestIdRef.current) {

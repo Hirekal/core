@@ -115,8 +115,7 @@ export default function UpgradeCheckoutPage() {
 
       const payable = planChangePreview.preview.estimatedAmountPayable;
       let previewDiscount = planChangePreview.preview.discountAmount ?? 0;
-      // Keep coupon banner savings consistent with subscribe when Stripe
-      // preview omits an explicit discount amount.
+      // Derive savings from the payable drop when BE omits discountAmount.
       if (
         coupon &&
         previewDiscount <= 0 &&
@@ -426,7 +425,7 @@ export default function UpgradeCheckoutPage() {
       setAppliedCoupon(validated);
     } catch (err) {
       if (requestId === previewRequestIdRef.current) {
-        setCouponError(toUserErrorMessage(err, 'Coupon code is not available'));
+        setCouponError(toUserErrorMessage(err, 'Coupon not available'));
       }
     } finally {
       if (requestId === previewRequestIdRef.current) {

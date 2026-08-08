@@ -12,4 +12,7 @@ export const SUBSCRIPTION_METADATA_KEYS = {
   SCHEDULED_PLAN_CHANGE_AT: 'scheduledPlanChangeAt',
 } as const;
 
+/** Stripe invoice-item metadata: pending upgrade coupon credit (payable-based). */
+export const UPGRADE_COUPON_CREDIT_METADATA_KEY = 'hirekalUpgradeCouponCredit';
+
 export const CHANGEABLE_SUBSCRIPTION_STATUSES = ['ACTIVE', 'TRIALING'] as const;

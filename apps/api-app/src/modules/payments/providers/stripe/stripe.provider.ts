@@ -44,7 +44,7 @@ import {
 import { rethrowStripeError } from '../../common/utils/stripe-error.util';
 import { ERROR_MESSAGES } from '../../common/messages/payment.messages';
 import { now, toDate } from '../../common/utils/date.util';
-import { SUBSCRIPTION_METADATA_KEYS } from '../../common/constants/subscription.constants';
+import { SUBSCRIPTION_METADATA_KEYS, UPGRADE_COUPON_CREDIT_METADATA_KEY } from '../../common/constants/subscription.constants';
 
 const UPGRADE_PRORATION_BEHAVIOR = 'always_invoice' as const;
 
@@ -314,6 +314,8 @@ export class StripeProvider implements PaymentProvider {
 
   /*
    * Calls Stripe invoice preview for proration estimates.
+   * Coupons are applied to today's payable (proration), not the catalog plan price —
+   * invoice-level Stripe discounts do not reduce non-discountable proration lines.
    */
   async previewSubscriptionPlanChange(
     input: ProviderPlanChangePreviewInput,
@@ -351,12 +353,12 @@ export class StripeProvider implements PaymentProvider {
           ...(intervalChange ? { billing_cycle_anchor: 'now' } : {}),
         };
 
-      const discounts = buildStripeDiscounts(input);
+      // Do not pass invoice-level discounts: proration lines are not discountable.
+      // Coupon savings are applied to the computed payable below.
       const invoicePreview = await stripe.invoices.createPreview({
         customer: input.providerCustomerId,
         subscription: input.providerSubscriptionId,
         subscription_details: subscriptionDetails,
-        ...(discounts ? { discounts } : {}),
       });
 
       const currency = invoicePreview.currency.toUpperCase();
@@ -383,16 +385,9 @@ export class StripeProvider implements PaymentProvider {
       }
 
       const netProrationAmount = Math.max(prorationCharge - prorationCredit, 0);
-      const discount = this.resolveInvoiceDiscount(invoicePreview, currency);
-      let discountAmount = this.resolveProrationDiscountAmount(
-        netProrationAmount,
-        discount,
-        invoicePreview,
-        currency,
-      );
 
       // When the billing cycle resets, Stripe's amount_due is the charge today
-      // (new period minus unused-time credit, after discounts). Prefer it.
+      // (new period minus unused-time credit). Prefer it.
       // Same-interval upgrades must not use amount_due — it can include the
       // next full period in addition to prorations.
       const amountDueToday = Math.max(
@@ -400,15 +395,27 @@ export class StripeProvider implements PaymentProvider {
         0,
       );
 
-      let estimatedAmountPayable = Math.max(
-        netProrationAmount - discountAmount,
-        0,
-      );
-
+      let basePayable = netProrationAmount;
       if (intervalChange && amountDueToday > 0) {
-        estimatedAmountPayable = amountDueToday;
-        // Keep discount display consistent with Stripe's settled amount.
-        discountAmount = Math.max(netProrationAmount - amountDueToday, 0);
+        basePayable = amountDueToday;
+      }
+
+      let discountAmount = 0;
+      let discountLabel: string | null = null;
+      let estimatedAmountPayable = basePayable;
+
+      if (input.providerCouponId && basePayable > 0) {
+        const stripeCoupon = await stripe.coupons.retrieve(
+          input.providerCouponId,
+        );
+        const applied = this.applyCouponToPayableMajor(
+          basePayable,
+          stripeCoupon,
+          currency,
+        );
+        discountAmount = applied.discountMajor;
+        estimatedAmountPayable = applied.payableMajor;
+        discountLabel = stripeCoupon.name ?? stripeCoupon.id;
       }
 
       return {
@@ -429,7 +436,7 @@ export class StripeProvider implements PaymentProvider {
           0,
         ),
         discountAmount,
-        discountLabel: discount.label,
+        discountLabel,
       };
     } catch (error) {
       rethrowStripeError(error);
@@ -790,6 +797,8 @@ export class StripeProvider implements PaymentProvider {
 
   /*
    * Applies an upgrade with incomplete payment and returns the proration invoice secret.
+   * Coupons discount today's payable amount via a pending invoice credit (proration
+   * lines are not discountable by Stripe invoice/subscription coupons).
    */
   async createUpgradeCheckoutSession(
     input: ProviderUpgradeCheckoutSessionInput,
@@ -805,6 +814,7 @@ export class StripeProvider implements PaymentProvider {
       }
 
       await this.releaseSubscriptionSchedule(input.providerSubscriptionId);
+      await this.clearPendingUpgradeCouponCredits(input.providerCustomerId);
 
       const currentProviderPriceId = resolveStripeResourceId(subscriptionItem.price);
       const intervalChange =
@@ -815,46 +825,98 @@ export class StripeProvider implements PaymentProvider {
               input.providerPriceId,
             );
 
-      const discounts = buildStripeDiscounts(input);
-      const updatedSubscription = await stripe.subscriptions.update(
-        input.providerSubscriptionId,
-        {
-          items: [{ id: subscriptionItem.id, price: input.providerPriceId }],
-          proration_behavior: UPGRADE_PRORATION_BEHAVIOR,
-          payment_behavior: 'default_incomplete',
-          billing_cycle_anchor: intervalChange ? 'now' : 'unchanged',
-          expand: ['latest_invoice.confirmation_secret'],
-          metadata: {
-            ...(subscription.metadata ?? {}),
-            ...(input.metadata ?? {}),
+      let couponCreditItemId: string | null = null;
+      if (input.providerCouponId) {
+        const basePreview = await this.previewSubscriptionPlanChange({
+          providerCustomerId: input.providerCustomerId,
+          providerSubscriptionId: input.providerSubscriptionId,
+          providerPriceId: input.providerPriceId,
+          providerCouponId: null,
+          resetBillingCycle: intervalChange,
+        });
+        const stripeCoupon = await stripe.coupons.retrieve(
+          input.providerCouponId,
+        );
+        const { discountMajor } = this.applyCouponToPayableMajor(
+          basePreview.estimatedAmountPayable,
+          stripeCoupon,
+          basePreview.currency,
+        );
+        const discountMinor = toProviderMinorAmount(
+          discountMajor,
+          basePreview.currency,
+        );
+        if (discountMinor > 0) {
+          const creditItem = await stripe.invoiceItems.create({
+            customer: input.providerCustomerId,
+            amount: -discountMinor,
+            currency: basePreview.currency.toLowerCase(),
+            description: stripeCoupon.name
+              ? `Coupon (${stripeCoupon.name})`
+              : 'Coupon discount',
+            metadata: {
+              [UPGRADE_COUPON_CREDIT_METADATA_KEY]: 'true',
+              providerCouponId: input.providerCouponId,
+            },
+          });
+          couponCreditItemId = creditItem.id;
+        }
+      }
+
+      try {
+        const updatedSubscription = await stripe.subscriptions.update(
+          input.providerSubscriptionId,
+          {
+            items: [{ id: subscriptionItem.id, price: input.providerPriceId }],
+            proration_behavior: UPGRADE_PRORATION_BEHAVIOR,
+            payment_behavior: 'default_incomplete',
+            billing_cycle_anchor: intervalChange ? 'now' : 'unchanged',
+            expand: ['latest_invoice.confirmation_secret'],
+            metadata: {
+              ...(subscription.metadata ?? {}),
+              ...(input.metadata ?? {}),
+            },
           },
-          ...(discounts ? { discounts } : {}),
-        },
-      );
-
-      const latestInvoice = updatedSubscription.latest_invoice;
-      if (!latestInvoice || typeof latestInvoice === 'string') {
-        throw new BadRequestException(
-          ERROR_MESSAGES.CHECKOUT.SESSION_CREATE_FAILED,
         );
+
+        const latestInvoice = updatedSubscription.latest_invoice;
+        if (!latestInvoice || typeof latestInvoice === 'string') {
+          throw new BadRequestException(
+            ERROR_MESSAGES.CHECKOUT.SESSION_CREATE_FAILED,
+          );
+        }
+
+        const clientSecret = latestInvoice.confirmation_secret?.client_secret;
+        if (!clientSecret) {
+          throw new BadRequestException(
+            ERROR_MESSAGES.CHECKOUT.SESSION_CREATE_FAILED,
+          );
+        }
+
+        const currency = latestInvoice.currency.toUpperCase();
+
+        return {
+          clientSecret,
+          sessionId: updatedSubscription.id,
+          providerSubscriptionId: updatedSubscription.id,
+          amountDue: toMajorAmount(latestInvoice.amount_due, currency),
+          currency,
+        };
+      } catch (error) {
+        if (couponCreditItemId) {
+          try {
+            await stripe.invoiceItems.del(couponCreditItemId);
+          } catch (cleanupError) {
+            this.logger.warn(
+              `Failed to delete upgrade coupon credit ${couponCreditItemId}`,
+              cleanupError instanceof Error
+                ? cleanupError.message
+                : cleanupError,
+            );
+          }
+        }
+        throw error;
       }
-
-      const clientSecret = latestInvoice.confirmation_secret?.client_secret;
-      if (!clientSecret) {
-        throw new BadRequestException(
-          ERROR_MESSAGES.CHECKOUT.SESSION_CREATE_FAILED,
-        );
-      }
-
-      const currency = latestInvoice.currency.toUpperCase();
-
-      return {
-        clientSecret,
-        sessionId: updatedSubscription.id,
-        providerSubscriptionId: updatedSubscription.id,
-        amountDue: toMajorAmount(latestInvoice.amount_due, currency),
-        currency,
-      };
     } catch (error) {
       rethrowStripeError(error);
     }
@@ -927,6 +989,10 @@ export class StripeProvider implements PaymentProvider {
           }
         }
       }
+
+      await this.clearPendingUpgradeCouponCredits(
+        resolveStripeResourceId(subscription.customer) ?? '',
+      );
 
       const clearedMetadata = { ...(subscription.metadata ?? {}) };
       delete clearedMetadata[
@@ -1342,47 +1408,74 @@ export class StripeProvider implements PaymentProvider {
   }
 
   /*
-   * Discount amount attributable to today's proration charge only.
+   * Applies a Stripe coupon to an upgrade payable amount (proration due today).
    */
-  private resolveProrationDiscountAmount(
-    netProrationAmount: number,
-    discount: {
-      amount: number;
-      percentOff: number | null;
-      amountOff: number | null;
-    },
-    invoice: Stripe.Invoice,
+  private applyCouponToPayableMajor(
+    payableMajor: number,
+    coupon: Stripe.Coupon,
     currency: string,
-  ): number {
-    if (netProrationAmount <= 0) {
-      return 0;
+  ): { payableMajor: number; discountMajor: number } {
+    if (payableMajor <= 0) {
+      return { payableMajor: 0, discountMajor: 0 };
     }
 
-    if (typeof discount.percentOff === 'number' && discount.percentOff > 0) {
-      return Number(
-        ((netProrationAmount * discount.percentOff) / 100).toFixed(2),
+    let discountMajor = 0;
+    if (typeof coupon.percent_off === 'number' && coupon.percent_off > 0) {
+      discountMajor = Number(
+        ((payableMajor * coupon.percent_off) / 100).toFixed(2),
+      );
+    } else if (
+      typeof coupon.amount_off === 'number' &&
+      coupon.amount_off > 0
+    ) {
+      discountMajor = Math.min(
+        toMajorAmount(coupon.amount_off, currency),
+        payableMajor,
       );
     }
 
-    if (typeof discount.amountOff === 'number' && discount.amountOff > 0) {
-      return Math.min(discount.amountOff, netProrationAmount);
+    return {
+      discountMajor,
+      payableMajor: Math.max(Number((payableMajor - discountMajor).toFixed(2)), 0),
+    };
+  }
+
+  /*
+   * Removes unattached upgrade coupon credit invoice items for a customer.
+   */
+  private async clearPendingUpgradeCouponCredits(
+    providerCustomerId: string,
+  ): Promise<void> {
+    if (!providerCustomerId) {
+      return;
     }
 
-    if (discount.amount <= 0) {
-      return 0;
+    const stripe = this.stripeService.getClient();
+    try {
+      const pendingItems = await stripe.invoiceItems.list({
+        customer: providerCustomerId,
+        pending: true,
+        limit: 100,
+      });
+      for (const item of pendingItems.data) {
+        if (item.metadata?.[UPGRADE_COUPON_CREDIT_METADATA_KEY] !== 'true') {
+          continue;
+        }
+        try {
+          await stripe.invoiceItems.del(item.id);
+        } catch (error) {
+          this.logger.warn(
+            `Failed to clear pending upgrade coupon credit ${item.id}`,
+            error instanceof Error ? error.message : error,
+          );
+        }
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Failed to list pending upgrade coupon credits for ${providerCustomerId}`,
+        error instanceof Error ? error.message : error,
+      );
     }
-
-    const subtotal = toMajorAmount(invoice.subtotal ?? 0, currency);
-    if (subtotal <= 0) {
-      return Math.min(discount.amount, netProrationAmount);
-    }
-
-    return Number(
-      Math.min(
-        (discount.amount * netProrationAmount) / subtotal,
-        netProrationAmount,
-      ).toFixed(2),
-    );
   }
 
   /*
