@@ -112,14 +112,14 @@ export default function BillingPeriodToggle({
                 onClick={() => onChange(period)}
                 className={`inline-flex items-center gap-2 px-5 py-2.5 text-sm transition-colors ${
                   isActive
-                    ? 'font-semibold text-[#2563eb]'
-                    : 'font-normal text-[#1a1f36] hover:text-[#2563eb]/80'
+                    ? 'font-semibold text-accent'
+                    : 'font-normal text-[#1a1f36] hover:text-accent/80'
                 }`}
               >
                 {getBillingPeriodLabel(period)}
                 {renderSavingsBadge(
                   period,
-                  'rounded-md bg-gradient-to-r from-[#8b5cf6] to-[#06b6d4] px-2 py-0.5 text-[11px] font-semibold leading-none text-white',
+                  'rounded-md bg-accent px-2 py-0.5 text-[11px] font-semibold leading-none text-white',
                 )}
               </button>
             </div>

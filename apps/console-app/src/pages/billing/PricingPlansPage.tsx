@@ -482,6 +482,7 @@ export default function PricingPlansPage() {
                 isCurrent={isCurrent}
                 isScheduled={isScheduled}
                 scheduleNote={scheduleNote}
+                showPopularHighlight={!subscription}
                 actionLabel={getActionLabel(plan)}
                 actionDisabled={
                   isCurrent ||

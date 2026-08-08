@@ -16,6 +16,8 @@ interface PlanCardProps {
   isCurrent: boolean;
   isScheduled?: boolean;
   scheduleNote?: string | null;
+  /** When false, hide Popular badge/border/CTA highlight (e.g. user already subscribed). */
+  showPopularHighlight?: boolean;
   actionLabel: string;
   actionDisabled?: boolean;
   actionLoading?: boolean;
@@ -31,6 +33,7 @@ export default function PlanCard({
   isCurrent,
   isScheduled = false,
   scheduleNote = null,
+  showPopularHighlight = true,
   actionLabel,
   actionDisabled = false,
   actionLoading = false,
@@ -38,14 +41,21 @@ export default function PlanCard({
   onAction,
 }: PlanCardProps) {
   const { product, price, features, recommended } = plan;
+  const isPopular =
+    Boolean(recommended) &&
+    showPopularHighlight &&
+    !isCurrent &&
+    !isScheduled;
 
   return (
     <Card
       className={`relative flex h-full flex-col ${
-        isCurrent ? 'border-accent bg-accent/[0.04] ring-2 ring-accent/30' : ''
-      } ${isScheduled ? 'border-accent/50 bg-accent/[0.03] ring-1 ring-accent/20' : ''}`}
+        isPopular ? 'border-accent/40 bg-accent/[0.03] ring-2 ring-accent/20' : ''
+      } ${isCurrent ? 'border-accent bg-accent/[0.04] ring-2 ring-accent/30' : ''} ${
+        isScheduled ? 'border-accent/50 bg-accent/[0.03] ring-1 ring-accent/20' : ''
+      }`}
     >
-      {recommended && !isCurrent && (
+      {isPopular && (
         <div className="absolute -top-3 left-1/2 -translate-x-1/2">
           <Badge status="success">
             <span className="inline-flex items-center gap-1">
@@ -93,27 +103,38 @@ export default function PlanCard({
       </div>
 
       {!hideAction && (
-      <div className="mt-8">
-        <Button
-          className="w-full"
-          variant="secondary"
-          disabled={isCurrent || isScheduled || actionDisabled}
-          onClick={onAction}
-        >
-          {actionLoading
-            ? 'Processing…'
-            : isCurrent
-              ? 'Subscribed'
-              : isScheduled
-                ? 'Scheduled'
-                : actionLabel}
-        </Button>
-        {isScheduled && (
-          <p className="mt-2 text-center text-xs text-muted">
-            This plan starts on the scheduled date
-          </p>
-        )}
-      </div>
+        <div className="mt-8">
+          {isPopular ? (
+            <button
+              type="button"
+              disabled={isCurrent || isScheduled || actionDisabled}
+              onClick={onAction}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-accent/10 px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/15 focus:outline-none focus:ring-2 focus:ring-accent/30 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {actionLoading ? 'Processing…' : actionLabel}
+            </button>
+          ) : (
+            <Button
+              className="w-full"
+              variant="secondary"
+              disabled={isCurrent || isScheduled || actionDisabled}
+              onClick={onAction}
+            >
+              {actionLoading
+                ? 'Processing…'
+                : isCurrent
+                  ? 'Subscribed'
+                  : isScheduled
+                    ? 'Scheduled'
+                    : actionLabel}
+            </Button>
+          )}
+          {isScheduled && (
+            <p className="mt-2 text-center text-xs text-muted">
+              This plan starts on the scheduled date
+            </p>
+          )}
+        </div>
       )}
     </Card>
   );
