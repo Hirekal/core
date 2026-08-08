@@ -59,6 +59,28 @@ function buildStripeDiscounts(input: {
   return undefined;
 }
 
+function resolveCalendarDayProrationDate(
+  currentPeriodStart: number,
+): number {
+  const periodStart = new Date(currentPeriodStart * 1000);
+  const now = new Date();
+
+  // Stripe proration is second-based by default. Align the proration time to
+  // the current calendar day while preserving the subscription's anchor time
+  // so Stripe computes a day-based fraction instead of an exact timestamp one.
+  return Math.floor(
+    Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+      periodStart.getUTCHours(),
+      periodStart.getUTCMinutes(),
+      periodStart.getUTCSeconds(),
+      periodStart.getUTCMilliseconds(),
+    ) / 1000,
+  );
+}
+
 @Injectable()
 export class StripeProvider implements PaymentProvider {
   readonly code = PaymentProviderCode.STRIPE;
@@ -343,6 +365,7 @@ export class StripeProvider implements PaymentProvider {
         subscriptionItem.current_period_end ??
         periodStart ??
         subscription.start_date;
+      const prorationDate = resolveCalendarDayProrationDate(periodStart);
 
       const currentProviderPriceId = resolveStripeResourceId(subscriptionItem.price);
       const intervalChange =
@@ -357,6 +380,7 @@ export class StripeProvider implements PaymentProvider {
         {
           items: [{ id: subscriptionItem.id, price: input.providerPriceId }],
           proration_behavior: 'create_prorations',
+          proration_date: prorationDate,
           ...(intervalChange ? { billing_cycle_anchor: 'now' } : {}),
         };
 
@@ -545,6 +569,9 @@ export class StripeProvider implements PaymentProvider {
       if (!subscriptionItem) {
         throw new BadRequestException(ERROR_MESSAGES.SUBSCRIPTION.NOT_FOUND);
       }
+      const prorationDate = resolveCalendarDayProrationDate(
+        subscriptionItem.current_period_start,
+      );
 
       await this.releaseSubscriptionSchedule(input.providerSubscriptionId);
 
@@ -559,6 +586,7 @@ export class StripeProvider implements PaymentProvider {
         {
           items: [{ id: subscriptionItem.id, price: input.providerPriceId }],
           proration_behavior: UPGRADE_PRORATION_BEHAVIOR,
+          proration_date: prorationDate,
           payment_behavior: 'error_if_incomplete',
           billing_cycle_anchor: intervalChange ? 'now' : 'unchanged',
         },
@@ -819,6 +847,9 @@ export class StripeProvider implements PaymentProvider {
       if (!subscriptionItem) {
         throw new BadRequestException(ERROR_MESSAGES.SUBSCRIPTION.NOT_FOUND);
       }
+      const prorationDate = resolveCalendarDayProrationDate(
+        subscriptionItem.current_period_start,
+      );
 
       await this.releaseSubscriptionSchedule(input.providerSubscriptionId);
       await this.clearPendingUpgradeCouponCredits(input.providerCustomerId);
@@ -876,6 +907,7 @@ export class StripeProvider implements PaymentProvider {
           {
             items: [{ id: subscriptionItem.id, price: input.providerPriceId }],
             proration_behavior: UPGRADE_PRORATION_BEHAVIOR,
+            proration_date: prorationDate,
             payment_behavior: 'default_incomplete',
             billing_cycle_anchor: intervalChange ? 'now' : 'unchanged',
             expand: ['latest_invoice.confirmation_secret'],
