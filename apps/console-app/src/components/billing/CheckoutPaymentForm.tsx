@@ -676,11 +676,11 @@ export default function CheckoutPaymentForm({
                 ? 'Updating checkout…'
                 : `Pay ${formatMoney(payAmount ?? price.amount, price.currency)}`}
           </Button>
-          {!canPay && !processing && !disabled && !switchError ? (
+          {/* {!canPay && !processing && !disabled && !switchError ? (
             <p className="mt-2 text-center text-sm text-muted">
               Complete all required fields marked with * to continue.
             </p>
-          ) : null}
+          ) : null} */}
         </div>
       </div>
     </form>

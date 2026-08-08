@@ -111,9 +111,11 @@ export class CouponsService {
       return;
     }
 
-    const coupon = await this.couponRepository.findOne({
-      where: { promotionCode, status: RecordStatus.ACTIVE },
-    });
+    const coupon = await this.couponRepository
+      .createQueryBuilder('coupon')
+      .where('UPPER(TRIM(coupon.promotionCode)) = :code', { code: promotionCode })
+      .andWhere('coupon.status = :status', { status: RecordStatus.ACTIVE })
+      .getOne();
     if (!coupon) {
       this.logger.warn(
         `Skipping redemption record; coupon ${promotionCode} not found locally`,
@@ -145,6 +147,7 @@ export class CouponsService {
 
   /*
    * Finds an active, non-expired local coupon by promotion code.
+   * Matching is case-insensitive (OFF10 / off10 / Off10 all work).
    */
   private async findActiveByPromotionCode(
     promotionCode: string,
@@ -154,12 +157,11 @@ export class CouponsService {
       throw new NotFoundException(ERROR_MESSAGES.COUPON.NOT_AVAILABLE);
     }
 
-    const coupon = await this.couponRepository.findOne({
-      where: {
-        promotionCode: normalized,
-        status: RecordStatus.ACTIVE,
-      },
-    });
+    const coupon = await this.couponRepository
+      .createQueryBuilder('coupon')
+      .where('UPPER(TRIM(coupon.promotionCode)) = :code', { code: normalized })
+      .andWhere('coupon.status = :status', { status: RecordStatus.ACTIVE })
+      .getOne();
 
     if (!coupon) {
       throw new NotFoundException(ERROR_MESSAGES.COUPON.NOT_AVAILABLE);

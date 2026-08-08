@@ -3,7 +3,7 @@
  */
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, Loader2 } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, ChevronRight, Loader2 } from 'lucide-react';
 import {
   formatIntervalShort,
   formatMoney,
@@ -88,11 +88,12 @@ export default function CheckoutOrderSummary({
   })();
 
   const [couponInput, setCouponInput] = useState('');
-  const [showCouponField, setShowCouponField] = useState(Boolean(appliedCoupon));
+  const [showCouponField, setShowCouponField] = useState(false);
 
   useEffect(() => {
     if (appliedCoupon) {
-      setShowCouponField(true);
+      setCouponInput('');
+      setShowCouponField(false);
     }
   }, [appliedCoupon]);
 
@@ -100,7 +101,17 @@ export default function CheckoutOrderSummary({
     if (!onApplyCoupon || !couponInput.trim()) {
       return;
     }
-    await onApplyCoupon(couponInput.trim());
+    // Coupons are case-insensitive; normalize before validate/apply.
+    await onApplyCoupon(couponInput.trim().toUpperCase());
+  };
+
+  const toggleCouponAccordion = () => {
+    setShowCouponField((current) => {
+      if (current) {
+        setCouponInput('');
+      }
+      return !current;
+    });
   };
 
   return (
@@ -157,15 +168,7 @@ export default function CheckoutOrderSummary({
 
       {onApplyCoupon && (
         <div className="mt-4 space-y-2 border-t border-black/10 pt-4">
-          {!showCouponField && !appliedCoupon ? (
-            <button
-              type="button"
-              className="text-base font-medium text-[#635bff] hover:underline"
-              onClick={() => setShowCouponField(true)}
-            >
-              Apply coupon
-            </button>
-          ) : appliedCoupon ? (
+          {appliedCoupon ? (
             <div className="space-y-2">
               <div
                 className={`rounded-md border border-[#99f6e4] bg-[#f0fdfa] px-3 py-2.5 ${
@@ -222,59 +225,78 @@ export default function CheckoutOrderSummary({
               )}
             </div>
           ) : (
-            <div className="space-y-1.5">
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={couponInput}
-                  onChange={(event) => setCouponInput(event.target.value.toUpperCase())}
-                  placeholder="Coupon code"
-                  className="min-w-0 flex-1 rounded-md border border-[#e6ebf1] bg-white px-3 py-2.5 text-base text-heading placeholder:text-[#8898aa] focus:border-[#635bff] focus:outline-none"
-                  disabled={couponApplying}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault();
-                      void handleApply();
-                    }
-                    if (event.key === 'Escape') {
-                      event.preventDefault();
-                      setCouponInput('');
-                      setShowCouponField(false);
-                    }
-                  }}
+            <div>
+              <button
+                type="button"
+                id="checkout-coupon-trigger"
+                className="inline-flex items-center gap-1.5 text-left text-base font-medium text-[#635bff] hover:underline"
+                aria-expanded={showCouponField}
+                aria-controls="checkout-coupon-panel"
+                onClick={toggleCouponAccordion}
+              >
+                <span>Apply coupon</span>
+                <ChevronRight
+                  size={18}
+                  aria-hidden
+                  className={`shrink-0 text-[#635bff] transition-transform duration-200 ease-out ${
+                    showCouponField ? 'rotate-90' : 'rotate-0'
+                  }`}
                 />
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  disabled={couponApplying || !couponInput.trim()}
-                  onClick={() => void handleApply()}
-                >
-                  {couponApplying ? (
-                    <>
-                      <Loader2 size={14} className="animate-spin" aria-hidden />
-                      Applying…
-                    </>
-                  ) : (
-                    'Apply'
-                  )}
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={couponApplying}
-                  onClick={() => {
-                    setCouponInput('');
-                    setShowCouponField(false);
-                  }}
-                >
-                  Cancel
-                </Button>
+              </button>
+
+              <div
+                id="checkout-coupon-panel"
+                role="region"
+                aria-labelledby="checkout-coupon-trigger"
+                className={`grid transition-[grid-template-rows] duration-200 ease-out ${
+                  showCouponField ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+                }`}
+              >
+                <div className="overflow-hidden">
+                  <div className="space-y-1.5 pt-3">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={couponInput}
+                        onChange={(event) => setCouponInput(event.target.value)}
+                        placeholder="Coupon code"
+                        className="min-w-0 flex-1 rounded-md border border-[#e6ebf1] bg-white px-3 py-2.5 text-base text-heading placeholder:text-[#8898aa] focus:border-[#635bff] focus:outline-none"
+                        disabled={couponApplying}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault();
+                            void handleApply();
+                          }
+                          if (event.key === 'Escape') {
+                            event.preventDefault();
+                            setCouponInput('');
+                            setShowCouponField(false);
+                          }
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        disabled={couponApplying || !couponInput.trim()}
+                        onClick={() => void handleApply()}
+                      >
+                        {couponApplying ? (
+                          <>
+                            <Loader2 size={14} className="animate-spin" aria-hidden />
+                            Applying…
+                          </>
+                        ) : (
+                          'Apply'
+                        )}
+                      </Button>
+                    </div>
+                    {couponError && (
+                      <p className="text-base text-[#df1b41]">{couponError}</p>
+                    )}
+                  </div>
+                </div>
               </div>
-              {couponError && (
-                <p className="text-base text-[#df1b41]">{couponError}</p>
-              )}
             </div>
           )}
         </div>

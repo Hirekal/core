@@ -328,6 +328,14 @@ export async function cancelScheduledPlanChange(
 }
 
 /*
+ * Coupons are case-insensitive; normalize before API calls.
+ */
+function normalizeCouponCode(couponCode?: string): string | undefined {
+  const normalized = couponCode?.trim().toUpperCase();
+  return normalized || undefined;
+}
+
+/*
  * Previews proration for an immediate plan change.
  */
 export async function previewPlanChange(
@@ -335,13 +343,14 @@ export async function previewPlanChange(
   priceId: string,
   couponCode?: string,
 ): Promise<PlanChangePreview> {
+  const normalizedCoupon = normalizeCouponCode(couponCode);
   return withBillingErrorHandling(() =>
     apiRequest(`/payments/subscriptions/${subscriptionId}/plan-change/preview`, {
       method: 'POST',
       auth: true,
       body: {
         priceId,
-        ...(couponCode ? { couponCode } : {}),
+        ...(normalizedCoupon ? { couponCode: normalizedCoupon } : {}),
       },
     }),
   );
@@ -415,13 +424,14 @@ export async function createUpgradeCheckoutSession(
   priceId: string,
   couponCode?: string,
 ): Promise<UpgradeCheckoutSessionResponse> {
+  const normalizedCoupon = normalizeCouponCode(couponCode);
   return withBillingErrorHandling(() =>
     apiRequest(`/payments/subscriptions/${subscriptionId}/upgrade/checkout`, {
       method: 'POST',
       auth: true,
       body: {
         priceId,
-        ...(couponCode ? { couponCode } : {}),
+        ...(normalizedCoupon ? { couponCode: normalizedCoupon } : {}),
       },
     }),
   );
@@ -451,11 +461,23 @@ export async function createCheckoutSession(input: {
   couponCode?: string;
   previousProviderSubscriptionId?: string;
 }): Promise<CheckoutSessionResponse> {
+  const normalizedCoupon = normalizeCouponCode(input.couponCode);
   return withBillingErrorHandling(() =>
     apiRequest('/payments/checkout', {
       method: 'POST',
       auth: true,
-      body: input,
+      body: {
+        priceId: input.priceId,
+        email: input.email,
+        ...(input.name ? { name: input.name } : {}),
+        ...(normalizedCoupon ? { couponCode: normalizedCoupon } : {}),
+        ...(input.previousProviderSubscriptionId
+          ? {
+              previousProviderSubscriptionId:
+                input.previousProviderSubscriptionId,
+            }
+          : {}),
+      },
     }),
   );
 }
@@ -600,11 +622,15 @@ export function clearUpgradeCheckoutPrefetch(
 export async function validateCoupon(
   promotionCode: string,
 ): Promise<ValidatedCoupon> {
+  const normalizedCode = normalizeCouponCode(promotionCode);
+  if (!normalizedCode) {
+    throw new Error('Coupon code is required');
+  }
   return withBillingErrorHandling(() =>
     apiRequest('/payments/coupons/validate', {
       method: 'POST',
       auth: true,
-      body: { promotionCode },
+      body: { promotionCode: normalizedCode },
     }),
   );
 }
